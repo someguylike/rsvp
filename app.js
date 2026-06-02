@@ -1,14 +1,56 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
-  const DEFAULT_PLAYERS = [];
-  const PLAYER_STORAGE_KEY = "play-rsvp.playerNames";
+  const PLAYERS = [
+    "Alex Yeung",
+    "Anh Khoa Tran (Truc Phuong)",
+    "Bao Ta",
+    "Cuong (MC) Nguyen",
+    "Cuong Tipu",
+    "Danny Phan",
+    "Derek Blaiotta (Hoa Pham's fr)",
+    "Duy Nguyen",
+    "Harvey Le",
+    "Hoan Nguyen",
+    "Hoang Huynh",
+    "Hung Cao (Truong Do)",
+    "Huong Le",
+    "Huy Nguyen (Harvey's fr)",
+    "Huy Viet Nguyen",
+    "Jordan Scherr",
+    "Khang Nguyen",
+    "Khang Vinh",
+    "KhiemHoang Tran",
+    "Luan Nguyen",
+    "Nam Pham",
+    "Nick Nguyen",
+    "Phuc Anh",
+    "Phuoc Truong",
+    "Son Nguyen",
+    "Thanh Nguyen",
+    "Thanh Thanh Tran (Tu Do's friend)",
+    "Thien Nguyen",
+    "Thinh Do (Lily Do)",
+    "Thinh Pham",
+    "Thuy Duong",
+    "Todd Nguyen",
+    "Tr Nguyen (Trung)",
+    "Tri Ho",
+    "Truc Phuong",
+    "Trung Van Nguyễn",
+    "Truong Do",
+    "Tu Anh Do",
+    "Tuan Pham",
+    "Tuan Phan/Hien",
+    "Uyen",
+    "Viet Do",
+    "Vu Nguyen",
+  ];
   const LAST_RSVP_KEY = "play-rsvp.lastRsvp";
   const PLAY_DAYS = [2, 4, 5, 0];
 
   const form = document.querySelector("#rsvp-form");
-  const playerInput = document.querySelector("#player-name");
-  const playerList = document.querySelector("#player-list");
+  const playerSelect = document.querySelector("#player-name");
   const dateInput = document.querySelector("#play-date");
   const dateOptions = document.querySelector("#date-options");
   const customDateField = document.querySelector("#custom-date-field");
@@ -160,34 +202,16 @@
   }
 
   function renderPlayerOptions() {
-    const rememberedNames = readJson(PLAYER_STORAGE_KEY, []);
-    const names = [...DEFAULT_PLAYERS, ...rememberedNames].filter(
-      (name, index, list) =>
-        list.findIndex(
-          (item) => item.toLocaleLowerCase() === name.toLocaleLowerCase(),
-        ) === index,
-    );
-    playerList.replaceChildren(
-      ...names.map((name) => {
+    const placeholder = playerSelect.querySelector("option[value='']");
+    playerSelect.replaceChildren(
+      placeholder,
+      ...PLAYERS.map((name) => {
         const option = document.createElement("option");
         option.value = name;
+        option.textContent = name;
         return option;
       }),
     );
-  }
-
-  function rememberPlayerName(name) {
-    const cleanName = name.trim();
-    if (!cleanName) {
-      return;
-    }
-
-    const existing = readJson(PLAYER_STORAGE_KEY, []);
-    const withoutDuplicate = existing.filter(
-      (item) => item.toLocaleLowerCase() !== cleanName.toLocaleLowerCase(),
-    );
-    writeJson(PLAYER_STORAGE_KEY, [cleanName, ...withoutDuplicate].slice(0, 20));
-    renderPlayerOptions();
   }
 
   function setStatus(message, type) {
@@ -311,7 +335,6 @@
         return;
       }
 
-      rememberPlayerName(payload.playerName);
       writeJson(LAST_RSVP_KEY, payload);
       renderTally(result.tally);
       setStatus(
@@ -408,8 +431,8 @@
     renderDateOptions();
 
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
-    if (lastRsvp?.playerName) {
-      playerInput.value = lastRsvp.playerName;
+    if (lastRsvp?.playerName && PLAYERS.includes(lastRsvp.playerName)) {
+      playerSelect.value = lastRsvp.playerName;
     }
 
     guestInput.value = "0";

@@ -81,7 +81,8 @@ legend {
   font-weight: 650;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-height: 46px;
   border: 1px solid var(--line);
@@ -92,7 +93,8 @@ input {
   padding: 10px 12px;
 }
 
-input:focus {
+input:focus,
+select:focus {
   border-color: var(--focus);
   outline: 3px solid rgb(215 155 36 / 22%);
 }

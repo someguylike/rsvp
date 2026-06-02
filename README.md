@@ -4,7 +4,7 @@ Static RSVP page for weekly play sessions.
 
 ## What it does
 
-- Player name input uses a dropdown from names remembered in this browser.
+- Player name is limited to a fixed roster dropdown.
 - Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an optional calendar picker.
 - Vote defaults to `Yes`.
 - Guest count defaults to `0`.
