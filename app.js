@@ -275,7 +275,7 @@
     overrideDialog.showModal();
   }
 
-  function requestViaJsonp(payload) {
+  function requestViaJsonp(payload, attempt) {
     return new Promise((resolve, reject) => {
       if (!APPS_SCRIPT_URL) {
         reject(new Error("Missing Apps Script URL in app.js"));
@@ -286,9 +286,10 @@
         .toString(36)
         .slice(2)}`;
       const script = document.createElement("script");
+      script.referrerPolicy = "no-referrer";
       const timeout = window.setTimeout(() => {
         cleanup();
-        reject(new Error("Submission timed out"));
+        reject(new Error("Apps Script took too long to respond"));
       }, 30000);
 
       function cleanup() {
@@ -318,6 +319,14 @@
       };
       script.src = url.toString();
       document.body.append(script);
+    }).catch((error) => {
+      if (!attempt) {
+        return new Promise((resolve) => {
+          window.setTimeout(resolve, 1200);
+        }).then(() => requestViaJsonp(payload, 1));
+      }
+
+      throw error;
     });
   }
 
