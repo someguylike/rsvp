@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Play RSVP</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel" aria-labelledby="page-title">
+        <div class="heading">
+          <p class="eyebrow">Weekly play signup</p>
+          <h1 id="page-title">RSVP for the next session</h1>
+        </div>
+
+        <form id="rsvp-form" class="form">
+          <label class="field">
+            <span>Player name</span>
+            <input
+              id="player-name"
+              name="playerName"
+              list="player-list"
+              autocomplete="name"
+              required
+              placeholder="Choose or type your name"
+            />
+            <datalist id="player-list"></datalist>
+          </label>
+
+          <label class="field">
+            <span>Date to play</span>
+            <input id="play-date" name="playDate" type="date" required />
+          </label>
+
+          <fieldset class="field">
+            <legend>Vote</legend>
+            <div class="segmented" role="radiogroup" aria-label="Vote">
+              <label>
+                <input type="radio" name="vote" value="Yes" checked />
+                <span>Yes</span>
+              </label>
+              <label>
+                <input type="radio" name="vote" value="No" />
+                <span>No</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="field">
+            <span>Guests</span>
+            <input
+              id="guest-count"
+              name="guestCount"
+              type="number"
+              min="0"
+              max="20"
+              step="1"
+              inputmode="numeric"
+              value="0"
+              required
+            />
+          </label>
+
+          <button id="submit-button" type="submit">Submit RSVP</button>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
