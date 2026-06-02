@@ -223,6 +223,12 @@
     playerList.hidden = true;
   }
 
+  function selectPlayerName(name) {
+    playerInput.value = name;
+    hidePlayerList();
+    playerInput.blur();
+  }
+
   function renderPlayerMatches(query) {
     const matches = getPlayerMatches(query);
     playerList.replaceChildren(
@@ -233,8 +239,10 @@
         option.textContent = name;
         option.addEventListener("pointerdown", (event) => {
           event.preventDefault();
-          playerInput.value = name;
-          hidePlayerList();
+          selectPlayerName(name);
+        });
+        option.addEventListener("click", () => {
+          selectPlayerName(name);
         });
         return option;
       }),
