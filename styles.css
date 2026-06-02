@@ -175,6 +175,15 @@ input:focus {
   font-weight: 600;
 }
 
+.custom-date-field {
+  display: none;
+  gap: 8px;
+}
+
+.custom-date-field.active {
+  display: grid;
+}
+
 button {
   min-height: 48px;
   border: 0;

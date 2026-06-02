@@ -11,6 +11,8 @@
   const playerList = document.querySelector("#player-list");
   const dateInput = document.querySelector("#play-date");
   const dateOptions = document.querySelector("#date-options");
+  const customDateField = document.querySelector("#custom-date-field");
+  const customDateInput = document.querySelector("#custom-play-date");
   const guestInput = document.querySelector("#guest-count");
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
@@ -74,15 +76,22 @@
     });
 
     return {
-      day: date.getTime() === today.getTime() ? "Today" : day,
+      day: date.getTime() === today.getTime() ? "Today" : `Next ${day}`,
       full,
     };
   }
 
-  function selectPlayDate(value) {
+  function selectPlayDate(value, options) {
+    const isCustom = Boolean(options?.isCustom);
     dateInput.value = value;
+    if (customDateInput && customDateInput.value !== value) {
+      customDateInput.value = value;
+    }
+    customDateField?.classList.toggle("active", isCustom);
     dateOptions.querySelectorAll(".date-option").forEach((button) => {
-      const isActive = button.dataset.date === value;
+      const isActive =
+        button.dataset.date === value ||
+        (isCustom && button.dataset.date === "custom");
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-checked", String(isActive));
     });
@@ -116,6 +125,36 @@
         return button;
       }),
     );
+
+    const otherButton = document.createElement("button");
+    const otherTitle = document.createElement("span");
+    const otherSubtitle = document.createElement("span");
+
+    otherButton.type = "button";
+    otherButton.className = "date-option";
+    otherButton.dataset.date = "custom";
+    otherButton.setAttribute("role", "radio");
+    otherButton.setAttribute("aria-checked", "false");
+    otherTitle.className = "date-day";
+    otherSubtitle.className = "date-full";
+    otherTitle.textContent = "Other date";
+    otherSubtitle.textContent = "Open calendar";
+    otherButton.append(otherTitle, otherSubtitle);
+    otherButton.addEventListener("click", () => {
+      const fallbackDate = customDateInput?.value || dateInput.value;
+      if (fallbackDate) {
+        selectPlayDate(fallbackDate, { isCustom: true });
+      }
+      customDateInput?.focus();
+      customDateInput?.showPicker?.();
+    });
+    dateOptions.append(otherButton);
+
+    customDateInput?.addEventListener("change", () => {
+      if (customDateInput.value) {
+        selectPlayDate(customDateInput.value, { isCustom: true });
+      }
+    });
 
     selectPlayDate(formatDate(getNextPlayDate()));
   }
@@ -227,7 +266,7 @@
       const timeout = window.setTimeout(() => {
         cleanup();
         reject(new Error("Submission timed out"));
-      }, 12000);
+      }, 30000);
 
       function cleanup() {
         window.clearTimeout(timeout);
@@ -339,19 +378,27 @@
     );
   }
 
-  async function loadTally(playDate) {
+  async function loadTally(playDate, attempt) {
     if (!playDate || !APPS_SCRIPT_URL) {
       return;
     }
 
     try {
+      tallyCount.textContent = "Loading tally...";
       const result = await requestViaJsonp({
         action: "list",
         playDate,
       });
       renderTally(result.tally);
-    } catch {
-      tallyCount.textContent = "Tally unavailable";
+    } catch (error) {
+      if (!attempt) {
+        window.setTimeout(() => {
+          loadTally(playDate, 1);
+        }, 1200);
+        return;
+      }
+
+      tallyCount.textContent = "Could not load tally. Try refreshing.";
       tallyList.replaceChildren();
     }
   }
