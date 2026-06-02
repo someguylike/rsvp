@@ -417,7 +417,12 @@
       });
 
       renderTally(result.tally);
-      setStatus("Removed the existing RSVP.", "success");
+      setStatus(
+        result.action === "not_found"
+          ? "No existing RSVP found for that player/date."
+          : "Removed the existing RSVP.",
+        result.action === "not_found" ? "" : "success",
+      );
     } catch (error) {
       setStatus(error.message, "error");
     } finally {
@@ -508,6 +513,11 @@
     }
 
     payload.guestCount = Math.max(0, payload.guestCount);
+
+    if (payload.vote === "Remove") {
+      removeExistingRsvp(payload);
+      return;
+    }
 
     submitRsvp(payload);
   });
