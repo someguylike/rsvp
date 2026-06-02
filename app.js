@@ -304,7 +304,56 @@
     overrideDialog.showModal();
   }
 
-  function requestViaJsonp(payload, attempt) {
+  function buildAppsScriptUrl(payload, callbackName) {
+    const url = new URL(APPS_SCRIPT_URL);
+    if (callbackName) {
+      url.searchParams.set("callback", callbackName);
+    }
+    Object.entries(payload).forEach(([key, value]) => {
+      url.searchParams.set(key, String(value));
+    });
+    return url.toString();
+  }
+
+  function parseJsonpResponse(text, callbackName) {
+    const trimmed = text.trim();
+    const prefix = `${callbackName}(`;
+
+    if (!trimmed.startsWith(prefix) || !trimmed.endsWith(");")) {
+      throw new Error("Unexpected Apps Script response");
+    }
+
+    return JSON.parse(trimmed.slice(prefix.length, -2));
+  }
+
+  async function requestViaFetch(payload) {
+    if (!APPS_SCRIPT_URL) {
+      throw new Error("Missing Apps Script URL in app.js");
+    }
+
+    const callbackName = `playRsvpFetch_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2)}`;
+    const response = await fetch(buildAppsScriptUrl(payload, callbackName), {
+      cache: "no-store",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error("Could not reach Apps Script");
+    }
+
+    const parsed = parseJsonpResponse(text, callbackName);
+    if (parsed && parsed.ok) {
+      return parsed;
+    }
+
+    throw new Error(parsed?.error || "Submission failed");
+  }
+
+  function requestViaJsonp(payload) {
     return new Promise((resolve, reject) => {
       if (!APPS_SCRIPT_URL) {
         reject(new Error("Missing Apps Script URL in app.js"));
@@ -336,35 +385,25 @@
         }
       };
 
-      const url = new URL(APPS_SCRIPT_URL);
-      url.searchParams.set("callback", callbackName);
-      Object.entries(payload).forEach(([key, value]) => {
-        url.searchParams.set(key, String(value));
-      });
-
       script.onerror = () => {
         cleanup();
         reject(new Error("Could not reach Apps Script"));
       };
-      script.src = url.toString();
+      script.src = buildAppsScriptUrl(payload, callbackName);
       document.body.append(script);
-    }).catch((error) => {
+    });
+  }
+
+  function requestAppsScript(payload, attempt) {
+    return requestViaFetch(payload).catch(() => requestViaJsonp(payload)).catch((error) => {
       if (!attempt) {
         return new Promise((resolve) => {
           window.setTimeout(resolve, 1200);
-        }).then(() => requestViaJsonp(payload, 1));
+        }).then(() => requestAppsScript(payload, 1));
       }
 
       throw error;
     });
-  }
-
-  function buildAppsScriptUrl(payload) {
-    const url = new URL(APPS_SCRIPT_URL);
-    Object.entries(payload).forEach(([key, value]) => {
-      url.searchParams.set(key, String(value));
-    });
-    return url.toString();
   }
 
   async function submitRsvp(payload) {
@@ -372,7 +411,7 @@
     setStatus("Submitting...", "");
 
     try {
-      const result = await requestViaJsonp(payload);
+      const result = await requestAppsScript(payload);
 
       if (result.action === "needs_confirmation") {
         askOverrideConfirmation(result.existing, payload);
@@ -410,7 +449,7 @@
     setStatus("Removing RSVP...", "");
 
     try {
-      const result = await requestViaJsonp({
+      const result = await requestAppsScript({
         action: "delete",
         playerName: payload.playerName,
         playDate: payload.playDate,
@@ -463,7 +502,7 @@
 
     try {
       tallyCount.textContent = "Loading tally...";
-      const result = await requestViaJsonp({
+      const result = await requestAppsScript({
         action: "list",
         playDate,
       });
