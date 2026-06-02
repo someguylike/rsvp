@@ -111,15 +111,20 @@
   function formatDateOption(date) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const startOfThisWeek = new Date(today);
+    startOfThisWeek.setDate(today.getDate() - today.getDay());
+    const endOfThisWeek = new Date(startOfThisWeek);
+    endOfThisWeek.setDate(startOfThisWeek.getDate() + 6);
 
     const day = date.toLocaleDateString(undefined, { weekday: "short" });
     const full = date.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
     });
+    const prefix = date <= endOfThisWeek ? "This" : "Next";
 
     return {
-      day: date.getTime() === today.getTime() ? "Today" : `Next ${day}`,
+      day: date.getTime() === today.getTime() ? "Today" : `${prefix} ${day}`,
       full,
     };
   }
@@ -218,6 +223,17 @@
     status.className = `status ${type || ""}`.trim();
   }
 
+  function setStatusWithLink(message, linkText, href, type) {
+    const link = document.createElement("a");
+    status.textContent = `${message} `;
+    status.className = `status ${type || ""}`.trim();
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.textContent = linkText;
+    status.append(link);
+  }
+
   function collectPayload() {
     const formData = new FormData(form);
     return {
@@ -235,11 +251,17 @@
   }
 
   function renderRsvpDetails(container, rsvp) {
+    const detailsSource = rsvp || {};
     const details = [
-      ["Player", rsvp.playerName],
-      ["Date", rsvp.playDate],
-      ["Vote", rsvp.vote],
-      ["Guests", formatGuestLabel(rsvp.guestCount)],
+      ["Player", detailsSource.playerName],
+      ["Date", detailsSource.playDate],
+      ["Vote", detailsSource.vote],
+      [
+        "Guests",
+        detailsSource.guestCount == null
+          ? "Unknown"
+          : formatGuestLabel(detailsSource.guestCount),
+      ],
     ];
 
     container.replaceChildren(
@@ -257,6 +279,13 @@
   }
 
   function askOverrideConfirmation(existing, payload) {
+    const previous = existing || {
+      playerName: payload.playerName,
+      playDate: payload.playDate,
+      vote: "Already submitted",
+      guestCount: null,
+    };
+
     if (!overrideDialog || !previousRsvp || !newRsvp) {
       if (window.confirm("This player already has an RSVP. Update it?")) {
         submitRsvp({
@@ -270,7 +299,7 @@
     }
 
     pendingOverridePayload = payload;
-    renderRsvpDetails(previousRsvp, existing);
+    renderRsvpDetails(previousRsvp, previous);
     renderRsvpDetails(newRsvp, payload);
     overrideDialog.showModal();
   }
@@ -330,6 +359,14 @@
     });
   }
 
+  function buildAppsScriptUrl(payload) {
+    const url = new URL(APPS_SCRIPT_URL);
+    Object.entries(payload).forEach(([key, value]) => {
+      url.searchParams.set(key, String(value));
+    });
+    return url.toString();
+  }
+
   async function submitRsvp(payload) {
     submitButton.disabled = true;
     setStatus("Submitting...", "");
@@ -352,6 +389,16 @@
         "success",
       );
     } catch (error) {
+      if (error.message === "Could not reach Apps Script") {
+        setStatusWithLink(
+          "Your browser blocked the embedded submit.",
+          "Open fallback submit.",
+          buildAppsScriptUrl(payload),
+          "error",
+        );
+        return;
+      }
+
       setStatus(error.message, "error");
     } finally {
       submitButton.disabled = false;
