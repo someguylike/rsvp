@@ -21,6 +21,12 @@ Use GitHub Pages for the static website and Google Apps Script as the free backe
 
 GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it cannot safely store Google credentials or update a private Sheet by itself. Apps Script fills that backend role and runs as the Google account that owns the Sheet.
 
+## Repo Layout
+
+- `index.html`, `app.js`, `styles.css`: public RSVP page.
+- `admin.html`, `admin.js`: admin page for monthly roster export.
+- `google-apps-script/Code.gs`: Apps Script backend source. Paste this into Apps Script and deploy it as the Web App backend.
+
 ## Google Sheets Setup
 
 1. Create or open the Google Sheet that should store RSVPs.
@@ -36,21 +42,87 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 const APPS_SCRIPT_URL = "YOUR_WEB_APP_URL";
 ```
 
-To seed the dropdown with known players, set this in `app.js`:
+Also set the same Web App URL in `admin.js`.
 
-```js
-const DEFAULT_PLAYERS = ["Player One", "Player Two"];
-```
+The fixed player roster lives in two places and must stay in sync:
+
+- `app.js`: client-side searchable player list.
+- `google-apps-script/Code.gs`: server-side roster validation and export columns.
 
 ## GitHub Pages Setup
 
 1. Create a GitHub repository.
-2. Put `index.html`, `styles.css`, and `app.js` at the repository root.
+2. Put the site files at the repository root.
 3. Commit and push.
 4. In GitHub, open `Settings > Pages`.
 5. Under `Build and deployment`, select `Deploy from a branch`.
 6. Choose the main branch and `/root`.
 7. Open the published GitHub Pages URL.
+
+## Install And Continue Development
+
+```bash
+git clone https://github.com/someguylike/rsvp.git
+cd rsvp
+```
+
+This is a static site. No package install is required. Open `index.html` directly, or run a tiny local server:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open:
+
+- RSVP page: `http://localhost:8000/`
+- Admin page: `http://localhost:8000/admin.html`
+
+Development workflow:
+
+1. Edit `index.html`, `app.js`, `admin.html`, `admin.js`, or `styles.css`.
+2. If frontend assets change, bump the query string on the referenced JS/CSS file in the HTML to avoid stale GitHub Pages/browser cache.
+3. If backend behavior changes, edit `google-apps-script/Code.gs`.
+4. Paste the full `Code.gs` into Apps Script.
+5. Deploy a **New version** of the Apps Script Web App.
+6. Commit and push changes to `main`.
+
+```bash
+git status
+git add .
+git commit -m "Describe the change"
+git push
+```
+
+GitHub Pages will publish from `main` after a short delay.
+
+## Apps Script Backend Notes
+
+The backend source is intentionally checked into this public repo at `google-apps-script/Code.gs`.
+
+Apps Script deployment is manual:
+
+1. Open the RSVP Google Sheet.
+2. Go to `Extensions > Apps Script`.
+3. Replace `Code.gs` with the repo version.
+4. Click Save.
+5. Go to `Deploy > Manage deployments`.
+6. Edit the Web App deployment.
+7. Select **New version**.
+8. Deploy.
+
+The Web App URL must stay in both `app.js` and `admin.js`.
+
+## Admin Export
+
+Open `admin.html`, choose a month, and click `Export Month`.
+
+The export writes to the spreadsheet ID configured in `google-apps-script/Code.gs` as `EXPORT_SPREADSHEET_ID`.
+
+Output format:
+
+- Row 1: `Date` plus all player names.
+- Rows: play dates in the selected month.
+- Cell value: blank when not joining, `1` when the player joins alone, `n` when the player brings `n - 1` guests.
 
 ## Notes From Tool Research
 
