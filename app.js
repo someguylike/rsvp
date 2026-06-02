@@ -170,7 +170,6 @@
 
     const otherButton = document.createElement("button");
     const otherTitle = document.createElement("span");
-    const otherSubtitle = document.createElement("span");
 
     otherButton.type = "button";
     otherButton.className = "date-option";
@@ -178,10 +177,8 @@
     otherButton.setAttribute("role", "radio");
     otherButton.setAttribute("aria-checked", "false");
     otherTitle.className = "date-day";
-    otherSubtitle.className = "date-full";
     otherTitle.textContent = "Other date";
-    otherSubtitle.textContent = "Open calendar";
-    otherButton.append(otherTitle, otherSubtitle);
+    otherButton.append(otherTitle);
     otherButton.addEventListener("click", () => {
       const fallbackDate = customDateInput?.value || dateInput.value;
       if (fallbackDate) {
