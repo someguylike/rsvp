@@ -239,9 +239,12 @@
         option.textContent = name;
         option.addEventListener("pointerdown", (event) => {
           event.preventDefault();
+          event.stopPropagation();
           selectPlayerName(name);
         });
-        option.addEventListener("click", () => {
+        option.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
           selectPlayerName(name);
         });
         return option;
