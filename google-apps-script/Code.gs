@@ -9,14 +9,23 @@ const HEADERS = [
 ];
 
 function doGet(event) {
-  const callback = event.parameter.callback || "callback";
+  const params = event && event.parameter ? event.parameter : {};
+  const callback = params.callback || "callback";
 
   try {
-    const result = upsertRsvp_(event.parameter);
+    if (params.action === "list") {
+      return jsonp_(callback, {
+        ok: true,
+        tally: getTally_(required_(params.playDate, "Missing play date")),
+      });
+    }
+
+    const result = upsertRsvp_(params);
     return jsonp_(callback, {
       ok: true,
       action: result.action,
       row: result.row,
+      tally: result.tally,
     });
   } catch (error) {
     return jsonp_(callback, {
@@ -59,11 +68,15 @@ function upsertRsvpWithLock_(params) {
     const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
     values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
-    return { action: "updated", row };
+    return { action: "updated", row, tally: getTally_(playDate) };
   }
 
   sheet.appendRow(values);
-  return { action: "created", row: sheet.getLastRow() };
+  return {
+    action: "created",
+    row: sheet.getLastRow(),
+    tally: getTally_(playDate),
+  };
 }
 
 function getSheet_() {
@@ -104,6 +117,50 @@ function findExistingRow_(sheet, playDate, playerName) {
   }
 
   return null;
+}
+
+function getTally_(playDate) {
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  const tally = {
+    playDate,
+    playerCount: 0,
+    guestCount: 0,
+    totalCount: 0,
+    players: [],
+  };
+
+  if (lastRow < 2) {
+    return tally;
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+
+  rows.forEach((row) => {
+    const rowDate = normalizeDate_(row[0]);
+    const playerName = String(row[1] || "").trim();
+    const vote = normalize_(row[2]);
+    const guestCount = Math.max(0, Number(row[3] || 0));
+
+    if (rowDate !== playDate || vote !== "yes" || !playerName) {
+      return;
+    }
+
+    tally.players.push({
+      name: playerName,
+      guestCount: Number.isFinite(guestCount) ? guestCount : 0,
+    });
+  });
+
+  tally.players.sort((first, second) => first.name.localeCompare(second.name));
+  tally.playerCount = tally.players.length;
+  tally.guestCount = tally.players.reduce(
+    (sum, player) => sum + player.guestCount,
+    0,
+  );
+  tally.totalCount = tally.playerCount + tally.guestCount;
+
+  return tally;
 }
 
 function normalize_(value) {

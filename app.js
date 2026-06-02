@@ -13,6 +13,8 @@
   const guestInput = document.querySelector("#guest-count");
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
+  const tallyCount = document.querySelector("#tally-count");
+  const tallyList = document.querySelector("#tally-list");
 
   function readJson(key, fallback) {
     try {
@@ -95,7 +97,7 @@
     };
   }
 
-  function submitViaJsonp(payload) {
+  function requestViaJsonp(payload) {
     return new Promise((resolve, reject) => {
       if (!APPS_SCRIPT_URL) {
         reject(new Error("Missing Apps Script URL in app.js"));
@@ -141,6 +143,54 @@
     });
   }
 
+  function renderTally(tally) {
+    const players = Array.isArray(tally?.players) ? tally.players : [];
+    const playerCount = Number(tally?.playerCount || 0);
+    const guestCount = Number(tally?.guestCount || 0);
+    const totalCount = Number(tally?.totalCount || 0);
+
+    tallyCount.textContent =
+      totalCount > 0
+        ? `${totalCount} total (${playerCount} players, ${guestCount} guests)`
+        : "No Yes RSVPs yet";
+
+    tallyList.replaceChildren(
+      ...players.map((player) => {
+        const item = document.createElement("li");
+        const name = document.createElement("span");
+        const guests = document.createElement("span");
+
+        name.className = "tally-name";
+        guests.className = "tally-guests";
+        name.textContent = player.name;
+        guests.textContent =
+          Number(player.guestCount || 0) > 0
+            ? `+${player.guestCount} guests`
+            : "No guests";
+
+        item.append(name, guests);
+        return item;
+      }),
+    );
+  }
+
+  async function loadTally(playDate) {
+    if (!playDate || !APPS_SCRIPT_URL) {
+      return;
+    }
+
+    try {
+      const result = await requestViaJsonp({
+        action: "list",
+        playDate,
+      });
+      renderTally(result.tally);
+    } catch {
+      tallyCount.textContent = "Tally unavailable";
+      tallyList.replaceChildren();
+    }
+  }
+
   function initialize() {
     renderPlayerOptions();
 
@@ -151,7 +201,12 @@
 
     dateInput.value = formatDate(getNextPlayDate());
     guestInput.value = "0";
+    loadTally(dateInput.value);
   }
+
+  dateInput.addEventListener("change", () => {
+    loadTally(dateInput.value);
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -168,9 +223,10 @@
     setStatus("Submitting...", "");
 
     try {
-      const result = await submitViaJsonp(payload);
+      const result = await requestViaJsonp(payload);
       rememberPlayerName(payload.playerName);
       writeJson(LAST_RSVP_KEY, payload);
+      renderTally(result.tally);
       setStatus(
         result.action === "updated"
           ? "Updated your existing RSVP."

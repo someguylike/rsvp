@@ -167,6 +167,66 @@ button:disabled {
   color: var(--error);
 }
 
+.tally {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.tally-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tally h2 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.tally p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.tally-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tally-list li {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf9;
+  padding: 8px 10px;
+}
+
+.tally-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.tally-guests {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.88rem;
+}
+
 @media (max-width: 520px) {
   .shell {
     align-items: start;
@@ -175,5 +235,11 @@ button:disabled {
 
   .panel {
     padding: 20px;
+  }
+
+  .tally-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 4px;
   }
 }
