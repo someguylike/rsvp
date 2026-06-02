@@ -221,6 +221,7 @@
 
   function hidePlayerList() {
     playerList.hidden = true;
+    playerList.style.display = "none";
   }
 
   function selectPlayerName(name) {
@@ -251,6 +252,7 @@
       }),
     );
     playerList.hidden = matches.length === 0;
+    playerList.style.display = matches.length === 0 ? "none" : "grid";
   }
 
   function isValidPlayerName(name) {
