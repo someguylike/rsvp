@@ -20,6 +20,16 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "delete") {
+      const result = deleteRsvp_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: result.action,
+        row: result.row,
+        tally: result.tally,
+      });
+    }
+
     const result = upsertRsvp_(params);
     return jsonp_(callback, {
       ok: true,
@@ -41,6 +51,35 @@ function upsertRsvp_(params) {
 
   try {
     return upsertRsvpWithLock_(params);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteRsvp_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const playDate = required_(params.playDate, "Missing play date");
+    const playerName = required_(params.playerName, "Missing player name").trim();
+    const sheet = getSheet_();
+    const row = findExistingRow_(sheet, playDate, playerName);
+
+    if (!row) {
+      return {
+        action: "not_found",
+        row: null,
+        tally: getTally_(playDate),
+      };
+    }
+
+    sheet.deleteRow(row);
+    return {
+      action: "deleted",
+      row,
+      tally: getTally_(playDate),
+    };
   } finally {
     lock.releaseLock();
   }

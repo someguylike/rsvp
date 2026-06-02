@@ -20,6 +20,7 @@
   const previousRsvp = document.querySelector("#previous-rsvp");
   const newRsvp = document.querySelector("#new-rsvp");
   const cancelOverride = document.querySelector("#cancel-override");
+  const removeRsvp = document.querySelector("#remove-rsvp");
   const confirmOverride = document.querySelector("#confirm-override");
   let pendingOverridePayload = null;
 
@@ -194,6 +195,18 @@
   }
 
   function askOverrideConfirmation(existing, payload) {
+    if (!overrideDialog || !previousRsvp || !newRsvp) {
+      if (window.confirm("This player already has an RSVP. Update it?")) {
+        submitRsvp({
+          ...payload,
+          confirmOverride: "true",
+        });
+      } else {
+        setStatus("Kept the previous RSVP.", "");
+      }
+      return;
+    }
+
     pendingOverridePayload = payload;
     renderRsvpDetails(previousRsvp, existing);
     renderRsvpDetails(newRsvp, payload);
@@ -275,6 +288,26 @@
     }
   }
 
+  async function removeExistingRsvp(payload) {
+    submitButton.disabled = true;
+    setStatus("Removing RSVP...", "");
+
+    try {
+      const result = await requestViaJsonp({
+        action: "delete",
+        playerName: payload.playerName,
+        playDate: payload.playDate,
+      });
+
+      renderTally(result.tally);
+      setStatus("Removed the existing RSVP.", "success");
+    } catch (error) {
+      setStatus(error.message, "error");
+    } finally {
+      submitButton.disabled = false;
+    }
+  }
+
   function renderTally(tally) {
     const players = Array.isArray(tally?.players) ? tally.players : [];
     const playerCount = Number(tally?.playerCount || 0);
@@ -349,12 +382,24 @@
     submitRsvp(payload);
   });
 
-  cancelOverride.addEventListener("click", () => {
+  initialize();
+
+  cancelOverride?.addEventListener("click", () => {
     pendingOverridePayload = null;
     setStatus("Kept the previous RSVP.", "");
   });
 
-  confirmOverride.addEventListener("click", () => {
+  removeRsvp?.addEventListener("click", () => {
+    if (!pendingOverridePayload) {
+      return;
+    }
+
+    const payload = pendingOverridePayload;
+    pendingOverridePayload = null;
+    removeExistingRsvp(payload);
+  });
+
+  confirmOverride?.addEventListener("click", () => {
     if (!pendingOverridePayload) {
       return;
     }
@@ -366,6 +411,4 @@
     pendingOverridePayload = null;
     submitRsvp(payload);
   });
-
-  initialize();
 })();
