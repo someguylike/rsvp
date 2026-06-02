@@ -1,5 +1,6 @@
 (function () {
-  const APPS_SCRIPT_URL = "";
+  const APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
   const DEFAULT_PLAYERS = [];
   const PLAYER_STORAGE_KEY = "play-rsvp.playerNames";
   const LAST_RSVP_KEY = "play-rsvp.lastRsvp";
