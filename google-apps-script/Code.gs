@@ -7,6 +7,51 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
+const PLAYERS = [
+  "Alex Yeung",
+  "Anh Khoa Tran (Truc Phuong)",
+  "Bao Ta",
+  "Cuong (MC) Nguyen",
+  "Cuong Tipu",
+  "Danny Phan",
+  "Derek Blaiotta (Hoa Pham's fr)",
+  "Duy Nguyen",
+  "Harvey Le",
+  "Hoan Nguyen",
+  "Hoang Huynh",
+  "Hung Cao (Truong Do)",
+  "Huong Le",
+  "Huy Nguyen (Harvey's fr)",
+  "Huy Viet Nguyen",
+  "Jordan Scherr",
+  "Khang Nguyen",
+  "Khang Vinh",
+  "KhiemHoang Tran",
+  "Luan Nguyen",
+  "Nam Pham",
+  "Nick Nguyen",
+  "Phuc Anh",
+  "Phuoc Truong",
+  "Son Nguyen",
+  "Thanh Nguyen",
+  "Thanh Thanh Tran (Tu Do's friend)",
+  "Thien Nguyen",
+  "Thinh Do (Lily Do)",
+  "Thinh Pham",
+  "Thuy Duong",
+  "Todd Nguyen",
+  "Tr Nguyen (Trung)",
+  "Tri Ho",
+  "Truc Phuong",
+  "Trung Van Nguyễn",
+  "Truong Do",
+  "Tu Anh Do",
+  "Tuan Pham",
+  "Tuan Phan/Hien",
+  "Uyen",
+  "Viet Do",
+  "Vu Nguyen",
+];
 
 function doGet(event) {
   const params = event && event.parameter ? event.parameter : {};
@@ -30,11 +75,22 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "cleanup") {
+      const result = cleanupNonRosterRows_();
+      return jsonp_(callback, {
+        ok: true,
+        action: "cleanup",
+        deletedCount: result.deletedCount,
+        deletedNames: result.deletedNames,
+      });
+    }
+
     const result = upsertRsvp_(params);
     return jsonp_(callback, {
       ok: true,
       action: result.action,
       row: result.row,
+      existing: result.existing || null,
       tally: result.tally,
     });
   } catch (error) {
@@ -63,6 +119,7 @@ function deleteRsvp_(params) {
   try {
     const playDate = required_(params.playDate, "Missing play date");
     const playerName = required_(params.playerName, "Missing player name").trim();
+    validatePlayerName_(playerName);
     const sheet = getSheet_();
     const row = findExistingRow_(sheet, playDate, playerName);
 
@@ -90,6 +147,7 @@ function upsertRsvpWithLock_(params) {
   const playerName = sanitizeText_(
     required_(params.playerName, "Missing player name").trim(),
   );
+  validatePlayerName_(playerName);
   const vote = sanitizeText_(params.vote || "Yes");
   const guestCount = Math.max(0, Number(params.guestCount || 0));
   const submittedAt = params.submittedAt || new Date().toISOString();
@@ -179,6 +237,38 @@ function getRsvpAtRow_(sheet, row) {
   };
 }
 
+function cleanupNonRosterRows_() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const sheet = getSheet_();
+    const lastRow = sheet.getLastRow();
+    const deletedNames = [];
+
+    if (lastRow < 2) {
+      return { deletedCount: 0, deletedNames };
+    }
+
+    const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const playerName = String(rows[index][1] || "").trim();
+      if (!isRosterPlayer_(playerName)) {
+        deletedNames.push(playerName || "(blank)");
+        sheet.deleteRow(index + 2);
+      }
+    }
+
+    return {
+      deletedCount: deletedNames.length,
+      deletedNames,
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function getTally_(playDate) {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
@@ -225,6 +315,17 @@ function getTally_(playDate) {
 
 function normalize_(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isRosterPlayer_(playerName) {
+  const normalizedName = normalize_(playerName);
+  return PLAYERS.some((player) => normalize_(player) === normalizedName);
+}
+
+function validatePlayerName_(playerName) {
+  if (!isRosterPlayer_(playerName)) {
+    throw new Error("Please choose a player from the roster");
+  }
 }
 
 function sanitizeText_(value) {
