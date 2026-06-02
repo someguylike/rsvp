@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RSVP Admin</title>
+    <link rel="stylesheet" href="./styles.css?v=20260602-6" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel" aria-labelledby="page-title">
+        <div class="heading">
+          <p class="eyebrow">Admin export</p>
+          <h1 id="page-title">Monthly Roster Export</h1>
+        </div>
+
+        <form id="export-form" class="form">
+          <label class="field">
+            <span>Month</span>
+            <input id="export-month" name="month" type="month" required />
+          </label>
+
+          <button id="export-button" type="submit">Export Month</button>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <script src="./admin.js?v=20260602-1"></script>
+  </body>
+</html>

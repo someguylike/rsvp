@@ -1,4 +1,5 @@
 const SHEET_NAME = "RSVPs";
+const EXPORT_SPREADSHEET_ID = "1kL1aIsdR11XfOutznr_ee6zugODDpAype47hY9vaeBk";
 const HEADERS = [
   "Play Date",
   "Player Name",
@@ -82,6 +83,19 @@ function doGet(event) {
         action: "cleanup",
         deletedCount: result.deletedCount,
         deletedNames: result.deletedNames,
+      });
+    }
+
+    if (params.action === "exportMonth") {
+      const result = exportMonthRoster_(
+        required_(params.month, "Missing export month"),
+      );
+      return jsonp_(callback, {
+        ok: true,
+        action: "exportMonth",
+        sheetName: result.sheetName,
+        exportedDates: result.exportedDates,
+        url: result.url,
       });
     }
 
@@ -288,6 +302,100 @@ function cleanupNonRosterRows_() {
   }
 }
 
+function exportMonthRoster_(month) {
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error("Month must use YYYY-MM format");
+  }
+
+  const sourceSheet = getSheet_();
+  const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
+  const exportSheetName = `${month} Roster`;
+  let exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
+
+  if (!exportSheet) {
+    exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
+  }
+
+  const monthDates = getExportDatesForMonth_(sourceSheet, month);
+  const header = ["Date"].concat(PLAYERS);
+  const matrix = [header].concat(
+    monthDates.map((date) => {
+      const rowByPlayer = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
+      return [date].concat(
+        PLAYERS.map((player) => rowByPlayer[normalize_(player)] || ""),
+      );
+    }),
+  );
+
+  exportSheet.clear();
+  exportSheet
+    .getRange(1, 1, matrix.length, matrix[0].length)
+    .setValues(matrix);
+  exportSheet.setFrozenRows(1);
+  exportSheet.setFrozenColumns(1);
+  exportSheet.getRange(1, 1, 1, matrix[0].length).setFontWeight("bold");
+  exportSheet.getRange(1, 1, matrix.length, 1).setFontWeight("bold");
+  exportSheet.autoResizeColumns(1, matrix[0].length);
+
+  return {
+    sheetName: exportSheetName,
+    exportedDates: monthDates.length,
+    url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
+  };
+}
+
+function getExportDatesForMonth_(sheet, month) {
+  const dateSet = {};
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(5, 7)) - 1;
+  const current = new Date(year, monthIndex, 1);
+
+  while (current.getMonth() === monthIndex) {
+    if (PLAY_DAYS.indexOf(current.getDay()) !== -1) {
+      dateSet[formatDate_(current)] = true;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const rows = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    rows.forEach((row) => {
+      const date = normalizeDate_(row[0]);
+      if (date.indexOf(`${month}-`) === 0) {
+        dateSet[date] = true;
+      }
+    });
+  }
+
+  return Object.keys(dateSet).sort();
+}
+
+function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
+  const lastRow = sheet.getLastRow();
+  const totals = {};
+
+  if (lastRow < 2) {
+    return totals;
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  rows.forEach((row) => {
+    const rowDate = normalizeDate_(row[0]);
+    const playerName = String(row[1] || "").trim();
+    const vote = normalize_(row[2]);
+    const guestCount = Math.max(0, Number(row[3] || 0));
+
+    if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
+      return;
+    }
+
+    totals[normalize_(playerName)] = 1 + (Number.isFinite(guestCount) ? guestCount : 0);
+  });
+
+  return totals;
+}
+
 function getTally_(playDate) {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
@@ -334,6 +442,13 @@ function getTally_(playDate) {
 
 function normalize_(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function formatDate_(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function isRosterPlayer_(playerName) {

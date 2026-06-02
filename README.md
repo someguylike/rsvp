@@ -13,6 +13,7 @@ Static RSVP page for weekly play sessions.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
 - After submit and when the date changes, the page shows the Yes RSVP tally for that date.
+- `admin.html` exports a selected month to the roster spreadsheet as dates by players, with each cell showing total headcount.
 
 ## Recommended Hosting
 

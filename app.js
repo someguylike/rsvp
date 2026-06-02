@@ -576,6 +576,7 @@
     }
 
     guestInput.value = "0";
+    playerInput.focus();
   }
 
   form.addEventListener("submit", async (event) => {
