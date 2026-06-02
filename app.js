@@ -50,7 +50,8 @@
   const PLAY_DAYS = [2, 4, 5, 0];
 
   const form = document.querySelector("#rsvp-form");
-  const playerSelect = document.querySelector("#player-name");
+  const playerInput = document.querySelector("#player-name");
+  const playerList = document.querySelector("#player-list");
   const dateInput = document.querySelector("#play-date");
   const dateOptions = document.querySelector("#date-options");
   const customDateField = document.querySelector("#custom-date-field");
@@ -199,16 +200,17 @@
   }
 
   function renderPlayerOptions() {
-    const placeholder = playerSelect.querySelector("option[value='']");
-    playerSelect.replaceChildren(
-      placeholder,
+    playerList.replaceChildren(
       ...PLAYERS.map((name) => {
         const option = document.createElement("option");
         option.value = name;
-        option.textContent = name;
         return option;
       }),
     );
+  }
+
+  function isValidPlayerName(name) {
+    return PLAYERS.some((player) => player === name);
   }
 
   function setStatus(message, type) {
@@ -428,8 +430,8 @@
     renderDateOptions();
 
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
-    if (lastRsvp?.playerName && PLAYERS.includes(lastRsvp.playerName)) {
-      playerSelect.value = lastRsvp.playerName;
+    if (lastRsvp?.playerName && isValidPlayerName(lastRsvp.playerName)) {
+      playerInput.value = lastRsvp.playerName;
     }
 
     guestInput.value = "0";
@@ -441,6 +443,11 @@
     const payload = collectPayload();
     if (!payload.playerName || !payload.playDate || Number.isNaN(payload.guestCount)) {
       setStatus("Please fill out the required fields.", "error");
+      return;
+    }
+
+    if (!isValidPlayerName(payload.playerName)) {
+      setStatus("Please choose a player from the list.", "error");
       return;
     }
 

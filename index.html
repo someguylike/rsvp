@@ -17,9 +17,15 @@
         <form id="rsvp-form" class="form">
           <label class="field">
             <span>Player name</span>
-            <select id="player-name" name="playerName" required>
-              <option value="">Choose your name</option>
-            </select>
+            <input
+              id="player-name"
+              name="playerName"
+              list="player-list"
+              autocomplete="off"
+              required
+              placeholder="Search your name"
+            />
+            <datalist id="player-list"></datalist>
           </label>
 
           <fieldset class="field">
@@ -108,6 +114,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260602-6"></script>
+    <script src="./app.js?v=20260602-7"></script>
   </body>
 </html>
