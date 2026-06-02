@@ -322,7 +322,7 @@
     const previous = existing || {
       playerName: payload.playerName,
       playDate: payload.playDate,
-      vote: "Already submitted",
+      vote: "No",
       guestCount: 0,
     };
 
@@ -461,12 +461,18 @@
 
       writeJson(LAST_RSVP_KEY, payload);
       renderTally(result.tally);
-      setStatus(
-        result.action === "updated"
-          ? "Updated your existing RSVP."
-          : "RSVP submitted.",
-        "success",
-      );
+      if (result.action === "deleted") {
+        setStatus("Removed your RSVP.", "success");
+      } else if (result.action === "not_found") {
+        setStatus("No RSVP was on file for that date.", "");
+      } else {
+        setStatus(
+          result.action === "updated"
+            ? "Updated your existing RSVP."
+            : "RSVP submitted.",
+          "success",
+        );
+      }
     } catch (error) {
       if (error.message === "Could not reach Apps Script") {
         setStatusWithLink(

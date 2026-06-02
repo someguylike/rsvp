@@ -159,14 +159,33 @@ function upsertRsvpWithLock_(params) {
 
   const sheet = getSheet_();
   const row = findExistingRow_(sheet, playDate, playerName);
+  const existingRsvp = row ? getRsvpAtRow_(sheet, row) : null;
+
+  if (normalize_(vote) === "no") {
+    if (row) {
+      sheet.deleteRow(row);
+      return {
+        action: "deleted",
+        row,
+        tally: getTally_(playDate),
+      };
+    }
+
+    return {
+      action: "not_found",
+      row: null,
+      tally: getTally_(playDate),
+    };
+  }
+
   const values = [playDate, playerName, vote, guestCount, submittedAt, updatedAt];
 
   if (row) {
-    if (params.confirmOverride !== "true") {
+    if (normalize_(existingRsvp.vote) !== "no" && params.confirmOverride !== "true") {
       return {
         action: "needs_confirmation",
         row,
-        existing: getRsvpAtRow_(sheet, row),
+        existing: existingRsvp,
         tally: getTally_(playDate),
       };
     }
