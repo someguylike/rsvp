@@ -211,7 +211,7 @@
   function getPlayerMatches(query) {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     if (!normalizedQuery) {
-      return PLAYERS.slice(0, 8);
+      return PLAYERS;
     }
 
     return PLAYERS.filter((name) =>
