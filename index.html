@@ -28,10 +28,16 @@
             <datalist id="player-list"></datalist>
           </label>
 
-          <label class="field">
-            <span>Date to play</span>
-            <input id="play-date" name="playDate" type="date" required />
-          </label>
+          <fieldset class="field">
+            <legend>Date to play</legend>
+            <input id="play-date" name="playDate" type="hidden" required />
+            <div
+              id="date-options"
+              class="date-options"
+              role="radiogroup"
+              aria-label="Date to play"
+            ></div>
+          </fieldset>
 
           <fieldset class="field">
             <legend>Vote</legend>

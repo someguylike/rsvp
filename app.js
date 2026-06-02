@@ -10,6 +10,7 @@
   const playerInput = document.querySelector("#player-name");
   const playerList = document.querySelector("#player-list");
   const dateInput = document.querySelector("#play-date");
+  const dateOptions = document.querySelector("#date-options");
   const guestInput = document.querySelector("#guest-count");
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
@@ -36,18 +37,80 @@
   }
 
   function getNextPlayDate() {
+    return getUpcomingPlayDates(1)[0] || new Date();
+  }
+
+  function getUpcomingPlayDates(count) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const dates = [];
 
-    for (let offset = 0; offset <= 7; offset += 1) {
+    for (let offset = 0; offset <= 21 && dates.length < count; offset += 1) {
       const candidate = new Date(today);
       candidate.setDate(today.getDate() + offset);
       if (PLAY_DAYS.includes(candidate.getDay())) {
-        return candidate;
+        dates.push(candidate);
       }
     }
 
-    return today;
+    return dates;
+  }
+
+  function formatDateOption(date) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const day = date.toLocaleDateString(undefined, { weekday: "short" });
+    const full = date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+
+    return {
+      day: date.getTime() === today.getTime() ? "Today" : day,
+      full,
+    };
+  }
+
+  function selectPlayDate(value) {
+    dateInput.value = value;
+    dateOptions.querySelectorAll(".date-option").forEach((button) => {
+      const isActive = button.dataset.date === value;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-checked", String(isActive));
+    });
+    loadTally(value);
+  }
+
+  function renderDateOptions() {
+    const dates = getUpcomingPlayDates(4);
+    dateOptions.replaceChildren(
+      ...dates.map((date) => {
+        const value = formatDate(date);
+        const label = formatDateOption(date);
+        const button = document.createElement("button");
+        const day = document.createElement("span");
+        const full = document.createElement("span");
+
+        button.type = "button";
+        button.className = "date-option";
+        button.dataset.date = value;
+        button.setAttribute("role", "radio");
+        button.setAttribute("aria-checked", "false");
+        day.className = "date-day";
+        full.className = "date-full";
+        day.textContent = label.day;
+        full.textContent = label.full;
+
+        button.append(day, full);
+        button.addEventListener("click", () => {
+          selectPlayDate(value);
+        });
+        return button;
+      }),
+    );
+
+    selectPlayDate(formatDate(getNextPlayDate()));
   }
 
   function renderPlayerOptions() {
@@ -193,20 +256,15 @@
 
   function initialize() {
     renderPlayerOptions();
+    renderDateOptions();
 
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
     if (lastRsvp?.playerName) {
       playerInput.value = lastRsvp.playerName;
     }
 
-    dateInput.value = formatDate(getNextPlayDate());
     guestInput.value = "0";
-    loadTally(dateInput.value);
   }
-
-  dateInput.addEventListener("change", () => {
-    loadTally(dateInput.value);
-  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();

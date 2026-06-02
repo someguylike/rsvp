@@ -132,6 +132,49 @@ input:focus {
   font-weight: 750;
 }
 
+.date-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.date-option {
+  display: grid;
+  min-height: 58px;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf9;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.date-option:hover {
+  border-color: var(--accent);
+  background: #f5fbf8;
+}
+
+.date-option.active {
+  border-color: var(--accent);
+  background: #e7f1ed;
+  color: var(--accent-strong);
+}
+
+.date-day {
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.date-full {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
 button {
   min-height: 48px;
   border: 0;
@@ -241,5 +284,9 @@ button:disabled {
     align-items: start;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .date-options {
+    grid-template-columns: 1fr;
   }
 }

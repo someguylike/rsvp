@@ -5,7 +5,7 @@ Static RSVP page for weekly play sessions.
 ## What it does
 
 - Player name input uses a dropdown from names remembered in this browser.
-- Date defaults to the next Tuesday, Thursday, Friday, or Sunday, including today if today matches.
+- Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday.
 - Vote defaults to `Yes`.
 - Guest count defaults to `0`.
 - Submit writes to Google Sheets through Apps Script.
