@@ -65,6 +65,15 @@ function upsertRsvpWithLock_(params) {
   const values = [playDate, playerName, vote, guestCount, submittedAt, updatedAt];
 
   if (row) {
+    if (params.confirmOverride !== "true") {
+      return {
+        action: "needs_confirmation",
+        row,
+        existing: getRsvpAtRow_(sheet, row),
+        tally: getTally_(playDate),
+      };
+    }
+
     const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
     values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
@@ -117,6 +126,18 @@ function findExistingRow_(sheet, playDate, playerName) {
   }
 
   return null;
+}
+
+function getRsvpAtRow_(sheet, row) {
+  const values = sheet.getRange(row, 1, 1, 6).getValues()[0];
+  return {
+    playDate: normalizeDate_(values[0]),
+    playerName: String(values[1] || "").trim(),
+    vote: String(values[2] || "").trim(),
+    guestCount: Math.max(0, Number(values[3] || 0)),
+    submittedAt: String(values[4] || ""),
+    updatedAt: String(values[5] || ""),
+  };
 }
 
 function getTally_(playDate) {

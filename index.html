@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Play RSVP</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260602-2" />
   </head>
   <body>
     <main class="shell">
@@ -82,6 +82,31 @@
       </section>
     </main>
 
-    <script src="./app.js"></script>
+    <dialog id="override-dialog" class="dialog">
+      <form method="dialog" class="dialog-panel">
+        <h2>Update existing RSVP?</h2>
+        <p class="dialog-copy">
+          This player already has an RSVP for this date.
+        </p>
+        <div class="compare">
+          <section>
+            <h3>Previous</h3>
+            <dl id="previous-rsvp"></dl>
+          </section>
+          <section>
+            <h3>New</h3>
+            <dl id="new-rsvp"></dl>
+          </section>
+        </div>
+        <div class="dialog-actions">
+          <button id="cancel-override" class="secondary-button" value="cancel">
+            Keep previous
+          </button>
+          <button id="confirm-override" value="confirm">Update RSVP</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./app.js?v=20260602-2"></script>
   </body>
 </html>

@@ -16,6 +16,12 @@
   const submitButton = document.querySelector("#submit-button");
   const tallyCount = document.querySelector("#tally-count");
   const tallyList = document.querySelector("#tally-list");
+  const overrideDialog = document.querySelector("#override-dialog");
+  const previousRsvp = document.querySelector("#previous-rsvp");
+  const newRsvp = document.querySelector("#new-rsvp");
+  const cancelOverride = document.querySelector("#cancel-override");
+  const confirmOverride = document.querySelector("#confirm-override");
+  let pendingOverridePayload = null;
 
   function readJson(key, fallback) {
     try {
@@ -160,6 +166,40 @@
     };
   }
 
+  function formatGuestLabel(guestCount) {
+    const count = Number(guestCount || 0);
+    return count === 1 ? "1 guest" : `${count} guests`;
+  }
+
+  function renderRsvpDetails(container, rsvp) {
+    const details = [
+      ["Player", rsvp.playerName],
+      ["Date", rsvp.playDate],
+      ["Vote", rsvp.vote],
+      ["Guests", formatGuestLabel(rsvp.guestCount)],
+    ];
+
+    container.replaceChildren(
+      ...details.map(([label, value]) => {
+        const row = document.createElement("div");
+        const term = document.createElement("dt");
+        const description = document.createElement("dd");
+
+        term.textContent = label;
+        description.textContent = String(value || "-");
+        row.append(term, description);
+        return row;
+      }),
+    );
+  }
+
+  function askOverrideConfirmation(existing, payload) {
+    pendingOverridePayload = payload;
+    renderRsvpDetails(previousRsvp, existing);
+    renderRsvpDetails(newRsvp, payload);
+    overrideDialog.showModal();
+  }
+
   function requestViaJsonp(payload) {
     return new Promise((resolve, reject) => {
       if (!APPS_SCRIPT_URL) {
@@ -204,6 +244,35 @@
       script.src = url.toString();
       document.body.append(script);
     });
+  }
+
+  async function submitRsvp(payload) {
+    submitButton.disabled = true;
+    setStatus("Submitting...", "");
+
+    try {
+      const result = await requestViaJsonp(payload);
+
+      if (result.action === "needs_confirmation") {
+        askOverrideConfirmation(result.existing, payload);
+        setStatus("Confirm whether to update the existing RSVP.", "");
+        return;
+      }
+
+      rememberPlayerName(payload.playerName);
+      writeJson(LAST_RSVP_KEY, payload);
+      renderTally(result.tally);
+      setStatus(
+        result.action === "updated"
+          ? "Updated your existing RSVP."
+          : "RSVP submitted.",
+        "success",
+      );
+    } catch (error) {
+      setStatus(error.message, "error");
+    } finally {
+      submitButton.disabled = false;
+    }
   }
 
   function renderTally(tally) {
@@ -277,25 +346,25 @@
 
     payload.guestCount = Math.max(0, payload.guestCount);
 
-    submitButton.disabled = true;
-    setStatus("Submitting...", "");
+    submitRsvp(payload);
+  });
 
-    try {
-      const result = await requestViaJsonp(payload);
-      rememberPlayerName(payload.playerName);
-      writeJson(LAST_RSVP_KEY, payload);
-      renderTally(result.tally);
-      setStatus(
-        result.action === "updated"
-          ? "Updated your existing RSVP."
-          : "RSVP submitted.",
-        "success",
-      );
-    } catch (error) {
-      setStatus(error.message, "error");
-    } finally {
-      submitButton.disabled = false;
+  cancelOverride.addEventListener("click", () => {
+    pendingOverridePayload = null;
+    setStatus("Kept the previous RSVP.", "");
+  });
+
+  confirmOverride.addEventListener("click", () => {
+    if (!pendingOverridePayload) {
+      return;
     }
+
+    const payload = {
+      ...pendingOverridePayload,
+      confirmOverride: "true",
+    };
+    pendingOverridePayload = null;
+    submitRsvp(payload);
   });
 
   initialize();
