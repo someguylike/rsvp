@@ -115,7 +115,7 @@
     const endOfThisWeek = new Date(startOfThisWeek);
     endOfThisWeek.setDate(startOfThisWeek.getDate() + 6);
 
-    const day = date.toLocaleDateString(undefined, { weekday: "short" });
+    const day = date.toLocaleDateString(undefined, { weekday: "long" });
     const full = date.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
