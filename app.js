@@ -205,13 +205,41 @@
   }
 
   function renderPlayerOptions() {
+    renderPlayerMatches("");
+  }
+
+  function getPlayerMatches(query) {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) {
+      return PLAYERS.slice(0, 8);
+    }
+
+    return PLAYERS.filter((name) =>
+      name.toLocaleLowerCase().includes(normalizedQuery),
+    ).slice(0, 8);
+  }
+
+  function hidePlayerList() {
+    playerList.hidden = true;
+  }
+
+  function renderPlayerMatches(query) {
+    const matches = getPlayerMatches(query);
     playerList.replaceChildren(
-      ...PLAYERS.map((name) => {
-        const option = document.createElement("option");
-        option.value = name;
+      ...matches.map((name) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "player-option";
+        option.textContent = name;
+        option.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          playerInput.value = name;
+          hidePlayerList();
+        });
         return option;
       }),
     );
+    playerList.hidden = matches.length === 0;
   }
 
   function isValidPlayerName(name) {
@@ -549,6 +577,18 @@
     payload.guestCount = Math.max(0, payload.guestCount);
 
     submitRsvp(payload);
+  });
+
+  playerInput.addEventListener("focus", () => {
+    renderPlayerMatches(playerInput.value);
+  });
+
+  playerInput.addEventListener("input", () => {
+    renderPlayerMatches(playerInput.value);
+  });
+
+  playerInput.addEventListener("blur", () => {
+    window.setTimeout(hidePlayerList, 120);
   });
 
   initialize();
