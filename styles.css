@@ -256,16 +256,6 @@ button:disabled {
   background: #f5fbf8;
 }
 
-.danger-button {
-  border: 1px solid #c65d4e;
-  background: #fff8f6;
-  color: #8d2f25;
-}
-
-.danger-button:hover {
-  background: #fbe9e5;
-}
-
 .status {
   min-height: 22px;
   margin: 0;
@@ -417,7 +407,7 @@ button:disabled {
 
 .dialog-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 

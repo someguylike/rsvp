@@ -65,7 +65,6 @@
   const previousRsvp = document.querySelector("#previous-rsvp");
   const newRsvp = document.querySelector("#new-rsvp");
   const cancelOverride = document.querySelector("#cancel-override");
-  const removeRsvp = document.querySelector("#remove-rsvp");
   const confirmOverride = document.querySelector("#confirm-override");
   let pendingOverridePayload = null;
 
@@ -300,7 +299,7 @@
       [
         "Guests",
         detailsSource.guestCount == null
-          ? "Unknown"
+          ? formatGuestLabel(0)
           : formatGuestLabel(detailsSource.guestCount),
       ],
     ];
@@ -324,7 +323,7 @@
       playerName: payload.playerName,
       playDate: payload.playDate,
       vote: "Already submitted",
-      guestCount: null,
+      guestCount: 0,
     };
 
     if (!overrideDialog || !previousRsvp || !newRsvp) {
@@ -609,16 +608,6 @@
   cancelOverride?.addEventListener("click", () => {
     pendingOverridePayload = null;
     setStatus("Kept the previous RSVP.", "");
-  });
-
-  removeRsvp?.addEventListener("click", () => {
-    if (!pendingOverridePayload) {
-      return;
-    }
-
-    const payload = pendingOverridePayload;
-    pendingOverridePayload = null;
-    removeExistingRsvp(payload);
   });
 
   confirmOverride?.addEventListener("click", () => {
