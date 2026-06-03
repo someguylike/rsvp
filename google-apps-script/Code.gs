@@ -2,7 +2,7 @@ const SHEET_NAME = "RSVPs";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
-const EXPORT_MIN_HEADCOUNT = 4;
+const EXPORT_MIN_HEADCOUNT = 2;
 const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
   "Play Date",
