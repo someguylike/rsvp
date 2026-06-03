@@ -1,5 +1,6 @@
 const SHEET_NAME = "RSVPs";
 const EXPORT_SPREADSHEET_ID = "1kL1aIsdR11XfOutznr_ee6zugODDpAype47hY9vaeBk";
+const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
   "Play Date",
   "Player Name",
