@@ -42,6 +42,10 @@ body {
   box-shadow: 0 16px 40px rgb(32 25 13 / 10%);
 }
 
+.admin-panel {
+  width: min(100%, 1180px);
+}
+
 .heading {
   margin-bottom: 24px;
 }
@@ -271,6 +275,89 @@ button:disabled {
   color: var(--error);
 }
 
+.admin-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.admin-preview[hidden] {
+  display: none;
+}
+
+.preview-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.preview-heading h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.preview-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.table-wrap {
+  max-height: 68vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.export-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.export-table th,
+.export-table td {
+  min-width: 72px;
+  border: 1px solid var(--line);
+  padding: 7px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.export-table th:first-child,
+.export-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 112px;
+  background: #fffdf9;
+  font-weight: 800;
+  text-align: left;
+}
+
+.export-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #e7f1ed;
+  color: var(--accent-strong);
+}
+
+.export-table thead th:first-child {
+  z-index: 3;
+}
+
+.export-table .summary-row td {
+  background: #f5fbf8;
+  font-weight: 800;
+}
+
 .tally {
   display: grid;
   gap: 12px;
@@ -434,5 +521,15 @@ button:disabled {
   .compare,
   .dialog-actions {
     grid-template-columns: 1fr;
+  }
+
+  .preview-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .preview-heading p {
+    text-align: left;
   }
 }

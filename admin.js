@@ -6,6 +6,9 @@
   const monthInput = document.querySelector("#export-month");
   const exportButton = document.querySelector("#export-button");
   const status = document.querySelector("#status");
+  const previewSection = document.querySelector("#preview-section");
+  const previewNote = document.querySelector("#preview-note");
+  const previewTable = document.querySelector("#preview-table");
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -27,6 +30,43 @@
     link.rel = "noreferrer";
     link.textContent = "Open spreadsheet";
     status.append(link);
+  }
+
+  function renderPreview(rows, sheetName) {
+    previewTable.textContent = "";
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      previewSection.hidden = true;
+      return;
+    }
+
+    const thead = document.createElement("thead");
+    const tbody = document.createElement("tbody");
+
+    rows.forEach((row, rowIndex) => {
+      const tr = document.createElement("tr");
+      const firstCell = String(row[0] || "").trim().toLowerCase();
+
+      if (firstCell.includes("pay") || firstCell.includes("fee")) {
+        tr.className = "summary-row";
+      }
+
+      row.forEach((cell) => {
+        const element = document.createElement(rowIndex === 0 ? "th" : "td");
+        element.textContent = cell == null ? "" : String(cell);
+        tr.append(element);
+      });
+
+      if (rowIndex === 0) {
+        thead.append(tr);
+      } else {
+        tbody.append(tr);
+      }
+    });
+
+    previewTable.append(thead, tbody);
+    previewNote.textContent = `Rendered from the ${sheetName} spreadsheet tab, including formula results such as Member Pay.`;
+    previewSection.hidden = false;
   }
 
   function buildUrl(payload, callbackName) {
@@ -87,6 +127,7 @@
         `Exported ${result.exportedDates} dates to ${result.sheetName}.`,
         result.url,
       );
+      renderPreview(result.previewRows, result.sheetName);
     } catch (error) {
       setStatus(error.message, "error");
     } finally {

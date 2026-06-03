@@ -4,11 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RSVP Admin</title>
-    <link rel="stylesheet" href="./styles.css?v=20260602-6" />
+    <link rel="stylesheet" href="./styles.css?v=20260602-7" />
   </head>
   <body>
     <main class="shell">
-      <section class="panel" aria-labelledby="page-title">
+      <section class="panel admin-panel" aria-labelledby="page-title">
         <div class="heading">
           <p class="eyebrow">Admin export</p>
           <h1 id="page-title">Monthly Roster Export</h1>
@@ -23,9 +23,19 @@
           <button id="export-button" type="submit">Export Month</button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
         </form>
+
+        <section id="preview-section" class="admin-preview" hidden>
+          <div class="preview-heading">
+            <h2>Exported Sheet Preview</h2>
+            <p id="preview-note"></p>
+          </div>
+          <div class="table-wrap">
+            <table id="preview-table" class="export-table"></table>
+          </div>
+        </section>
       </section>
     </main>
 
-    <script src="./admin.js?v=20260602-1"></script>
+    <script src="./admin.js?v=20260602-2"></script>
   </body>
 </html>

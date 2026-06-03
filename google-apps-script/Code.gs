@@ -1,5 +1,6 @@
 const SHEET_NAME = "RSVPs";
 const EXPORT_SPREADSHEET_ID = "1kL1aIsdR11XfOutznr_ee6zugODDpAype47hY9vaeBk";
+const EXPORT_TEMPLATE_SHEET_NAME = "Sample";
 const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
   "Play Date",
@@ -96,6 +97,7 @@ function doGet(event) {
         action: "exportMonth",
         sheetName: result.sheetName,
         exportedDates: result.exportedDates,
+        previewRows: result.previewRows,
         url: result.url,
       });
     }
@@ -311,9 +313,16 @@ function exportMonthRoster_(month) {
   const sourceSheet = getSheet_();
   const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
   const exportSheetName = formatMonthTabName_(month);
+  const templateSheet = targetSpreadsheet.getSheetByName(EXPORT_TEMPLATE_SHEET_NAME);
   let exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
 
-  if (!exportSheet) {
+  if (templateSheet) {
+    if (exportSheet) {
+      targetSpreadsheet.deleteSheet(exportSheet);
+    }
+    exportSheet = templateSheet.copyTo(targetSpreadsheet);
+    exportSheet.setName(exportSheetName);
+  } else if (!exportSheet) {
     exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
   }
 
@@ -327,22 +336,88 @@ function exportMonthRoster_(month) {
       );
     }),
   );
+  const summaryStartRow = findSummaryStartRow_(exportSheet);
 
-  exportSheet.clear();
+  if (summaryStartRow && matrix.length > summaryStartRow - 1) {
+    exportSheet.insertRowsBefore(summaryStartRow, matrix.length - summaryStartRow + 1);
+  }
+
+  const attendanceBlockRows = Math.max(
+    matrix.length,
+    summaryStartRow ? summaryStartRow - 1 : matrix.length,
+  );
+
+  if (!templateSheet) {
+    exportSheet.clear();
+  }
+  exportSheet.getRange(1, 1, attendanceBlockRows, header.length).clearContent();
   exportSheet
     .getRange(1, 1, matrix.length, matrix[0].length)
     .setValues(matrix);
   exportSheet.setFrozenRows(1);
   exportSheet.setFrozenColumns(1);
   exportSheet.getRange(1, 1, 1, matrix[0].length).setFontWeight("bold");
-  exportSheet.getRange(1, 1, matrix.length, 1).setFontWeight("bold");
+  exportSheet.getRange(1, 1, attendanceBlockRows, 1).setFontWeight("bold");
   exportSheet.autoResizeColumns(1, matrix[0].length);
+  SpreadsheetApp.flush();
 
   return {
     sheetName: exportSheetName,
     exportedDates: monthDates.length,
+    previewRows: getPreviewRows_(exportSheet),
     url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
   };
+}
+
+function findSummaryStartRow_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 1) {
+    return null;
+  }
+
+  const values = sheet.getRange(1, 1, lastRow, 1).getDisplayValues();
+  for (let index = 0; index < values.length; index += 1) {
+    const label = normalize_(values[index][0]);
+    if (label.indexOf("member pay") !== -1 || label.indexOf("fee") !== -1) {
+      return index + 1;
+    }
+  }
+
+  return null;
+}
+
+function getPreviewRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+
+  if (lastRow < 1 || lastColumn < 1) {
+    return [];
+  }
+
+  const values = sheet.getRange(1, 1, lastRow, lastColumn).getDisplayValues();
+  return trimEmptyEdges_(values);
+}
+
+function trimEmptyEdges_(values) {
+  let lastRow = values.length - 1;
+  let lastColumn = values.reduce((maxColumn, row) => {
+    for (let index = row.length - 1; index >= 0; index -= 1) {
+      if (String(row[index] || "").trim()) {
+        return Math.max(maxColumn, index);
+      }
+    }
+    return maxColumn;
+  }, 0);
+
+  while (lastRow >= 0 && values[lastRow].every((cell) => !String(cell || "").trim())) {
+    lastRow -= 1;
+  }
+
+  if (lastRow < 0) {
+    return [];
+  }
+
+  return values.slice(0, lastRow + 1).map((row) => row.slice(0, lastColumn + 1));
 }
 
 function getExportDatesForMonth_(sheet, month) {
