@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --bg: #edf5ff;
+  --bg: #003087;
   --panel: #ffffff;
   --surface: #f7fbff;
   --surface-strong: #e8f2ff;
@@ -25,7 +25,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 82%), rgb(237 245 255 / 0) 280px),
+    linear-gradient(180deg, rgb(0 48 135 / 96%), rgb(0 94 184 / 82%) 320px, rgb(237 245 255) 320px),
     var(--bg);
   color: var(--text);
   font-family:
@@ -42,11 +42,11 @@ body {
 
 .panel {
   width: min(100%, 520px);
-  border: 1px solid var(--line);
+  border: 1px solid rgb(255 255 255 / 76%);
   border-radius: 8px;
   background: var(--panel);
   padding: 30px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 28px 80px rgb(0 22 65 / 24%);
 }
 
 .admin-panel {
@@ -493,6 +493,12 @@ button:disabled {
 .heat-5 span,
 .heat-5 strong {
   color: white;
+}
+
+.audit-table th:nth-child(2),
+.audit-table td:nth-child(2) {
+  min-width: 220px;
+  text-align: left;
 }
 
 .tally {

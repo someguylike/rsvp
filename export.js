@@ -16,6 +16,9 @@
   const individualSection = document.querySelector("#individual-section");
   const individualNote = document.querySelector("#individual-note");
   const individualTable = document.querySelector("#individual-table");
+  const auditSection = document.querySelector("#audit-section");
+  const auditNote = document.querySelector("#audit-note");
+  const auditTable = document.querySelector("#audit-table");
   let currentRosterRows = [];
   let selectedDate = "";
 
@@ -62,11 +65,14 @@
   function clearPreview() {
     groupHeatmap.textContent = "";
     individualTable.textContent = "";
+    auditTable.textContent = "";
     heatmapNote.textContent = "";
     individualNote.textContent = "";
+    auditNote.textContent = "";
     heatmapSection.hidden = true;
     filterSection.hidden = true;
     individualSection.hidden = true;
+    auditSection.hidden = true;
     shareStatus.hidden = true;
     shareStatus.textContent = "";
   }
@@ -173,6 +179,28 @@
     filterSection.hidden = activePlayers.length === 0;
   }
 
+  function getAuditRows(model) {
+    const rows = [];
+
+    model.dates.forEach((date, dateIndex) => {
+      model.players.forEach((player) => {
+        const headcount = Number(player.values[dateIndex] || 0);
+        if (!headcount) {
+          return;
+        }
+
+        rows.push({
+          date,
+          player: player.name,
+          guests: Math.max(0, headcount - 1),
+          headcount,
+        });
+      });
+    });
+
+    return rows;
+  }
+
   function renderGroupHeatmap(model) {
     const totals = getDateTotals(model).filter((item) => item.total > 0);
     const maxTotal = totals.reduce(
@@ -254,6 +282,41 @@
     individualSection.hidden = false;
   }
 
+  function renderAuditTable(model) {
+    const rows = getAuditRows(model);
+    auditTable.textContent = "";
+
+    if (rows.length === 0) {
+      auditSection.hidden = true;
+      return;
+    }
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    ["Date", "Player", "Guests", "Headcount"].forEach((header) => {
+      appendCell(headerRow, "th", header);
+    });
+    thead.append(headerRow);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach((entry) => {
+      const row = document.createElement("tr");
+      appendCell(row, "td", entry.date);
+      appendCell(row, "td", entry.player);
+      appendCell(row, "td", String(entry.guests));
+      appendCell(row, "td", String(entry.headcount));
+      tbody.append(row);
+    });
+
+    auditTable.append(thead, tbody);
+    auditNote.textContent = [
+      playerFilter.value ? playerFilter.value : "All players",
+      selectedDate || "all dates",
+      `${rows.length} RSVP rows`,
+    ].join(" · ");
+    auditSection.hidden = false;
+  }
+
   function renderAnalytics(rows) {
     currentRosterRows = rows;
     const model = parseRosterRows(rows);
@@ -262,6 +325,7 @@
 
     renderGroupHeatmap(model);
     renderIndividualHeatmap(filteredModel);
+    renderAuditTable(filteredModel);
   }
 
   function renderPreview(rows) {
