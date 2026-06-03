@@ -3,6 +3,7 @@
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
 
   const form = document.querySelector("#export-form");
+  const monthField = document.querySelector("#month-field");
   const monthInput = document.querySelector("#export-month");
   const exportButton = document.querySelector("#export-button");
   const status = document.querySelector("#status");
@@ -161,6 +162,28 @@
       exportButton.disabled = false;
     }
   }
+
+  function openMonthPicker() {
+    monthInput.focus();
+    try {
+      monthInput.showPicker?.();
+    } catch {
+      // Focusing the input is the best fallback when a browser blocks showPicker.
+    }
+  }
+
+  monthField.addEventListener("click", (event) => {
+    if (event.target === monthInput) {
+      return;
+    }
+
+    event.preventDefault();
+    openMonthPicker();
+  });
+
+  monthInput.addEventListener("click", () => {
+    openMonthPicker();
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
