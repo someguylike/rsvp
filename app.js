@@ -88,6 +88,16 @@
     return `${year}-${month}-${day}`;
   }
 
+  function getTodayValue() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return formatDate(today);
+  }
+
+  function isPastDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) && value < getTodayValue();
+  }
+
   function getNextPlayDate() {
     return getUpcomingPlayDates(1)[0] || new Date();
   }
@@ -163,6 +173,9 @@
 
   function renderDateOptions() {
     const dates = getUpcomingPlayDates(4);
+    if (customDateInput) {
+      customDateInput.min = getTodayValue();
+    }
     dateOptions.replaceChildren(
       ...dates.map((date) => {
         const value = formatDate(date);
@@ -212,6 +225,12 @@
 
     customDateInput?.addEventListener("change", () => {
       if (customDateInput.value) {
+        if (isPastDate(customDateInput.value)) {
+          customDateInput.value = "";
+          dateInput.value = "";
+          setStatus("Choose today or a future date.", "error");
+          return;
+        }
         selectPlayDate(customDateInput.value, { isCustom: true });
       }
     });
@@ -628,6 +647,11 @@
 
     if (!isValidPlayerName(payload.playerName)) {
       setStatus("Please choose a player from the list.", "error");
+      return;
+    }
+
+    if (isPastDate(payload.playDate)) {
+      setStatus("Choose today or a future date.", "error");
       return;
     }
 
