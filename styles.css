@@ -330,6 +330,14 @@ button:disabled {
   display: none;
 }
 
+.filter-panel {
+  padding: 14px 16px;
+}
+
+.filter-panel .field {
+  max-width: 360px;
+}
+
 .preview-heading {
   display: flex;
   align-items: baseline;

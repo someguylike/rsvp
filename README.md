@@ -13,7 +13,7 @@ Static RSVP page for weekly play sessions.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
 - After submit and when the date changes, the page shows the Yes RSVP tally for that date.
-- `export.html` exports a selected month, then renders group heatmap, individual breakdown, audit table, and sheet preview.
+- `export.html` exports a selected month, then renders group heatmap, player dropdown audit, individual breakdown, and sheet preview.
 
 ## Recommended Hosting
 

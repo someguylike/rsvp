@@ -11,6 +11,8 @@
   const heatmapSection = document.querySelector("#heatmap-section");
   const heatmapNote = document.querySelector("#heatmap-note");
   const groupHeatmap = document.querySelector("#group-heatmap");
+  const filterSection = document.querySelector("#filter-section");
+  const playerFilter = document.querySelector("#player-filter");
   const individualSection = document.querySelector("#individual-section");
   const individualNote = document.querySelector("#individual-note");
   const individualTable = document.querySelector("#individual-table");
@@ -20,6 +22,7 @@
   const auditSection = document.querySelector("#audit-section");
   const auditNote = document.querySelector("#audit-note");
   const auditTable = document.querySelector("#audit-table");
+  let currentRosterRows = [];
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -71,6 +74,7 @@
     previewNote.textContent = "";
     auditNote.textContent = "";
     heatmapSection.hidden = true;
+    filterSection.hidden = true;
     individualSection.hidden = true;
     previewSection.hidden = true;
     auditSection.hidden = true;
@@ -133,6 +137,43 @@
     return model.players.filter((player) =>
       player.values.some((value) => value > 0),
     );
+  }
+
+  function getFilteredModel(model) {
+    const selectedPlayer = playerFilter.value;
+    if (!selectedPlayer) {
+      return model;
+    }
+
+    return {
+      dates: model.dates,
+      players: model.players.filter((player) => player.name === selectedPlayer),
+    };
+  }
+
+  function renderPlayerFilter(model) {
+    const activePlayers = getActivePlayers(model);
+    const previousValue = playerFilter.value;
+
+    playerFilter.replaceChildren();
+
+    const allOption = document.createElement("option");
+    allOption.value = "";
+    allOption.textContent = "All players";
+    playerFilter.append(allOption);
+
+    activePlayers.forEach((player) => {
+      const option = document.createElement("option");
+      option.value = player.name;
+      option.textContent = player.name;
+      playerFilter.append(option);
+    });
+
+    if (activePlayers.some((player) => player.name === previousValue)) {
+      playerFilter.value = previousValue;
+    }
+
+    filterSection.hidden = activePlayers.length === 0;
   }
 
   function getAuditRows(model) {
@@ -254,15 +295,21 @@
     });
 
     auditTable.append(thead, tbody);
-    auditNote.textContent = `${rows.length} player/date RSVP rows.`;
+    auditNote.textContent = playerFilter.value
+      ? `${rows.length} dates for ${playerFilter.value}.`
+      : `${rows.length} player/date RSVP rows.`;
     auditSection.hidden = false;
   }
 
   function renderAnalytics(rows) {
+    currentRosterRows = rows;
     const model = parseRosterRows(rows);
+    renderPlayerFilter(model);
+    const filteredModel = getFilteredModel(model);
+
     renderGroupHeatmap(model);
-    renderIndividualHeatmap(model);
-    renderAuditTable(model);
+    renderIndividualHeatmap(filteredModel);
+    renderAuditTable(filteredModel);
   }
 
   function renderPreview(rows, sheetName) {
@@ -390,6 +437,10 @@
 
   monthInput.addEventListener("click", () => {
     openMonthPicker();
+  });
+
+  playerFilter.addEventListener("change", () => {
+    renderAnalytics(currentRosterRows);
   });
 
   form.addEventListener("submit", async (event) => {
