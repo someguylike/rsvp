@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RSVP Admin</title>
+    <title>RSVP Export</title>
     <link rel="stylesheet" href="./styles.css?v=20260602-7" />
   </head>
   <body>
     <main class="shell">
       <section class="panel admin-panel" aria-labelledby="page-title">
         <div class="heading">
-          <p class="eyebrow">Admin export</p>
+          <p class="eyebrow">Roster export</p>
           <h1 id="page-title">Monthly Roster Export</h1>
         </div>
 
@@ -22,6 +22,7 @@
 
           <button id="export-button" type="submit">Export Month</button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
+          <p id="share-status" class="status" hidden></p>
         </form>
 
         <section id="preview-section" class="admin-preview" hidden>
@@ -36,6 +37,6 @@
       </section>
     </main>
 
-    <script src="./export.js?v=20260602-1"></script>
+    <script src="./export.js?v=20260602-2"></script>
   </body>
 </html>

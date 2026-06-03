@@ -67,6 +67,7 @@
   const cancelOverride = document.querySelector("#cancel-override");
   const confirmOverride = document.querySelector("#confirm-override");
   let pendingOverridePayload = null;
+  let latestTallyRequest = 0;
 
   function readJson(key, fallback) {
     try {
@@ -145,6 +146,21 @@
     loadTally(value);
   }
 
+  function selectCustomDateOption() {
+    customDateField?.classList.add("active");
+    dateInput.value = customDateInput?.value || "";
+    latestTallyRequest += 1;
+    tallyCount.textContent = "Choose a date";
+    tallyList.replaceChildren();
+    dateOptions.querySelectorAll(".date-option").forEach((button) => {
+      const isActive = button.dataset.date === "custom";
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-checked", String(isActive));
+    });
+    customDateInput?.focus();
+    customDateInput?.showPicker?.();
+  }
+
   function renderDateOptions() {
     const dates = getUpcomingPlayDates(4);
     dateOptions.replaceChildren(
@@ -185,12 +201,12 @@
     otherTitle.textContent = "Other date";
     otherButton.append(otherTitle);
     otherButton.addEventListener("click", () => {
-      const fallbackDate = customDateInput?.value || dateInput.value;
-      if (fallbackDate) {
-        selectPlayDate(fallbackDate, { isCustom: true });
+      if (customDateInput?.value) {
+        selectPlayDate(customDateInput.value, { isCustom: true });
+        return;
       }
-      customDateInput?.focus();
-      customDateInput?.showPicker?.();
+
+      selectCustomDateOption();
     });
     dateOptions.append(otherButton);
 
@@ -208,14 +224,22 @@
   }
 
   function getPlayerMatches(query) {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const normalizedQuery = normalizeSearchText(query);
     if (!normalizedQuery) {
       return PLAYERS;
     }
 
     return PLAYERS.filter((name) =>
-      name.toLocaleLowerCase().includes(normalizedQuery),
+      normalizeSearchText(name).includes(normalizedQuery),
     ).slice(0, 8);
+  }
+
+  function normalizeSearchText(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLocaleLowerCase();
   }
 
   function hidePlayerList() {
@@ -326,7 +350,12 @@
       guestCount: 0,
     };
 
-    if (!overrideDialog || !previousRsvp || !newRsvp) {
+    if (
+      !overrideDialog ||
+      typeof overrideDialog.showModal !== "function" ||
+      !previousRsvp ||
+      !newRsvp
+    ) {
       if (window.confirm("This player already has an RSVP. Update it?")) {
         submitRsvp({
           ...payload,
@@ -546,14 +575,23 @@
       return;
     }
 
+    const requestId = latestTallyRequest + 1;
+    latestTallyRequest = requestId;
+
     try {
       tallyCount.textContent = "Loading tally...";
       const result = await requestAppsScript({
         action: "list",
         playDate,
       });
+      if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
+        return;
+      }
       renderTally(result.tally);
     } catch (error) {
+      if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
+        return;
+      }
       if (!attempt) {
         window.setTimeout(() => {
           loadTally(playDate, 1);

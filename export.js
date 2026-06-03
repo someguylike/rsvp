@@ -6,6 +6,7 @@
   const monthInput = document.querySelector("#export-month");
   const exportButton = document.querySelector("#export-button");
   const status = document.querySelector("#status");
+  const shareStatus = document.querySelector("#share-status");
   const previewSection = document.querySelector("#preview-section");
   const previewNote = document.querySelector("#preview-note");
   const previewTable = document.querySelector("#preview-table");
@@ -16,20 +17,46 @@
     return `${year}-${month}`;
   }
 
+  function isMonthValue(value) {
+    return /^\d{4}-(0[1-9]|1[0-2])$/.test(value || "");
+  }
+
   function setStatus(message, type) {
     status.textContent = message;
     status.className = `status ${type || ""}`.trim();
   }
 
-  function setStatusWithLink(message, href) {
+  function setStatusWithLink(message, href, linkText) {
     const link = document.createElement("a");
     status.textContent = `${message} `;
     status.className = "status success";
     link.href = href;
     link.target = "_blank";
     link.rel = "noreferrer";
-    link.textContent = "Open spreadsheet";
+    link.textContent = linkText || "Open spreadsheet";
     status.append(link);
+  }
+
+  function setShareLink(month) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("month", month);
+
+    const link = document.createElement("a");
+    link.href = url.toString();
+    link.textContent = url.toString();
+    shareStatus.textContent = "Share this month: ";
+    shareStatus.className = "status success";
+    shareStatus.hidden = false;
+    shareStatus.append(link);
+  }
+
+  function clearPreview() {
+    previewTable.textContent = "";
+    previewNote.textContent = "";
+    previewSection.hidden = true;
+    shareStatus.hidden = true;
+    shareStatus.textContent = "";
   }
 
   function renderPreview(rows, sheetName) {
@@ -107,6 +134,34 @@
     throw new Error(parsed?.error || "Export failed");
   }
 
+  async function loadMonth(month, mode) {
+    exportButton.disabled = true;
+    clearPreview();
+    setStatus(mode === "export" ? "Exporting..." : "Loading export...", "");
+
+    try {
+      const result = await requestAppsScript({
+        action: mode === "export" ? "exportMonth" : "viewMonth",
+        month,
+      });
+      setStatusWithLink(
+        `${mode === "export" ? "Exported" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
+        result.url,
+      );
+      renderPreview(result.previewRows, result.sheetName);
+      setShareLink(month);
+
+      const url = new URL(window.location.href);
+      url.searchParams.set("month", month);
+      window.history.replaceState({}, "", url);
+    } catch (error) {
+      clearPreview();
+      setStatus(error.message, "error");
+    } finally {
+      exportButton.disabled = false;
+    }
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
@@ -115,25 +170,14 @@
       return;
     }
 
-    exportButton.disabled = true;
-    setStatus("Exporting...", "");
-
-    try {
-      const result = await requestAppsScript({
-        action: "exportMonth",
-        month: monthInput.value,
-      });
-      setStatusWithLink(
-        `Exported ${result.exportedDates} dates to ${result.sheetName}.`,
-        result.url,
-      );
-      renderPreview(result.previewRows, result.sheetName);
-    } catch (error) {
-      setStatus(error.message, "error");
-    } finally {
-      exportButton.disabled = false;
-    }
+    loadMonth(monthInput.value, "export");
   });
 
-  monthInput.value = formatMonth(new Date());
+  const monthFromUrl = new URLSearchParams(window.location.search).get("month");
+  const hasValidMonthFromUrl = isMonthValue(monthFromUrl);
+  monthInput.value = hasValidMonthFromUrl ? monthFromUrl : formatMonth(new Date());
+
+  if (hasValidMonthFromUrl) {
+    loadMonth(monthInput.value, "view");
+  }
 })();

@@ -1,6 +1,8 @@
 const SHEET_NAME = "RSVPs";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const EXPORT_TEMPLATE_SHEET_NAME = "Sample";
+const PREVIEW_MAX_ROWS = 120;
+const PREVIEW_MAX_COLUMNS = 80;
 const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
   "Play Date",
@@ -102,6 +104,24 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "viewMonth") {
+      const result = viewMonthRoster_(
+        required_(params.month, "Missing export month"),
+      );
+      return jsonp_(callback, {
+        ok: true,
+        action: "viewMonth",
+        sheetName: result.sheetName,
+        exportedDates: result.exportedDates,
+        previewRows: result.previewRows,
+        url: result.url,
+      });
+    }
+
+    if (params.action) {
+      throw new Error(`Unsupported action: ${params.action}`);
+    }
+
     const result = upsertRsvp_(params);
     return jsonp_(callback, {
       ok: true,
@@ -138,9 +158,9 @@ function deleteRsvp_(params) {
     const playerName = required_(params.playerName, "Missing player name").trim();
     validatePlayerName_(playerName);
     const sheet = getSheet_();
-    const row = findExistingRow_(sheet, playDate, playerName);
+    const rows = findExistingRows_(sheet, playDate, playerName);
 
-    if (!row) {
+    if (rows.length === 0) {
       return {
         action: "not_found",
         row: null,
@@ -148,10 +168,12 @@ function deleteRsvp_(params) {
       };
     }
 
-    sheet.deleteRow(row);
+    rows.sort((first, second) => second - first).forEach((row) => {
+      sheet.deleteRow(row);
+    });
     return {
       action: "deleted",
-      row,
+      row: rows[0],
       tally: getTally_(playDate),
     };
   } finally {
@@ -175,12 +197,15 @@ function upsertRsvpWithLock_(params) {
   }
 
   const sheet = getSheet_();
-  const row = findExistingRow_(sheet, playDate, playerName);
+  const matchingRows = findExistingRows_(sheet, playDate, playerName);
+  const row = matchingRows[0] || null;
   const existingRsvp = row ? getRsvpAtRow_(sheet, row) : null;
 
   if (normalize_(vote) === "no") {
     if (row) {
-      sheet.deleteRow(row);
+      matchingRows.sort((first, second) => second - first).forEach((rowNumber) => {
+        sheet.deleteRow(rowNumber);
+      });
       return {
         action: "deleted",
         row,
@@ -198,6 +223,7 @@ function upsertRsvpWithLock_(params) {
   const values = [playDate, playerName, vote, guestCount, submittedAt, updatedAt];
 
   if (row) {
+    deleteDuplicateRows_(sheet, matchingRows, row);
     if (normalize_(existingRsvp.vote) !== "no" && params.confirmOverride !== "true") {
       return {
         action: "needs_confirmation",
@@ -242,23 +268,38 @@ function getSheet_() {
 }
 
 function findExistingRow_(sheet, playDate, playerName) {
+  const rows = findExistingRows_(sheet, playDate, playerName);
+  return rows[0] || null;
+}
+
+function findExistingRows_(sheet, playDate, playerName) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) {
-    return null;
+    return [];
   }
 
   const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
   const normalizedName = normalize_(playerName);
+  const rows = [];
 
   for (let index = 0; index < data.length; index += 1) {
     const rowDate = normalizeDate_(data[index][0]);
     const rowName = normalize_(data[index][1]);
     if (rowDate === playDate && rowName === normalizedName) {
-      return index + 2;
+      rows.push(index + 2);
     }
   }
 
-  return null;
+  return rows;
+}
+
+function deleteDuplicateRows_(sheet, rows, keepRow) {
+  rows
+    .filter((row) => row !== keepRow)
+    .sort((first, second) => second - first)
+    .forEach((row) => {
+      sheet.deleteRow(row);
+    });
 }
 
 function getRsvpAtRow_(sheet, row) {
@@ -306,9 +347,7 @@ function cleanupNonRosterRows_() {
 }
 
 function exportMonthRoster_(month) {
-  if (!/^\d{4}-\d{2}$/.test(month)) {
-    throw new Error("Month must use YYYY-MM format");
-  }
+  validateMonth_(month);
 
   const sourceSheet = getSheet_();
   const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
@@ -380,8 +419,7 @@ function exportMonthRoster_(month) {
   exportSheet
     .getRange(1, 1, matrix.length, matrix[0].length)
     .setValues(matrix);
-  exportSheet.setFrozenRows(1);
-  exportSheet.setFrozenColumns(1);
+  setFrozenPanes_(exportSheet);
   exportSheet.getRange(1, 1, 1, matrix[0].length).setFontWeight("bold");
   exportSheet.getRange(1, 1, matrix.length, 1).setFontWeight("bold");
   exportSheet.autoResizeColumns(1, exportSheet.getLastColumn());
@@ -393,6 +431,34 @@ function exportMonthRoster_(month) {
     previewRows: getPreviewRows_(exportSheet),
     url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
   };
+}
+
+function viewMonthRoster_(month) {
+  validateMonth_(month);
+
+  const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
+  const exportSheetName = formatMonthTabName_(month);
+  const exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
+
+  if (!exportSheet) {
+    throw new Error(`Export ${exportSheetName} has not been created yet`);
+  }
+
+  return {
+    sheetName: exportSheetName,
+    exportedDates: getExportedDateCount_(exportSheet),
+    previewRows: getPreviewRows_(exportSheet),
+    url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
+  };
+}
+
+function setFrozenPanes_(sheet) {
+  try {
+    sheet.setFrozenRows(1);
+    sheet.setFrozenColumns(1);
+  } catch (error) {
+    // Template tabs can contain merged cells. Export should still succeed.
+  }
 }
 
 function findSummaryStartRow_(sheet) {
@@ -430,8 +496,8 @@ function findFormulaStartColumn_(sheet) {
 }
 
 function getPreviewRows_(sheet) {
-  const lastRow = sheet.getLastRow();
-  const lastColumn = sheet.getLastColumn();
+  const lastRow = Math.min(sheet.getLastRow(), PREVIEW_MAX_ROWS);
+  const lastColumn = Math.min(sheet.getLastColumn(), PREVIEW_MAX_COLUMNS);
 
   if (lastRow < 1 || lastColumn < 1) {
     return [];
@@ -464,6 +530,7 @@ function trimEmptyEdges_(values) {
 }
 
 function getExportDatesForMonth_(sheet, month) {
+  validateMonth_(month);
   const dateSet = {};
   const year = Number(month.slice(0, 4));
   const monthIndex = Number(month.slice(5, 7)) - 1;
@@ -516,8 +583,31 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
 }
 
 function formatMonthTabName_(month) {
+  validateMonth_(month);
   const date = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1);
   return Utilities.formatDate(date, Session.getScriptTimeZone(), "MMMM yyyy");
+}
+
+function validateMonth_(month) {
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error("Month must use YYYY-MM format");
+  }
+
+  const monthNumber = Number(month.slice(5, 7));
+  if (monthNumber < 1 || monthNumber > 12) {
+    throw new Error("Month must be between 01 and 12");
+  }
+}
+
+function getExportedDateCount_(sheet) {
+  const previewRows = getPreviewRows_(sheet);
+  if (previewRows.length === 0) {
+    return 0;
+  }
+
+  return previewRows[0].filter(
+    (value, index) => index > 0 && /^\d{2}\/\d{2}\/\d{4}$/.test(String(value || "")),
+  ).length;
 }
 
 function formatDisplayDate_(dateValue) {
@@ -552,14 +642,23 @@ function getTally_(playDate) {
     const vote = normalize_(row[2]);
     const guestCount = Math.max(0, Number(row[3] || 0));
 
-    if (rowDate !== playDate || vote !== "yes" || !playerName) {
+    if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;
     }
 
-    tally.players.push({
-      name: playerName,
-      guestCount: Number.isFinite(guestCount) ? guestCount : 0,
-    });
+    const normalizedPlayer = normalize_(playerName);
+    const existingPlayer = tally.players.find(
+      (player) => normalize_(player.name) === normalizedPlayer,
+    );
+
+    if (existingPlayer) {
+      existingPlayer.guestCount += Number.isFinite(guestCount) ? guestCount : 0;
+    } else {
+      tally.players.push({
+        name: playerName,
+        guestCount: Number.isFinite(guestCount) ? guestCount : 0,
+      });
+    }
   });
 
   tally.players.sort((first, second) => first.name.localeCompare(second.name));

@@ -114,7 +114,7 @@ The Web App URL must stay in both `app.js` and `export.js`.
 
 ## Admin Export
 
-Open `export.html`, choose a month, and click `Export Month`.
+Open `export.html`, choose a month, and click `Export Month`. After export, the page shows a shareable month URL like `export.html?month=2026-06`; opening that URL renders the existing exported tab.
 
 The export writes to the spreadsheet ID configured in `google-apps-script/Code.gs` as `EXPORT_SPREADSHEET_ID`.
 
