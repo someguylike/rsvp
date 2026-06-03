@@ -1,19 +1,19 @@
 :root {
   color-scheme: light;
-  --bg: #eef3f7;
+  --bg: #eef4ff;
   --panel: #ffffff;
   --surface: #f8fafc;
-  --surface-strong: #eef6f4;
+  --surface-strong: #eff6ff;
   --text: #17212b;
   --muted: #647281;
   --line: #d8e0e8;
   --line-strong: #c2ced9;
-  --accent: #0f766e;
-  --accent-strong: #0b5e58;
-  --accent-soft: #e4f4f1;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: #dbeafe;
   --focus: #d48a12;
   --error: #b42318;
-  --success: #087443;
+  --success: #1d4ed8;
   --shadow: 0 24px 70px rgb(25 40 55 / 14%);
 }
 
@@ -25,7 +25,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 75%), rgb(238 243 247 / 0) 280px),
+    linear-gradient(180deg, rgb(255 255 255 / 78%), rgb(238 244 255 / 0) 280px),
     var(--bg);
   color: var(--text);
   font-family:
@@ -60,7 +60,7 @@ body {
 .eyebrow {
   width: fit-content;
   margin: 0 0 8px;
-  border: 1px solid #b8ded7;
+  border: 1px solid #bfdbfe;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
@@ -270,7 +270,7 @@ button {
   cursor: pointer;
   font: inherit;
   font-weight: 750;
-  box-shadow: 0 12px 26px rgb(15 118 110 / 22%);
+  box-shadow: 0 12px 26px rgb(37 99 235 / 22%);
   transition:
     background 140ms ease,
     box-shadow 140ms ease,
@@ -279,7 +279,7 @@ button {
 
 button:hover {
   background: var(--accent-strong);
-  box-shadow: 0 14px 30px rgb(15 118 110 / 28%);
+  box-shadow: 0 14px 30px rgb(37 99 235 / 28%);
   transform: translateY(-1px);
 }
 
@@ -428,8 +428,23 @@ button:disabled {
   gap: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
   padding: 12px;
   box-shadow: 0 8px 18px rgb(25 40 55 / 8%);
+  text-align: left;
+}
+
+.heatmap-tile:hover {
+  border-color: var(--accent);
+  box-shadow: 0 12px 24px rgb(37 99 235 / 16%);
+  transform: translateY(-1px);
+}
+
+.heatmap-tile[aria-pressed="true"] {
+  outline: 3px solid rgb(37 99 235 / 24%);
+  outline-offset: 2px;
 }
 
 .heatmap-tile span {
@@ -453,24 +468,24 @@ button:disabled {
 }
 
 .heat-1 {
-  background: #e6f5f1;
+  background: #dbeafe;
 }
 
 .heat-2 {
-  background: #c7e8df;
+  background: #bfdbfe;
 }
 
 .heat-3 {
-  background: #90d1c1;
+  background: #93c5fd;
 }
 
 .heat-4 {
-  background: #4aa995;
-  color: #11372f;
+  background: #60a5fa;
+  color: #102a56;
 }
 
 .heat-5 {
-  background: #176b5b;
+  background: #2563eb;
   color: white;
   font-weight: 800;
 }

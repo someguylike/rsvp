@@ -16,13 +16,11 @@
   const individualSection = document.querySelector("#individual-section");
   const individualNote = document.querySelector("#individual-note");
   const individualTable = document.querySelector("#individual-table");
-  const previewSection = document.querySelector("#preview-section");
-  const previewNote = document.querySelector("#preview-note");
-  const previewTable = document.querySelector("#preview-table");
   const auditSection = document.querySelector("#audit-section");
   const auditNote = document.querySelector("#audit-note");
   const auditTable = document.querySelector("#audit-table");
   let currentRosterRows = [];
+  let selectedDate = "";
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -67,16 +65,13 @@
   function clearPreview() {
     groupHeatmap.textContent = "";
     individualTable.textContent = "";
-    previewTable.textContent = "";
     auditTable.textContent = "";
     heatmapNote.textContent = "";
     individualNote.textContent = "";
-    previewNote.textContent = "";
     auditNote.textContent = "";
     heatmapSection.hidden = true;
     filterSection.hidden = true;
     individualSection.hidden = true;
-    previewSection.hidden = true;
     auditSection.hidden = true;
     shareStatus.hidden = true;
     shareStatus.textContent = "";
@@ -141,13 +136,21 @@
 
   function getFilteredModel(model) {
     const selectedPlayer = playerFilter.value;
-    if (!selectedPlayer) {
-      return model;
-    }
-
+    const dateIndexes = selectedDate
+      ? model.dates
+          .map((date, index) => (date === selectedDate ? index : -1))
+          .filter((index) => index !== -1)
+      : model.dates.map((_, index) => index);
+    const dates = dateIndexes.map((index) => model.dates[index]);
+    const players = selectedPlayer
+      ? model.players.filter((player) => player.name === selectedPlayer)
+      : model.players;
     return {
-      dates: model.dates,
-      players: model.players.filter((player) => player.name === selectedPlayer),
+      dates,
+      players: players.map((player) => ({
+        name: player.name,
+        values: dateIndexes.map((index) => player.values[index]),
+      })),
     };
   }
 
@@ -213,17 +216,26 @@
     }
 
     totals.forEach((item) => {
-      const tile = document.createElement("div");
+      const tile = document.createElement("button");
       const date = document.createElement("span");
       const total = document.createElement("strong");
+      const isSelected = selectedDate === item.date;
+      tile.type = "button";
       tile.className = `heatmap-tile ${getHeatClass(item.total, maxTotal)}`;
+      tile.setAttribute("aria-pressed", String(isSelected));
       date.textContent = item.date;
       total.textContent = `${item.total}`;
       tile.append(date, total);
+      tile.addEventListener("click", () => {
+        selectedDate = isSelected ? "" : item.date;
+        renderAnalytics(currentRosterRows);
+      });
       groupHeatmap.append(tile);
     });
 
-    heatmapNote.textContent = `${totals.length} dates, peak turnout ${maxTotal}.`;
+    heatmapNote.textContent = selectedDate
+      ? `${selectedDate} selected. Click again to clear.`
+      : `${totals.length} dates, peak turnout ${maxTotal}.`;
     heatmapSection.hidden = false;
   }
 
@@ -264,7 +276,9 @@
     });
 
     individualTable.append(thead, tbody);
-    individualNote.textContent = `${activePlayers.length} players with at least one RSVP.`;
+    individualNote.textContent = selectedDate
+      ? `${activePlayers.length} players on ${selectedDate}.`
+      : `${activePlayers.length} players with at least one RSVP.`;
     individualSection.hidden = false;
   }
 
@@ -295,9 +309,11 @@
     });
 
     auditTable.append(thead, tbody);
-    auditNote.textContent = playerFilter.value
-      ? `${rows.length} dates for ${playerFilter.value}.`
-      : `${rows.length} player/date RSVP rows.`;
+    auditNote.textContent = [
+      playerFilter.value ? playerFilter.value : "All players",
+      selectedDate || "all dates",
+      `${rows.length} RSVP rows`,
+    ].join(" · ");
     auditSection.hidden = false;
   }
 
@@ -312,42 +328,12 @@
     renderAuditTable(filteredModel);
   }
 
-  function renderPreview(rows, sheetName) {
-    previewTable.textContent = "";
-
+  function renderPreview(rows) {
     if (!Array.isArray(rows) || rows.length === 0) {
       renderAnalytics([]);
-      previewSection.hidden = true;
       return;
     }
 
-    const thead = document.createElement("thead");
-    const tbody = document.createElement("tbody");
-
-    rows.forEach((row, rowIndex) => {
-      const tr = document.createElement("tr");
-      const firstCell = String(row[0] || "").trim().toLowerCase();
-
-      if (firstCell.includes("pay") || firstCell.includes("fee")) {
-        tr.className = "summary-row";
-      }
-
-      row.forEach((cell) => {
-        const element = document.createElement(rowIndex === 0 ? "th" : "td");
-        element.textContent = cell == null ? "" : String(cell);
-        tr.append(element);
-      });
-
-      if (rowIndex === 0) {
-        thead.append(tr);
-      } else {
-        tbody.append(tr);
-      }
-    });
-
-    previewTable.append(thead, tbody);
-    previewNote.textContent = `Rendered from the ${sheetName} spreadsheet tab.`;
-    previewSection.hidden = false;
     renderAnalytics(rows);
   }
 
@@ -392,6 +378,7 @@
   async function loadMonth(month, mode) {
     exportButton.disabled = true;
     clearPreview();
+    selectedDate = "";
     setStatus(mode === "export" ? "Exporting..." : "Loading export...", "");
 
     try {
@@ -403,7 +390,7 @@
         `${mode === "export" ? "Exported" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
         result.url,
       );
-      renderPreview(result.previewRows, result.sheetName);
+      renderPreview(result.previewRows);
       setShareLink(month);
 
       const url = new URL(window.location.href);
