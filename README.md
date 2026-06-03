@@ -13,7 +13,7 @@ Static RSVP page for weekly play sessions.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
 - After submit and when the date changes, the page shows the Yes RSVP tally for that date.
-- `admin.html` exports a selected month to the roster spreadsheet and renders the exported tab back on the web page, including spreadsheet formula results like Member Pay.
+- `export.html` exports a selected month to the roster spreadsheet and renders the exported tab back on the web page, including spreadsheet formula results like Member Pay.
 
 ## Recommended Hosting
 
@@ -24,7 +24,7 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 ## Repo Layout
 
 - `index.html`, `app.js`, `styles.css`: public RSVP page.
-- `admin.html`, `admin.js`: admin page for monthly roster export.
+- `export.html`, `export.js`: admin page for monthly roster export.
 - `google-apps-script/Code.gs`: Apps Script backend source. Paste this into Apps Script and deploy it as the Web App backend.
 
 ## Google Sheets Setup
@@ -42,7 +42,7 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 const APPS_SCRIPT_URL = "YOUR_WEB_APP_URL";
 ```
 
-Also set the same Web App URL in `admin.js`.
+Also set the same Web App URL in `export.js`.
 
 The fixed player roster lives in two places and must stay in sync:
 
@@ -75,11 +75,11 @@ python3 -m http.server 8000
 Then open:
 
 - RSVP page: `http://localhost:8000/`
-- Admin page: `http://localhost:8000/admin.html`
+- Export page: `http://localhost:8000/export.html`
 
 Development workflow:
 
-1. Edit `index.html`, `app.js`, `admin.html`, `admin.js`, or `styles.css`.
+1. Edit `index.html`, `app.js`, `export.html`, `export.js`, or `styles.css`.
 2. If frontend assets change, bump the query string on the referenced JS/CSS file in the HTML to avoid stale GitHub Pages/browser cache.
 3. If backend behavior changes, edit `google-apps-script/Code.gs`.
 4. Paste the full `Code.gs` into Apps Script.
@@ -110,15 +110,15 @@ Apps Script deployment is manual:
 7. Select **New version**.
 8. Deploy.
 
-The Web App URL must stay in both `app.js` and `admin.js`.
+The Web App URL must stay in both `app.js` and `export.js`.
 
 ## Admin Export
 
-Open `admin.html`, choose a month, and click `Export Month`.
+Open `export.html`, choose a month, and click `Export Month`.
 
 The export writes to the spreadsheet ID configured in `google-apps-script/Code.gs` as `EXPORT_SPREADSHEET_ID`.
 
-If the export spreadsheet has a tab named `Sample`, Apps Script copies that tab for the selected month before filling in attendance. Keep fee and Member Pay formulas in `Sample`; each monthly export tab will inherit them, and the admin page will render the exported tab's displayed values.
+If the export spreadsheet has a tab named `Sample`, Apps Script copies that tab for the selected month before filling in attendance. Keep fee and Member Pay formulas in `Sample`; each monthly export tab will inherit them, and the export page will render the exported tab's displayed values.
 
 Output format:
 
