@@ -123,7 +123,7 @@ Each export recreates the selected month tab as a clean attendance table. It doe
 Output format:
 
 - Tab name: `Month YYYY`, for example `March 2026`.
-- Row 1: `Name` plus all play dates in the selected month.
+- Row 1: `Name` plus play dates with at least 4 total headcount.
 - Rows: one row per player.
 - Cell value: blank when not joining, `1` when the player joins alone, `n` when the player brings `n - 1` guests.
 

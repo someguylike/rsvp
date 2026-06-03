@@ -2,6 +2,7 @@ const SHEET_NAME = "RSVPs";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
+const EXPORT_MIN_HEADCOUNT = 4;
 const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
   "Play Date",
@@ -358,10 +359,10 @@ function exportMonthRoster_(month) {
   }
   exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
 
-  const monthDates = getExportDatesForMonth_(sourceSheet, month);
   const totalsByDate = {};
-  monthDates.forEach((date) => {
+  const monthDates = getExportDatesForMonth_(sourceSheet, month).filter((date) => {
     totalsByDate[date] = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
+    return getTotalHeadcount_(totalsByDate[date]) >= EXPORT_MIN_HEADCOUNT;
   });
   const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
   const matrix = [header].concat(
@@ -503,6 +504,13 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
   });
 
   return totals;
+}
+
+function getTotalHeadcount_(totalsByPlayer) {
+  return Object.keys(totalsByPlayer).reduce(
+    (sum, player) => sum + Number(totalsByPlayer[player] || 0),
+    0,
+  );
 }
 
 function formatMonthTabName_(month) {
