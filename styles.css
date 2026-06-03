@@ -26,7 +26,7 @@ body {
   min-height: 100vh;
   background:
     linear-gradient(180deg, rgb(0 48 135 / 76%), rgb(0 48 135 / 58%)),
-    url("https://images.squarespace-cdn.com/content/v1/603d2a1e5646d67cf7bfc0a7/1615577819772-N79HNDBQPAZEJA4UP4VY/chase_philly_environmental_graphics_lowres.jpg")
+    url("./assets/chase-background.jpg")
       center / cover fixed,
     var(--bg);
   color: var(--text);
@@ -563,6 +563,23 @@ button:disabled {
   color: var(--muted);
   flex: 0 0 auto;
   font-size: 0.88rem;
+}
+
+.page-footer {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.page-footer a {
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.page-footer a:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
 }
 
 .dialog {
