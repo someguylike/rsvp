@@ -1,6 +1,5 @@
 const SHEET_NAME = "RSVPs";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
-const EXPORT_TEMPLATE_SHEET_NAME = "Sample";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
 const PLAY_DAYS = [2, 4, 5, 0];
@@ -352,18 +351,12 @@ function exportMonthRoster_(month) {
   const sourceSheet = getSheet_();
   const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
   const exportSheetName = formatMonthTabName_(month);
-  const templateSheet = targetSpreadsheet.getSheetByName(EXPORT_TEMPLATE_SHEET_NAME);
   let exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
 
-  if (templateSheet) {
-    if (exportSheet) {
-      targetSpreadsheet.deleteSheet(exportSheet);
-    }
-    exportSheet = templateSheet.copyTo(targetSpreadsheet);
-    exportSheet.setName(exportSheetName);
-  } else if (!exportSheet) {
-    exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
+  if (exportSheet) {
+    targetSpreadsheet.deleteSheet(exportSheet);
   }
+  exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
 
   const monthDates = getExportDatesForMonth_(sourceSheet, month);
   const totalsByDate = {};
@@ -375,53 +368,26 @@ function exportMonthRoster_(month) {
     PLAYERS.map((player) => {
       const normalizedPlayer = normalize_(player);
       return [player].concat(
-        monthDates.map((date) => totalsByDate[date][normalizedPlayer] || ""),
+        monthDates.map((date) => {
+          const total = totalsByDate[date][normalizedPlayer];
+          return total ? Math.trunc(total) : "";
+        }),
       );
     }),
   );
-  const summaryStartRow = findSummaryStartRow_(exportSheet);
-  const formulaStartColumn = findFormulaStartColumn_(exportSheet);
 
-  if (summaryStartRow) {
-    const attendanceRowsBeforeSummary = summaryStartRow - 1;
-    if (matrix.length > attendanceRowsBeforeSummary) {
-      exportSheet.insertRowsBefore(
-        summaryStartRow,
-        matrix.length - attendanceRowsBeforeSummary,
-      );
-    } else if (matrix.length < attendanceRowsBeforeSummary) {
-      exportSheet.deleteRows(
-        matrix.length + 1,
-        attendanceRowsBeforeSummary - matrix.length,
-      );
-    }
-  }
-
-  if (formulaStartColumn) {
-    const attendanceColumnsBeforeFormula = formulaStartColumn - 1;
-    if (matrix[0].length > attendanceColumnsBeforeFormula) {
-      exportSheet.insertColumnsBefore(
-        formulaStartColumn,
-        matrix[0].length - attendanceColumnsBeforeFormula,
-      );
-    } else if (matrix[0].length < attendanceColumnsBeforeFormula) {
-      exportSheet.deleteColumns(
-        matrix[0].length + 1,
-        attendanceColumnsBeforeFormula - matrix[0].length,
-      );
-    }
-  }
-
-  if (!templateSheet) {
-    exportSheet.clear();
-  }
-  exportSheet.getRange(1, 1, matrix.length, matrix[0].length).clearContent();
   exportSheet
     .getRange(1, 1, matrix.length, matrix[0].length)
     .setValues(matrix);
-  setFrozenPanes_(exportSheet);
+  exportSheet.setFrozenRows(1);
+  exportSheet.setFrozenColumns(1);
   exportSheet.getRange(1, 1, 1, matrix[0].length).setFontWeight("bold");
   exportSheet.getRange(1, 1, matrix.length, 1).setFontWeight("bold");
+  if (matrix.length > 1 && matrix[0].length > 1) {
+    exportSheet
+      .getRange(2, 2, matrix.length - 1, matrix[0].length - 1)
+      .setNumberFormat("0");
+  }
   exportSheet.autoResizeColumns(1, exportSheet.getLastColumn());
   SpreadsheetApp.flush();
 
@@ -450,49 +416,6 @@ function viewMonthRoster_(month) {
     previewRows: getPreviewRows_(exportSheet),
     url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
   };
-}
-
-function setFrozenPanes_(sheet) {
-  try {
-    sheet.setFrozenRows(1);
-    sheet.setFrozenColumns(1);
-  } catch (error) {
-    // Template tabs can contain merged cells. Export should still succeed.
-  }
-}
-
-function findSummaryStartRow_(sheet) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 1) {
-    return null;
-  }
-
-  const values = sheet.getRange(1, 1, lastRow, 1).getDisplayValues();
-  for (let index = 0; index < values.length; index += 1) {
-    const label = normalize_(values[index][0]);
-    if (label.indexOf("member pay") !== -1 || label.indexOf("fee") !== -1) {
-      return index + 1;
-    }
-  }
-
-  return null;
-}
-
-function findFormulaStartColumn_(sheet) {
-  const lastColumn = sheet.getLastColumn();
-  if (lastColumn < 1) {
-    return null;
-  }
-
-  const values = sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0];
-  for (let index = 1; index < values.length; index += 1) {
-    const label = normalize_(values[index]);
-    if (label.indexOf("member pay") !== -1 || label.indexOf("fee") !== -1) {
-      return index + 1;
-    }
-  }
-
-  return null;
 }
 
 function getPreviewRows_(sheet) {
@@ -570,7 +493,7 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
     const rowDate = normalizeDate_(row[0]);
     const playerName = String(row[1] || "").trim();
     const vote = normalize_(row[2]);
-    const guestCount = Math.max(0, Number(row[3] || 0));
+    const guestCount = Math.max(0, Math.trunc(Number(row[3] || 0)));
 
     if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;

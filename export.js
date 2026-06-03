@@ -93,7 +93,7 @@
     });
 
     previewTable.append(thead, tbody);
-    previewNote.textContent = `Rendered from the ${sheetName} spreadsheet tab, including formula results such as Member Pay.`;
+    previewNote.textContent = `Rendered from the ${sheetName} spreadsheet tab.`;
     previewSection.hidden = false;
   }
 

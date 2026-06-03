@@ -13,7 +13,7 @@ Static RSVP page for weekly play sessions.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
 - After submit and when the date changes, the page shows the Yes RSVP tally for that date.
-- `export.html` exports a selected month to the roster spreadsheet and renders the exported tab back on the web page, including spreadsheet formula results like Member Pay.
+- `export.html` exports a selected month to the roster spreadsheet and renders the exported tab back on the web page.
 
 ## Recommended Hosting
 
@@ -118,7 +118,7 @@ Open `export.html`, choose a month, and click `Export Month`. After export, the 
 
 The export writes to the spreadsheet ID configured in `google-apps-script/Code.gs` as `EXPORT_SPREADSHEET_ID`.
 
-If the export spreadsheet has a tab named `Sample`, Apps Script copies that tab for the selected month before filling in attendance. Keep fee and Member Pay formulas in `Sample`; each monthly export tab will inherit them, and the export page will render the exported tab's displayed values.
+Each export recreates the selected month tab as a clean attendance table. It does not copy existing formatting or formulas.
 
 Output format:
 
