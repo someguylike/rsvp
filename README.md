@@ -123,8 +123,8 @@ If the export spreadsheet has a tab named `Sample`, Apps Script copies that tab 
 Output format:
 
 - Tab name: `Month YYYY`, for example `March 2026`.
-- Row 1: `Date` plus all player names.
-- Rows: play dates in the selected month.
+- Row 1: `Name` plus all play dates in the selected month.
+- Rows: one row per player.
 - Cell value: blank when not joining, `1` when the player joins alone, `n` when the player brings `n - 1` guests.
 
 ## Notes From Tool Research

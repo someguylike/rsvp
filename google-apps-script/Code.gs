@@ -1,5 +1,5 @@
 const SHEET_NAME = "RSVPs";
-const EXPORT_SPREADSHEET_ID = "1kL1aIsdR11XfOutznr_ee6zugODDpAype47hY9vaeBk";
+const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const EXPORT_TEMPLATE_SHEET_NAME = "Sample";
 const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
@@ -327,38 +327,64 @@ function exportMonthRoster_(month) {
   }
 
   const monthDates = getExportDatesForMonth_(sourceSheet, month);
-  const header = ["Date"].concat(PLAYERS);
+  const totalsByDate = {};
+  monthDates.forEach((date) => {
+    totalsByDate[date] = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
+  });
+  const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
   const matrix = [header].concat(
-    monthDates.map((date) => {
-      const rowByPlayer = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
-      return [formatDisplayDate_(date)].concat(
-        PLAYERS.map((player) => rowByPlayer[normalize_(player)] || ""),
+    PLAYERS.map((player) => {
+      const normalizedPlayer = normalize_(player);
+      return [player].concat(
+        monthDates.map((date) => totalsByDate[date][normalizedPlayer] || ""),
       );
     }),
   );
   const summaryStartRow = findSummaryStartRow_(exportSheet);
+  const formulaStartColumn = findFormulaStartColumn_(exportSheet);
 
-  if (summaryStartRow && matrix.length > summaryStartRow - 1) {
-    exportSheet.insertRowsBefore(summaryStartRow, matrix.length - summaryStartRow + 1);
+  if (summaryStartRow) {
+    const attendanceRowsBeforeSummary = summaryStartRow - 1;
+    if (matrix.length > attendanceRowsBeforeSummary) {
+      exportSheet.insertRowsBefore(
+        summaryStartRow,
+        matrix.length - attendanceRowsBeforeSummary,
+      );
+    } else if (matrix.length < attendanceRowsBeforeSummary) {
+      exportSheet.deleteRows(
+        matrix.length + 1,
+        attendanceRowsBeforeSummary - matrix.length,
+      );
+    }
   }
 
-  const attendanceBlockRows = Math.max(
-    matrix.length,
-    summaryStartRow ? summaryStartRow - 1 : matrix.length,
-  );
+  if (formulaStartColumn) {
+    const attendanceColumnsBeforeFormula = formulaStartColumn - 1;
+    if (matrix[0].length > attendanceColumnsBeforeFormula) {
+      exportSheet.insertColumnsBefore(
+        formulaStartColumn,
+        matrix[0].length - attendanceColumnsBeforeFormula,
+      );
+    } else if (matrix[0].length < attendanceColumnsBeforeFormula) {
+      exportSheet.deleteColumns(
+        matrix[0].length + 1,
+        attendanceColumnsBeforeFormula - matrix[0].length,
+      );
+    }
+  }
 
   if (!templateSheet) {
     exportSheet.clear();
   }
-  exportSheet.getRange(1, 1, attendanceBlockRows, header.length).clearContent();
+  exportSheet.getRange(1, 1, matrix.length, matrix[0].length).clearContent();
   exportSheet
     .getRange(1, 1, matrix.length, matrix[0].length)
     .setValues(matrix);
   exportSheet.setFrozenRows(1);
   exportSheet.setFrozenColumns(1);
   exportSheet.getRange(1, 1, 1, matrix[0].length).setFontWeight("bold");
-  exportSheet.getRange(1, 1, attendanceBlockRows, 1).setFontWeight("bold");
-  exportSheet.autoResizeColumns(1, matrix[0].length);
+  exportSheet.getRange(1, 1, matrix.length, 1).setFontWeight("bold");
+  exportSheet.autoResizeColumns(1, exportSheet.getLastColumn());
   SpreadsheetApp.flush();
 
   return {
@@ -378,6 +404,23 @@ function findSummaryStartRow_(sheet) {
   const values = sheet.getRange(1, 1, lastRow, 1).getDisplayValues();
   for (let index = 0; index < values.length; index += 1) {
     const label = normalize_(values[index][0]);
+    if (label.indexOf("member pay") !== -1 || label.indexOf("fee") !== -1) {
+      return index + 1;
+    }
+  }
+
+  return null;
+}
+
+function findFormulaStartColumn_(sheet) {
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) {
+    return null;
+  }
+
+  const values = sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0];
+  for (let index = 1; index < values.length; index += 1) {
+    const label = normalize_(values[index]);
     if (label.indexOf("member pay") !== -1 || label.indexOf("fee") !== -1) {
       return index + 1;
     }
