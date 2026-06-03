@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RSVP Export</title>
-    <link rel="stylesheet" href="./styles.css?v=20260602-7" />
+    <link rel="stylesheet" href="./styles.css?v=20260602-8" />
   </head>
   <body>
     <main class="shell">
@@ -25,6 +25,24 @@
           <p id="share-status" class="status" hidden></p>
         </form>
 
+        <section id="heatmap-section" class="admin-preview" hidden>
+          <div class="preview-heading">
+            <h2>Group Heatmap</h2>
+            <p id="heatmap-note"></p>
+          </div>
+          <div id="group-heatmap" class="heatmap-grid"></div>
+        </section>
+
+        <section id="individual-section" class="admin-preview" hidden>
+          <div class="preview-heading">
+            <h2>Individual Breakdown</h2>
+            <p id="individual-note"></p>
+          </div>
+          <div class="table-wrap compact-table-wrap">
+            <table id="individual-table" class="export-table heatmap-table"></table>
+          </div>
+        </section>
+
         <section id="preview-section" class="admin-preview" hidden>
           <div class="preview-heading">
             <h2>Exported Sheet Preview</h2>
@@ -34,9 +52,19 @@
             <table id="preview-table" class="export-table"></table>
           </div>
         </section>
+
+        <section id="audit-section" class="admin-preview" hidden>
+          <div class="preview-heading">
+            <h2>Guest Audit</h2>
+            <p id="audit-note"></p>
+          </div>
+          <div class="table-wrap compact-table-wrap">
+            <table id="audit-table" class="export-table audit-table"></table>
+          </div>
+        </section>
       </section>
     </main>
 
-    <script src="./export.js?v=20260602-4"></script>
+    <script src="./export.js?v=20260602-5"></script>
   </body>
 </html>

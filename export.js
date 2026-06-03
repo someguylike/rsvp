@@ -8,9 +8,18 @@
   const exportButton = document.querySelector("#export-button");
   const status = document.querySelector("#status");
   const shareStatus = document.querySelector("#share-status");
+  const heatmapSection = document.querySelector("#heatmap-section");
+  const heatmapNote = document.querySelector("#heatmap-note");
+  const groupHeatmap = document.querySelector("#group-heatmap");
+  const individualSection = document.querySelector("#individual-section");
+  const individualNote = document.querySelector("#individual-note");
+  const individualTable = document.querySelector("#individual-table");
   const previewSection = document.querySelector("#preview-section");
   const previewNote = document.querySelector("#preview-note");
   const previewTable = document.querySelector("#preview-table");
+  const auditSection = document.querySelector("#audit-section");
+  const auditNote = document.querySelector("#audit-note");
+  const auditTable = document.querySelector("#audit-table");
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -53,17 +62,214 @@
   }
 
   function clearPreview() {
+    groupHeatmap.textContent = "";
+    individualTable.textContent = "";
     previewTable.textContent = "";
+    auditTable.textContent = "";
+    heatmapNote.textContent = "";
+    individualNote.textContent = "";
     previewNote.textContent = "";
+    auditNote.textContent = "";
+    heatmapSection.hidden = true;
+    individualSection.hidden = true;
     previewSection.hidden = true;
+    auditSection.hidden = true;
     shareStatus.hidden = true;
     shareStatus.textContent = "";
+  }
+
+  function parsePositiveInt(value) {
+    const parsed = Number.parseInt(String(value || "").trim(), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  function parseRosterRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { dates: [], players: [] };
+    }
+
+    const dates = rows[0].slice(1).map((date) => String(date || "").trim());
+    const players = rows.slice(1).map((row) => ({
+      name: String(row[0] || "").trim(),
+      values: dates.map((_, index) => parsePositiveInt(row[index + 1])),
+    }));
+
+    return {
+      dates,
+      players: players.filter((player) => player.name),
+    };
+  }
+
+  function getHeatClass(value, maxValue) {
+    if (!value || !maxValue) {
+      return "heat-0";
+    }
+
+    const bucket = Math.max(1, Math.ceil((value / maxValue) * 5));
+    return `heat-${Math.min(bucket, 5)}`;
+  }
+
+  function appendCell(row, tagName, text, className) {
+    const cell = document.createElement(tagName);
+    cell.textContent = text;
+    if (className) {
+      cell.className = className;
+    }
+    row.append(cell);
+    return cell;
+  }
+
+  function getDateTotals(model) {
+    return model.dates.map((date, dateIndex) => ({
+      date,
+      total: model.players.reduce(
+        (sum, player) => sum + Number(player.values[dateIndex] || 0),
+        0,
+      ),
+    }));
+  }
+
+  function getActivePlayers(model) {
+    return model.players.filter((player) =>
+      player.values.some((value) => value > 0),
+    );
+  }
+
+  function getAuditRows(model) {
+    const rows = [];
+
+    model.dates.forEach((date, dateIndex) => {
+      model.players.forEach((player) => {
+        const headcount = Number(player.values[dateIndex] || 0);
+        if (!headcount) {
+          return;
+        }
+
+        rows.push({
+          date,
+          player: player.name,
+          guests: Math.max(0, headcount - 1),
+          headcount,
+        });
+      });
+    });
+
+    return rows;
+  }
+
+  function renderGroupHeatmap(model) {
+    const totals = getDateTotals(model).filter((item) => item.total > 0);
+    const maxTotal = totals.reduce(
+      (maxValue, item) => Math.max(maxValue, item.total),
+      0,
+    );
+
+    groupHeatmap.textContent = "";
+
+    if (totals.length === 0) {
+      heatmapSection.hidden = true;
+      return;
+    }
+
+    totals.forEach((item) => {
+      const tile = document.createElement("div");
+      const date = document.createElement("span");
+      const total = document.createElement("strong");
+      tile.className = `heatmap-tile ${getHeatClass(item.total, maxTotal)}`;
+      date.textContent = item.date;
+      total.textContent = `${item.total}`;
+      tile.append(date, total);
+      groupHeatmap.append(tile);
+    });
+
+    heatmapNote.textContent = `${totals.length} dates, peak turnout ${maxTotal}.`;
+    heatmapSection.hidden = false;
+  }
+
+  function renderIndividualHeatmap(model) {
+    const activePlayers = getActivePlayers(model);
+    const maxValue = activePlayers.reduce(
+      (maxPlayer, player) =>
+        Math.max(maxPlayer, ...player.values.map((value) => Number(value || 0))),
+      0,
+    );
+
+    individualTable.textContent = "";
+
+    if (activePlayers.length === 0 || model.dates.length === 0) {
+      individualSection.hidden = true;
+      return;
+    }
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    appendCell(headerRow, "th", "Name");
+    model.dates.forEach((date) => appendCell(headerRow, "th", date));
+    thead.append(headerRow);
+
+    const tbody = document.createElement("tbody");
+    activePlayers.forEach((player) => {
+      const row = document.createElement("tr");
+      appendCell(row, "td", player.name);
+      player.values.forEach((value) => {
+        appendCell(
+          row,
+          "td",
+          value ? String(value) : "",
+          getHeatClass(value, maxValue),
+        );
+      });
+      tbody.append(row);
+    });
+
+    individualTable.append(thead, tbody);
+    individualNote.textContent = `${activePlayers.length} players with at least one RSVP.`;
+    individualSection.hidden = false;
+  }
+
+  function renderAuditTable(model) {
+    const rows = getAuditRows(model);
+    auditTable.textContent = "";
+
+    if (rows.length === 0) {
+      auditSection.hidden = true;
+      return;
+    }
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    ["Date", "Player", "Guests", "Headcount"].forEach((header) => {
+      appendCell(headerRow, "th", header);
+    });
+    thead.append(headerRow);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach((entry) => {
+      const row = document.createElement("tr");
+      appendCell(row, "td", entry.date);
+      appendCell(row, "td", entry.player);
+      appendCell(row, "td", String(entry.guests));
+      appendCell(row, "td", String(entry.headcount));
+      tbody.append(row);
+    });
+
+    auditTable.append(thead, tbody);
+    auditNote.textContent = `${rows.length} player/date RSVP rows.`;
+    auditSection.hidden = false;
+  }
+
+  function renderAnalytics(rows) {
+    const model = parseRosterRows(rows);
+    renderGroupHeatmap(model);
+    renderIndividualHeatmap(model);
+    renderAuditTable(model);
   }
 
   function renderPreview(rows, sheetName) {
     previewTable.textContent = "";
 
     if (!Array.isArray(rows) || rows.length === 0) {
+      renderAnalytics([]);
       previewSection.hidden = true;
       return;
     }
@@ -95,6 +301,7 @@
     previewTable.append(thead, tbody);
     previewNote.textContent = `Rendered from the ${sheetName} spreadsheet tab.`;
     previewSection.hidden = false;
+    renderAnalytics(rows);
   }
 
   function buildUrl(payload, callbackName) {
