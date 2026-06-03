@@ -310,7 +310,7 @@ function exportMonthRoster_(month) {
 
   const sourceSheet = getSheet_();
   const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
-  const exportSheetName = `${month} Roster`;
+  const exportSheetName = formatMonthTabName_(month);
   let exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
 
   if (!exportSheet) {
@@ -322,7 +322,7 @@ function exportMonthRoster_(month) {
   const matrix = [header].concat(
     monthDates.map((date) => {
       const rowByPlayer = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
-      return [date].concat(
+      return [formatDisplayDate_(date)].concat(
         PLAYERS.map((player) => rowByPlayer[normalize_(player)] || ""),
       );
     }),
@@ -395,6 +395,20 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
   });
 
   return totals;
+}
+
+function formatMonthTabName_(month) {
+  const date = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1);
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), "MMMM yyyy");
+}
+
+function formatDisplayDate_(dateValue) {
+  const parts = String(dateValue).split("-");
+  if (parts.length !== 3) {
+    return dateValue;
+  }
+
+  return `${parts[1]}/${parts[2]}/${parts[0]}`;
 }
 
 function getTally_(playDate) {

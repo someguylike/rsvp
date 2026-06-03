@@ -120,6 +120,7 @@ The export writes to the spreadsheet ID configured in `google-apps-script/Code.g
 
 Output format:
 
+- Tab name: `Month YYYY`, for example `March 2026`.
 - Row 1: `Date` plus all player names.
 - Rows: play dates in the selected month.
 - Cell value: blank when not joining, `1` when the player joins alone, `n` when the player brings `n - 1` guests.
