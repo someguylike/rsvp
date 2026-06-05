@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Roster</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-15" />
+    <link rel="stylesheet" href="./styles.css?v=20260605-16" />
   </head>
   <body>
     <main class="shell">
@@ -24,31 +24,6 @@
             <a href="./export.html">Export</a>
           </div>
         </nav>
-
-        <section id="admin-login-panel" class="auth-panel compact-auth-panel">
-          <form id="admin-login-form" class="auth-form">
-            <label class="field">
-              <span>Admin password</span>
-              <input
-                id="admin-password"
-                autocomplete="current-password"
-                type="password"
-                required
-              />
-            </label>
-            <button id="admin-login-button" type="submit">Enable Remove</button>
-          </form>
-          <p id="admin-login-status" class="status" role="status" aria-live="polite">
-            Log in to remove members.
-          </p>
-        </section>
-
-        <div id="admin-session" class="auth-session" hidden>
-          <p class="status success">Member removal enabled</p>
-          <button id="admin-logout-button" class="secondary-button" type="button">
-            Log Out
-          </button>
-        </div>
 
         <form id="roster-form" class="form">
           <div class="roster-form-grid">
@@ -127,6 +102,31 @@
             <table id="member-table" class="export-table roster-member-table"></table>
           </div>
         </section>
+
+        <section id="admin-login-panel" class="auth-panel compact-auth-panel roster-auth-panel">
+          <form id="admin-login-form" class="auth-form">
+            <label class="field">
+              <span>Admin password</span>
+              <input
+                id="admin-password"
+                autocomplete="current-password"
+                type="password"
+                required
+              />
+            </label>
+            <button id="admin-login-button" type="submit">Enable Remove</button>
+          </form>
+          <p id="admin-login-status" class="status" role="status" aria-live="polite">
+            Log in to remove members.
+          </p>
+        </section>
+
+        <div id="admin-session" class="auth-session roster-auth-panel" hidden>
+          <p class="status success">Member removal enabled</p>
+          <button id="admin-logout-button" class="secondary-button" type="button">
+            Log Out
+          </button>
+        </div>
 
       </section>
     </main>

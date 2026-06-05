@@ -443,6 +443,11 @@ button:disabled {
   margin-bottom: 16px;
 }
 
+.roster-auth-panel {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
 .admin-preview {
   display: grid;
   gap: 12px;
