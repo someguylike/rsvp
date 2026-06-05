@@ -142,12 +142,22 @@
       return [];
     }
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const year = Number(month.slice(0, 4));
     const monthIndex = Number(month.slice(5, 7)) - 1;
-    const current = new Date(year, monthIndex, 1);
+    const isCurrentMonth = month === formatMonth(today);
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + 7);
+    const current = isCurrentMonth
+      ? new Date(today)
+      : new Date(year, monthIndex, 1);
     const dates = [];
 
-    while (current.getMonth() === monthIndex) {
+    while (
+      current.getMonth() === monthIndex &&
+      (!isCurrentMonth || current <= endDate)
+    ) {
       if (PLAY_DAYS.includes(current.getDay())) {
         dates.push(formatDate(current));
       }
