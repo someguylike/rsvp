@@ -364,6 +364,23 @@
       return "";
     }
 
+    const summaryRow = document.createElement("tr");
+    const summaryLabel = document.createElement("td");
+    summaryRow.className = "summary-row";
+    summaryLabel.textContent = "Daily total";
+    summaryLabel.dataset.label = "Name";
+    summaryRow.append(summaryLabel);
+
+    monthDates.forEach((date) => {
+      const total = getDateTotal(date);
+      const cell = document.createElement("td");
+      cell.textContent = String(total);
+      cell.dataset.date = date;
+      cell.dataset.label = formatDisplayDate(date);
+      summaryRow.append(cell);
+    });
+    tbody.append(summaryRow);
+
     visiblePlayers.forEach((player) => {
       const row = document.createElement("tr");
       const name = document.createElement("td");
@@ -407,23 +424,6 @@
 
       tbody.append(row);
     });
-
-    const summaryRow = document.createElement("tr");
-    const summaryLabel = document.createElement("td");
-    summaryRow.className = "summary-row";
-    summaryLabel.textContent = "Total";
-    summaryLabel.dataset.label = "Name";
-    summaryRow.append(summaryLabel);
-
-    monthDates.forEach((date) => {
-      const total = getDateTotal(date);
-      const cell = document.createElement("td");
-      cell.textContent = String(total);
-      cell.dataset.date = date;
-      cell.dataset.label = formatDisplayDate(date);
-      summaryRow.append(cell);
-    });
-    tbody.append(summaryRow);
 
     rosterTable.replaceChildren(thead, tbody);
     updateChangeCount();
