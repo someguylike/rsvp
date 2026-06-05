@@ -121,17 +121,14 @@
   function formatDateOption(date) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const startOfThisWeek = new Date(today);
-    startOfThisWeek.setDate(today.getDate() - today.getDay());
-    const endOfThisWeek = new Date(startOfThisWeek);
-    endOfThisWeek.setDate(startOfThisWeek.getDate() + 6);
+    const dayOffset = Math.round((date.getTime() - today.getTime()) / 86400000);
 
     const day = date.toLocaleDateString(undefined, { weekday: "long" });
     const full = date.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
     });
-    const prefix = date <= endOfThisWeek ? "This" : "Next";
+    const prefix = dayOffset <= 6 ? "This" : "Next";
 
     return {
       day: date.getTime() === today.getTime() ? "Today" : `${prefix} ${day}`,
