@@ -508,16 +508,28 @@ button:disabled {
   text-align: left;
 }
 
-.roster-cellphone-cell {
+.roster-member-table th:nth-child(5),
+.roster-member-table td:nth-child(5) {
+  min-width: 150px;
+  text-align: center;
+}
+
+.roster-cellphone-cell,
+.roster-actions {
   align-items: center;
   display: flex;
   gap: 8px;
+}
+
+.roster-cellphone-cell {
   justify-content: space-between;
 }
 
 .roster-actions-cell {
-  display: flex;
-  gap: 8px;
+  white-space: nowrap;
+}
+
+.roster-actions {
   justify-content: center;
 }
 
