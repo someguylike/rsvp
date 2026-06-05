@@ -10,6 +10,7 @@
   const loginStatus = document.querySelector("#admin-login-status");
   const adminSession = document.querySelector("#admin-session");
   const logoutButton = document.querySelector("#admin-logout-button");
+  const adminEyebrow = document.querySelector("#admin-eyebrow");
   const nameInput = document.querySelector("#member-name");
   const memberNameList = document.querySelector("#member-name-list");
   const venmoInput = document.querySelector("#venmo");
@@ -54,6 +55,7 @@
   function renderAdminState() {
     loginPanel.hidden = Boolean(adminToken);
     adminSession.hidden = !adminToken;
+    adminEyebrow.hidden = !adminToken;
     renderRoster();
   }
 
