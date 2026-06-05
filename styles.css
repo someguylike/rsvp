@@ -805,6 +805,43 @@ button:disabled {
     padding: 20px;
   }
 
+  .heading {
+    margin-bottom: 18px;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+    line-height: 1.08;
+  }
+
+  .roster-form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .admin-roster-actions {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-roster-actions button {
+    width: 100%;
+  }
+
+  .admin-roster-actions .status {
+    min-height: 0;
+    font-size: 0.84rem;
+  }
+
+  .admin-preview {
+    margin-top: 16px;
+    padding: 12px;
+  }
+
+  .roster-search-field {
+    max-width: none;
+  }
+
   .tally-header {
     align-items: start;
     flex-direction: column;
