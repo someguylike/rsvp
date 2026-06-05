@@ -164,7 +164,7 @@
     return `https://www.facebook.com/${text.replace(/^@/, "")}`;
   }
 
-  function appendLinkCell(row, text, href) {
+  function appendLinkCell(row, text, href, warningMessage) {
     const cell = document.createElement("td");
     if (text && href) {
       const link = document.createElement("a");
@@ -176,6 +176,16 @@
     } else {
       cell.textContent = text || "";
     }
+
+    if (warningMessage) {
+      const warning = document.createElement("span");
+      warning.className = "contact-warning";
+      warning.textContent = "!";
+      warning.title = warningMessage;
+      warning.setAttribute("aria-label", warningMessage);
+      cell.append(warning);
+    }
+
     row.append(cell);
     return cell;
   }
@@ -235,8 +245,16 @@
       const editButton = document.createElement("button");
       const removeButton = document.createElement("button");
 
+      const venmoUrl = getVenmoUrl(member.venmo);
       appendCell(row, "td", member.name || "");
-      appendLinkCell(row, member.venmo || "", getVenmoUrl(member.venmo));
+      appendLinkCell(
+        row,
+        member.venmo || "",
+        venmoUrl,
+        member.venmo && !venmoUrl
+          ? "Invalid Venmo handle or profile URL. Use a normal hyphen, not a long dash."
+          : "",
+      );
       appendLinkCell(
         row,
         member.messenger || "",
