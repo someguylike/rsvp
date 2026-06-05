@@ -486,6 +486,10 @@ button:disabled {
   min-width: 220px;
 }
 
+.roster-search-field {
+  max-width: 420px;
+}
+
 .roster-member-table th:nth-child(2),
 .roster-member-table td:nth-child(2) {
   min-width: 160px;

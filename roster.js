@@ -6,6 +6,7 @@
   const nameInput = document.querySelector("#member-name");
   const venmoInput = document.querySelector("#venmo");
   const messengerInput = document.querySelector("#messenger");
+  const memberSearch = document.querySelector("#member-search");
   const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
   const memberCount = document.querySelector("#member-count");
@@ -124,9 +125,35 @@
     return cell;
   }
 
+  function normalizeSearchText(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function getVisibleRoster() {
+    const query = normalizeSearchText(memberSearch.value);
+    if (!query) {
+      return roster;
+    }
+
+    return roster.filter((member) =>
+      [member.name, member.venmo, member.messenger].some((value) =>
+        normalizeSearchText(value).includes(query),
+      ),
+    );
+  }
+
   function renderRoster() {
+    const visibleRoster = getVisibleRoster();
     memberCount.textContent =
-      roster.length === 1 ? "1 member" : `${roster.length} members`;
+      visibleRoster.length === roster.length
+        ? roster.length === 1
+          ? "1 member"
+          : `${roster.length} members`
+        : `${visibleRoster.length} of ${roster.length} members`;
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
@@ -136,7 +163,7 @@
     thead.append(headerRow);
 
     const tbody = document.createElement("tbody");
-    roster.forEach((member) => {
+    visibleRoster.forEach((member) => {
       const row = document.createElement("tr");
       const actions = document.createElement("td");
       const editButton = document.createElement("button");
@@ -254,6 +281,10 @@
     }
 
     saveMember(payload);
+  });
+
+  memberSearch.addEventListener("input", () => {
+    renderRoster();
   });
 
   loadRoster();
