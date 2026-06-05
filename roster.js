@@ -280,7 +280,7 @@
       const removeButton = document.createElement("button");
 
       const venmoUrl = getVenmoUrl(member.venmo);
-      appendCell(row, "td", member.name || "");
+      appendCell(row, "td", member.name || "").dataset.label = "Name";
       appendLinkCell(
         row,
         member.venmo || "",
@@ -288,7 +288,7 @@
         member.venmo && !venmoUrl
           ? "Invalid Venmo handle or profile URL. Use a normal hyphen, not a long dash."
           : "",
-      );
+      ).dataset.label = "Venmo";
       const messengerUrl = getMessengerUrl(member.messenger);
       appendLinkCell(
         row,
@@ -297,9 +297,10 @@
         member.messenger && !messengerUrl
           ? "Invalid Messenger or Facebook profile URL. Use a plain handle or profile URL."
           : "",
-      );
+      ).dataset.label = "Messenger";
 
       actions.className = "roster-actions-cell";
+      actions.dataset.label = "Actions";
       const actionsWrap = document.createElement("div");
       actionsWrap.className = "roster-actions";
       editButton.className = "secondary-button inline-button";
