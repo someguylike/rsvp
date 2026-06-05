@@ -586,8 +586,12 @@ button:disabled {
   text-align: center;
 }
 
-.roster-edit-active {
-  background: var(--accent-soft);
+.roster-edit-solo {
+  background: #e3f7e8;
+}
+
+.roster-edit-party {
+  background: #d9ecff;
 }
 
 .roster-edit-dirty {

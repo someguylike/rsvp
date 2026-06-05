@@ -344,6 +344,16 @@
     });
     thead.append(headerRow);
 
+    function getAttendanceClass(value) {
+      if (value > 1) {
+        return "roster-edit-party";
+      }
+      if (value === 1) {
+        return "roster-edit-solo";
+      }
+      return "";
+    }
+
     visiblePlayers.forEach((player) => {
       const row = document.createElement("tr");
       const name = document.createElement("td");
@@ -360,7 +370,7 @@
         const cell = document.createElement("td");
         const select = document.createElement("select");
 
-        cell.className = value > 0 ? "roster-edit-active" : "";
+        cell.className = getAttendanceClass(value);
         cell.classList.toggle("roster-edit-dirty", changedValues.has(key));
         cell.dataset.label = formatDisplayDate(date);
         select.className = "roster-edit-select";
@@ -374,7 +384,7 @@
           } else {
             changedValues.set(key, nextValue);
           }
-          cell.className = nextValue > 0 ? "roster-edit-active" : "";
+          cell.className = getAttendanceClass(nextValue);
           cell.classList.toggle("roster-edit-dirty", changedValues.has(key));
           updateChangeCount();
           updateMonthTotal();
