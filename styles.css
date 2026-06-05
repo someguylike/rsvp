@@ -57,6 +57,41 @@ body {
   margin-bottom: 26px;
 }
 
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -10px 0 22px;
+}
+
+.page-nav a {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 800;
+  padding: 8px 12px;
+  text-decoration: none;
+}
+
+.page-nav a:hover {
+  border-color: var(--accent);
+  background: white;
+  color: var(--accent-strong);
+}
+
+.page-nav a.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgb(0 94 184 / 18%);
+}
+
 .eyebrow {
   width: fit-content;
   margin: 0 0 8px;
@@ -810,7 +845,7 @@ button:disabled {
   }
 
   .heading {
-    margin-bottom: 18px;
+    margin-bottom: 14px;
   }
 
   h1 {
@@ -820,6 +855,18 @@ button:disabled {
 
   .form {
     gap: 14px;
+  }
+
+  .page-nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 0 0 18px;
+  }
+
+  .page-nav a {
+    min-height: 42px;
+    padding: 8px 10px;
   }
 
   .admin-controls,

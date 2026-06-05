@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Who’s In This Week?</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-9" />
+    <link rel="stylesheet" href="./styles.css?v=20260605-10" />
   </head>
   <body>
     <main class="shell">
@@ -13,6 +13,13 @@
           <p class="eyebrow">Weekly play signup</p>
           <h1 id="page-title">Who’s In This Week?</h1>
         </div>
+
+        <nav class="page-nav" aria-label="Page navigation">
+          <a class="active" href="./index.html" aria-current="page">RSVP</a>
+          <a href="./admin.html">Attendance</a>
+          <a href="./roster.html">Members</a>
+          <a href="./export.html">Export</a>
+        </nav>
 
         <form id="rsvp-form" class="form">
           <div class="field">
@@ -76,9 +83,6 @@
           <ul id="tally-list" class="tally-list"></ul>
         </section>
 
-        <footer class="page-footer">
-          <a href="./export.html">Monthly export</a>
-        </footer>
       </section>
     </main>
 
