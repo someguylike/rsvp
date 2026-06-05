@@ -330,11 +330,11 @@
     }, 0);
   }
 
-  function updateSummaryRow() {
+  function updateDateHeaderTotals() {
     rosterTable
-      .querySelectorAll(".summary-row td[data-date]")
-      .forEach((cell) => {
-        cell.textContent = String(getDateTotal(cell.dataset.date));
+      .querySelectorAll("th[data-date] .date-total")
+      .forEach((total) => {
+        total.textContent = `Total: ${getDateTotal(total.dataset.date)}`;
       });
   }
 
@@ -349,7 +349,15 @@
     headerRow.append(nameHeader);
     monthDates.forEach((date) => {
       const header = document.createElement("th");
-      header.textContent = formatDisplayDate(date);
+      const dateLabel = document.createElement("span");
+      const totalLabel = document.createElement("span");
+      header.dataset.date = date;
+      dateLabel.className = "date-heading";
+      dateLabel.textContent = formatDisplayDate(date);
+      totalLabel.className = "date-total";
+      totalLabel.dataset.date = date;
+      totalLabel.textContent = `Total: ${getDateTotal(date)}`;
+      header.append(dateLabel, totalLabel);
       headerRow.append(header);
     });
     thead.append(headerRow);
@@ -363,23 +371,6 @@
       }
       return "";
     }
-
-    const summaryRow = document.createElement("tr");
-    const summaryLabel = document.createElement("td");
-    summaryRow.className = "summary-row";
-    summaryLabel.textContent = "Daily total";
-    summaryLabel.dataset.label = "Name";
-    summaryRow.append(summaryLabel);
-
-    monthDates.forEach((date) => {
-      const total = getDateTotal(date);
-      const cell = document.createElement("td");
-      cell.textContent = String(total);
-      cell.dataset.date = date;
-      cell.dataset.label = formatDisplayDate(date);
-      summaryRow.append(cell);
-    });
-    tbody.append(summaryRow);
 
     visiblePlayers.forEach((player) => {
       const row = document.createElement("tr");
@@ -415,7 +406,7 @@
           cell.classList.toggle("roster-edit-dirty", changedValues.has(key));
           updateChangeCount();
           updateMonthTotal();
-          updateSummaryRow();
+          updateDateHeaderTotals();
         });
 
         cell.append(select);
