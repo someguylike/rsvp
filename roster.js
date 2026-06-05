@@ -200,6 +200,11 @@
     return contact.url;
   }
 
+  function getMessengerDisplayValue(value) {
+    const contact = normalizeMessengerContact(value);
+    return contact ? contact.value : String(value || "").trim();
+  }
+
   function appendLinkCell(row, text, href, warningMessage) {
     const cell = document.createElement("td");
     if (text && href) {
@@ -331,7 +336,7 @@
       const messengerUrl = getMessengerUrl(member.messenger);
       appendLinkCell(
         row,
-        member.messenger || "",
+        getMessengerDisplayValue(member.messenger),
         messengerUrl,
         member.messenger && !messengerUrl
           ? "Invalid Messenger or Facebook profile URL. Use a plain handle or profile URL."
