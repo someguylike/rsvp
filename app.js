@@ -322,7 +322,6 @@
     return {
       playerName: String(formData.get("playerName") || "").trim(),
       playDate: String(formData.get("playDate") || ""),
-      vote: String(formData.get("vote") || "Yes"),
       participantCount: Number.parseInt(
         String(formData.get("participantCount") || "1"),
         10,
@@ -337,13 +336,16 @@
 
   function renderRsvpDetails(container, rsvp) {
     const detailsSource = rsvp || {};
+    const participantCount = Math.max(
+      0,
+      Number(detailsSource.participantCount || 0),
+    );
     const details = [
       ["Player", detailsSource.playerName],
       ["Date", detailsSource.playDate],
-      ["Vote", detailsSource.vote],
       [
         "Reserved spots",
-        formatParticipantCount(Number(detailsSource.participantCount || 1)),
+        participantCount > 0 ? formatParticipantCount(participantCount) : "0",
       ],
     ];
 
@@ -365,8 +367,7 @@
     const previous = existing || {
       playerName: payload.playerName,
       playDate: payload.playDate,
-      vote: "No",
-      participantCount: 1,
+      participantCount: 0,
     };
 
     if (
@@ -565,7 +566,7 @@
     tallyCount.textContent =
       totalCount > 0
         ? formatParticipantCount(totalCount)
-        : "No Yes RSVPs yet";
+        : "No reservations yet";
 
     tallyList.replaceChildren(
       ...players.map((player) => {
@@ -614,7 +615,7 @@
         return;
       }
 
-      tallyCount.textContent = "Could not load tally. Try refreshing.";
+      tallyCount.textContent = "Could not load reservations. Try refreshing.";
       tallyList.replaceChildren();
     }
   }
@@ -655,7 +656,8 @@
       return;
     }
 
-    payload.participantCount = Math.max(1, payload.participantCount);
+    payload.participantCount = Math.min(5, Math.max(0, payload.participantCount));
+    payload.vote = payload.participantCount > 0 ? "Yes" : "No";
 
     submitRsvp(payload);
   });

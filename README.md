@@ -6,13 +6,12 @@ Static RSVP page for weekly play sessions.
 
 - Player name is limited to a fixed roster dropdown.
 - Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an optional calendar picker.
-- Vote defaults to `Yes`.
 - Reserved spots defaults to `1` for the player; increase it to include guests.
-- A `No` vote removes that player/date RSVP instead of storing a `No` row.
+- Reserved spots `0` means not going and removes that player/date reservation.
 - Submit writes to Google Sheets through Apps Script.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
-- After submit and when the date changes, the page shows the Yes RSVP tally for that date.
+- After submit and when the date changes, the page shows the reserved participant tally for that date.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
 
 ## Recommended Hosting

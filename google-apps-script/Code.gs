@@ -187,17 +187,15 @@ function upsertRsvpWithLock_(params) {
     required_(params.playerName, "Missing player name").trim(),
   );
   validatePlayerName_(playerName);
-  const vote = sanitizeText_(params.vote || "Yes");
-  const participantCount = Math.max(
-    1,
-    Math.trunc(Number(params.participantCount || 1)),
+  const participantCount = clampSubmittedParticipantCount_(
+    params.participantCount,
   );
+  const vote =
+    participantCount > 0 && normalize_(params.vote || "Yes") !== "no"
+      ? "Yes"
+      : "No";
   const submittedAt = params.submittedAt || new Date().toISOString();
   const updatedAt = new Date().toISOString();
-
-  if (!Number.isFinite(participantCount)) {
-    throw new Error("Invalid participant count");
-  }
 
   const sheet = getSheet_();
   const matchingRows = findExistingRows_(sheet, playDate, playerName);
@@ -318,7 +316,7 @@ function getRsvpAtRow_(sheet, row) {
     playDate: normalizeDate_(values[0]),
     playerName: String(values[1] || "").trim(),
     vote: String(values[2] || "").trim(),
-    participantCount: Math.max(1, Number(values[3] || 1)),
+    participantCount: clampStoredParticipantCount_(values[3]),
     submittedAt: String(values[4] || ""),
     updatedAt: String(values[5] || ""),
   };
@@ -531,7 +529,7 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
     const rowDate = normalizeDate_(row[0]);
     const playerName = String(row[1] || "").trim();
     const vote = normalize_(row[2]);
-    const participantCount = Math.max(1, Math.trunc(Number(row[3] || 1)));
+    const participantCount = clampStoredParticipantCount_(row[3]);
 
     if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;
@@ -609,7 +607,7 @@ function getTally_(playDate) {
     const rowDate = normalizeDate_(row[0]);
     const playerName = String(row[1] || "").trim();
     const vote = normalize_(row[2]);
-    const participantCount = Math.max(1, Number(row[3] || 1));
+    const participantCount = clampStoredParticipantCount_(row[3]);
 
     if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;
@@ -647,6 +645,16 @@ function getTally_(playDate) {
 
 function normalize_(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function clampSubmittedParticipantCount_(value) {
+  const count = Math.trunc(Number(value || 0));
+  return Number.isFinite(count) ? Math.min(5, Math.max(0, count)) : 1;
+}
+
+function clampStoredParticipantCount_(value) {
+  const count = Math.trunc(Number(value || 1));
+  return Number.isFinite(count) ? Math.min(5, Math.max(1, count)) : 1;
 }
 
 function formatDate_(date) {

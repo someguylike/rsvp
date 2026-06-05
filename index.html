@@ -43,33 +43,20 @@
             </label>
           </fieldset>
 
-          <fieldset class="field">
-            <legend>Vote</legend>
-            <div class="segmented" role="radiogroup" aria-label="Vote">
-              <label>
-                <input type="radio" name="vote" value="Yes" checked />
-                <span>Yes</span>
-              </label>
-              <label>
-                <input type="radio" name="vote" value="No" />
-                <span>No</span>
-              </label>
-            </div>
-          </fieldset>
-
           <label class="field">
             <span>Reserved spots</span>
-            <input
+            <select
               id="participant-count"
               name="participantCount"
-              type="number"
-              min="1"
-              max="21"
-              step="1"
-              inputmode="numeric"
-              value="1"
               required
-            />
+            >
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
           </label>
 
           <button id="submit-button" type="submit">Submit RSVP</button>
@@ -115,6 +102,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260604-2"></script>
+    <script src="./app.js?v=20260604-3"></script>
   </body>
 </html>
