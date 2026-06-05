@@ -197,7 +197,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Name", "Venmo", "Messenger", "Cellphone", "Actions"].forEach((header) => {
+    ["Name", "Venmo", "Messenger", "Actions"].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -208,10 +208,6 @@
       const actions = document.createElement("td");
       const editButton = document.createElement("button");
       const removeButton = document.createElement("button");
-      const cellphoneCell = document.createElement("td");
-      const cellphoneWrap = document.createElement("div");
-      const cellphoneText = document.createElement("span");
-      const revealButton = document.createElement("button");
 
       appendCell(row, "td", member.name || "");
       appendLinkCell(row, member.venmo || "", getVenmoUrl(member.venmo));
@@ -220,19 +216,6 @@
         member.messenger || "",
         getMessengerUrl(member.messenger),
       );
-      cellphoneText.textContent = member.cellphone ? "***" : "";
-      revealButton.className = "secondary-button inline-button";
-      revealButton.type = "button";
-      revealButton.textContent = "Show";
-      revealButton.hidden = !member.cellphone;
-      revealButton.addEventListener("click", () => {
-        const isHidden = cellphoneText.textContent === "***";
-        cellphoneText.textContent = isHidden ? member.cellphone : "***";
-        revealButton.textContent = isHidden ? "Hide" : "Show";
-      });
-      cellphoneWrap.className = "roster-cellphone-cell";
-      cellphoneWrap.append(cellphoneText, revealButton);
-      cellphoneCell.append(cellphoneWrap);
 
       actions.className = "roster-actions-cell";
       const actionsWrap = document.createElement("div");
@@ -253,7 +236,6 @@
 
       actionsWrap.append(editButton, removeButton);
       actions.append(actionsWrap);
-      row.append(cellphoneCell);
       row.append(actions);
       tbody.append(row);
     });
