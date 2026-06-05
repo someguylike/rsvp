@@ -60,7 +60,19 @@ body {
 
 .rsvp-panel .form,
 .rsvp-panel .tally {
+  width: 100%;
   max-width: 520px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.rsvp-panel .heading {
+  text-align: center;
+}
+
+.rsvp-panel .eyebrow {
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .heading {
