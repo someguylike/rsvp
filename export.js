@@ -372,14 +372,17 @@
       return parsed;
     }
 
-    throw new Error(parsed?.error || "Export failed");
+    throw new Error(parsed?.error || "Report failed");
   }
 
   async function loadMonth(month, mode) {
     exportButton.disabled = true;
     clearPreview();
     selectedDate = "";
-    setStatus(mode === "export" ? "Exporting..." : "Loading export...", "");
+    setStatus(
+      mode === "export" ? "Generating report..." : "Loading report...",
+      "",
+    );
 
     try {
       const result = await requestAppsScript({
@@ -387,7 +390,7 @@
         month,
       });
       setStatusWithLink(
-        `${mode === "export" ? "Exported" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
+        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
         result.url,
       );
       renderPreview(result.previewRows);
@@ -434,7 +437,7 @@
     event.preventDefault();
 
     if (!monthInput.value) {
-      setStatus("Choose a month to export.", "error");
+      setStatus("Choose a month for the report.", "error");
       return;
     }
 
