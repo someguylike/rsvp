@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Who’s In This Week?</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-11" />
+    <link rel="stylesheet" href="./styles.css?v=20260605-13" />
   </head>
   <body>
     <main class="shell">
@@ -15,10 +15,14 @@
         </div>
 
         <nav class="page-nav" aria-label="Page navigation">
-          <a class="active" href="./index.html" aria-current="page">RSVP</a>
-          <a href="./admin.html">Attendance</a>
-          <a href="./roster.html">Members</a>
-          <a href="./export.html">Export</a>
+          <input id="page-nav-toggle" class="page-nav-toggle" type="checkbox" />
+          <label class="page-nav-button" for="page-nav-toggle">Menu</label>
+          <div class="page-nav-links">
+            <a class="active" href="./index.html" aria-current="page">RSVP</a>
+            <a href="./admin.html">Attendance</a>
+            <a href="./roster.html">Members</a>
+            <a href="./export.html">Export</a>
+          </div>
         </nav>
 
         <form id="rsvp-form" class="form">

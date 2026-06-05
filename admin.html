@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Update Attendance</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-12" />
+    <link rel="stylesheet" href="./styles.css?v=20260605-13" />
   </head>
   <body>
     <main class="shell">
@@ -14,10 +14,14 @@
         </div>
 
         <nav class="page-nav" aria-label="Page navigation">
-          <a href="./index.html">RSVP</a>
-          <a class="active" href="./admin.html" aria-current="page">Attendance</a>
-          <a href="./roster.html">Members</a>
-          <a href="./export.html">Export</a>
+          <input id="page-nav-toggle" class="page-nav-toggle" type="checkbox" />
+          <label class="page-nav-button" for="page-nav-toggle">Menu</label>
+          <div class="page-nav-links">
+            <a href="./index.html">RSVP</a>
+            <a class="active" href="./admin.html" aria-current="page">Attendance</a>
+            <a href="./roster.html">Members</a>
+            <a href="./export.html">Export</a>
+          </div>
         </nav>
 
         <form id="admin-form" class="form">

@@ -58,15 +58,30 @@ body {
 }
 
 .page-nav {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
   margin: -10px 0 22px;
 }
 
-.page-nav a {
+.page-nav-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.page-nav-button {
+  display: none;
+}
+
+.page-nav-links {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.page-nav a,
+.page-nav-button {
   min-height: 38px;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
@@ -78,6 +93,10 @@ body {
   padding: 8px 12px;
   text-align: center;
   text-decoration: none;
+}
+
+.page-nav a {
+  display: inline-flex;
 }
 
 .page-nav a:hover {
@@ -864,13 +883,28 @@ button:disabled {
   }
 
   .page-nav {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
     margin: 0 0 18px;
   }
 
-  .page-nav a {
+  .page-nav-button {
+    display: flex;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .page-nav-links {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .page-nav-toggle:checked ~ .page-nav-links {
+    display: grid;
+  }
+
+  .page-nav a,
+  .page-nav-button {
     min-height: 42px;
     padding: 8px 10px;
   }
