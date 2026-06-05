@@ -313,6 +313,19 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.admin-controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) minmax(260px, 1fr);
+  gap: 14px;
+}
+
+.admin-roster-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .status {
   min-height: 22px;
   margin: 0;
@@ -425,6 +438,41 @@ button:disabled {
 .export-table .summary-row td {
   background: var(--accent-soft);
   font-weight: 800;
+}
+
+.roster-edit-wrap {
+  max-height: 70vh;
+}
+
+.roster-edit-table th,
+.roster-edit-table td {
+  min-width: 82px;
+  padding: 6px;
+}
+
+.roster-edit-table th:first-child,
+.roster-edit-table td:first-child {
+  min-width: 220px;
+}
+
+.roster-edit-select {
+  min-height: 34px;
+  border-radius: 6px;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.roster-edit-active {
+  background: var(--accent-soft);
+}
+
+.roster-edit-dirty {
+  background: #fff4cf;
+}
+
+.roster-edit-dirty .roster-edit-select {
+  border-color: #c98200;
+  background: #fffaf0;
 }
 
 .heatmap-grid {

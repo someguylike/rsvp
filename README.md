@@ -13,7 +13,7 @@ Static RSVP page for weekly play sessions.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
 - After submit and when the date changes, the page shows the reserved participant tally for that date.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
-- `admin.html` lets an admin add, update, or remove a player reservation for a selected date.
+- `admin.html` lets an admin edit the current month roster in a player-by-date table.
 
 ## Recommended Hosting
 
@@ -24,7 +24,7 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 ## Repo Layout
 
 - `index.html`, `app.js`, `styles.css`: public RSVP page.
-- `admin.html`, `admin.js`: admin page for adding or removing selected date reservations.
+- `admin.html`, `admin.js`: admin page for editing player/date attendance counts.
 - `export.html`, `export.js`: admin page for monthly roster export.
 - `google-apps-script/Code.gs`: Apps Script backend source. Paste this into Apps Script and deploy it as the Web App backend.
 

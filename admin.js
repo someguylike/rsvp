@@ -1,6 +1,7 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
+  const PLAY_DAYS = [2, 4, 5, 0];
   const PLAYERS = [
     "Alex Yeung",
     "Anh Khoa Tran (Truc Phuong)",
@@ -48,14 +49,23 @@
   ];
 
   const form = document.querySelector("#admin-form");
-  const dateInput = document.querySelector("#play-date");
-  const playerInput = document.querySelector("#player-name");
-  const participantInput = document.querySelector("#participant-count");
-  const submitButton = document.querySelector("#submit-button");
+  const monthInput = document.querySelector("#roster-month");
+  const playerSearch = document.querySelector("#player-search");
+  const changeCount = document.querySelector("#change-count");
+  const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
-  const tallyCount = document.querySelector("#tally-count");
-  const tallyList = document.querySelector("#tally-list");
-  let latestTallyRequest = 0;
+  const monthTotal = document.querySelector("#month-total");
+  const rosterTable = document.querySelector("#roster-table");
+  let monthDates = [];
+  let rosterValues = new Map();
+  const changedValues = new Map();
+  let latestLoadRequest = 0;
+
+  function formatMonth(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${year}-${month}`;
+  }
 
   function formatDate(date) {
     const year = date.getFullYear();
@@ -64,8 +74,46 @@
     return `${year}-${month}-${day}`;
   }
 
-  function formatParticipantCount(count) {
-    return count === 1 ? "1 participant" : `${count} participants`;
+  function formatDisplayDate(value) {
+    const date = new Date(`${value}T00:00:00`);
+    const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+    const day = date.toLocaleDateString(undefined, {
+      month: "numeric",
+      day: "numeric",
+    });
+    return `${weekday} ${day}`;
+  }
+
+  function normalizeSearchText(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function getPlayDatesForMonth(month) {
+    if (!/^\d{4}-\d{2}$/.test(month || "")) {
+      return [];
+    }
+
+    const year = Number(month.slice(0, 4));
+    const monthIndex = Number(month.slice(5, 7)) - 1;
+    const current = new Date(year, monthIndex, 1);
+    const dates = [];
+
+    while (current.getMonth() === monthIndex) {
+      if (PLAY_DAYS.includes(current.getDay())) {
+        dates.push(formatDate(current));
+      }
+      current.setDate(current.getDate() + 1);
+    }
+
+    return dates;
+  }
+
+  function getKey(playerName, playDate) {
+    return `${playerName}\u0000${playDate}`;
   }
 
   function setStatus(message, type) {
@@ -159,165 +207,212 @@
     return requestViaFetch(payload).catch(() => requestViaJsonp(payload));
   }
 
-  function renderPlayerOptions() {
-    playerInput.replaceChildren(
-      ...PLAYERS.map((player) => {
-        const option = document.createElement("option");
-        option.value = player;
-        option.textContent = player;
-        return option;
-      }),
+  function parseParticipantCount(value) {
+    const count = Number.parseInt(String(value || "0"), 10);
+    return Number.isFinite(count) ? Math.min(5, Math.max(0, count)) : 0;
+  }
+
+  function getVisiblePlayers() {
+    const query = normalizeSearchText(playerSearch.value);
+    if (!query) {
+      return PLAYERS;
+    }
+
+    return PLAYERS.filter((player) =>
+      normalizeSearchText(player).includes(query),
     );
   }
 
-  function renderTally(tally) {
-    const players = Array.isArray(tally?.players) ? tally.players : [];
-    const totalCount = Number(tally?.totalCount || 0);
+  function getParticipantOptions(selectedValue) {
+    return [0, 1, 2, 3, 4, 5].map((value) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = String(value);
+      option.selected = value === selectedValue;
+      return option;
+    });
+  }
 
-    tallyCount.textContent =
-      totalCount > 0
-        ? formatParticipantCount(totalCount)
-        : "No reservations";
+  function updateChangeCount() {
+    const count = changedValues.size;
+    changeCount.textContent =
+      count === 0 ? "No changes" : `${count} pending changes`;
+    saveButton.disabled = count === 0;
+  }
 
-    tallyList.replaceChildren(
-      ...players.map((player) => {
-        const item = document.createElement("li");
-        const name = document.createElement("span");
-        const details = document.createElement("span");
-        const removeButton = document.createElement("button");
-        const participantCount = Math.max(1, Number(player.participantCount || 1));
+  function updateMonthTotal() {
+    const totals = monthDates.map((date) =>
+      PLAYERS.reduce((sum, player) => {
+        const key = getKey(player, date);
+        const value = changedValues.has(key)
+          ? changedValues.get(key)
+          : rosterValues.get(key) || 0;
+        return sum + value;
+      }, 0),
+    );
+    const total = totals.reduce((sum, value) => sum + value, 0);
+    monthTotal.textContent =
+      total === 0
+        ? "No reserved spots this month"
+        : `${total} reserved spots this month`;
+  }
 
-        name.className = "tally-name";
-        details.className = "tally-participants";
-        removeButton.className = "secondary-button inline-button";
-        removeButton.type = "button";
-        name.textContent = player.name;
-        details.textContent = formatParticipantCount(participantCount);
-        removeButton.textContent = "Remove";
-        removeButton.addEventListener("click", () => {
-          removeReservation(player.name);
+  function renderRosterTable() {
+    const visiblePlayers = getVisiblePlayers();
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    const nameHeader = document.createElement("th");
+    const tbody = document.createElement("tbody");
+
+    nameHeader.textContent = "Name";
+    headerRow.append(nameHeader);
+    monthDates.forEach((date) => {
+      const header = document.createElement("th");
+      header.textContent = formatDisplayDate(date);
+      headerRow.append(header);
+    });
+    thead.append(headerRow);
+
+    visiblePlayers.forEach((player) => {
+      const row = document.createElement("tr");
+      const name = document.createElement("td");
+      name.textContent = player;
+      row.append(name);
+
+      monthDates.forEach((date) => {
+        const key = getKey(player, date);
+        const originalValue = rosterValues.get(key) || 0;
+        const value = changedValues.has(key)
+          ? changedValues.get(key)
+          : originalValue;
+        const cell = document.createElement("td");
+        const select = document.createElement("select");
+
+        cell.className = value > 0 ? "roster-edit-active" : "";
+        cell.classList.toggle("roster-edit-dirty", changedValues.has(key));
+        select.className = "roster-edit-select";
+        select.dataset.player = player;
+        select.dataset.date = date;
+        select.replaceChildren(...getParticipantOptions(value));
+        select.addEventListener("change", () => {
+          const nextValue = parseParticipantCount(select.value);
+          if (nextValue === originalValue) {
+            changedValues.delete(key);
+          } else {
+            changedValues.set(key, nextValue);
+          }
+          cell.className = nextValue > 0 ? "roster-edit-active" : "";
+          cell.classList.toggle("roster-edit-dirty", changedValues.has(key));
+          updateChangeCount();
+          updateMonthTotal();
         });
 
-        item.append(name, details, removeButton);
-        return item;
-      }),
-    );
-  }
-
-  async function loadTally(playDate) {
-    if (!playDate) {
-      tallyCount.textContent = "Choose a date";
-      tallyList.replaceChildren();
-      return;
-    }
-
-    const requestId = latestTallyRequest + 1;
-    latestTallyRequest = requestId;
-    tallyCount.textContent = "Loading reservations...";
-
-    try {
-      const result = await requestAppsScript({
-        action: "list",
-        playDate,
+        cell.append(select);
+        row.append(cell);
       });
-      if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
-        return;
-      }
-      renderTally(result.tally);
-    } catch (error) {
-      if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
-        return;
-      }
-      tallyCount.textContent = "Could not load reservations.";
-      tallyList.replaceChildren();
-      setStatus(error.message, "error");
-    }
+
+      tbody.append(row);
+    });
+
+    rosterTable.replaceChildren(thead, tbody);
+    updateChangeCount();
+    updateMonthTotal();
   }
 
-  async function submitReservation(payload) {
-    submitButton.disabled = true;
-    setStatus("Adding player...", "");
+  async function loadMonth(month) {
+    const requestId = latestLoadRequest + 1;
+    latestLoadRequest = requestId;
+    monthDates = getPlayDatesForMonth(month);
+    rosterValues = new Map();
+    changedValues.clear();
+    rosterTable.textContent = "";
+    setStatus("Loading month...", "");
+    monthTotal.textContent = "Loading...";
+    updateChangeCount();
 
     try {
-      let result = await requestAppsScript(payload);
-
-      if (result.action === "needs_confirmation") {
-        const shouldUpdate = window.confirm(
-          "This player already has a reservation for this date. Update it?",
-        );
-        if (!shouldUpdate) {
-          setStatus("Kept the existing reservation.", "");
+      for (let index = 0; index < monthDates.length; index += 1) {
+        const playDate = monthDates[index];
+        setStatus(`Loading ${index + 1} of ${monthDates.length} dates...`, "");
+        const result = await requestAppsScript({
+          action: "list",
+          playDate,
+        });
+        if (requestId !== latestLoadRequest || monthInput.value !== month) {
           return;
         }
 
-        result = await requestAppsScript({
-          ...payload,
-          confirmOverride: "true",
+        const players = Array.isArray(result.tally?.players)
+          ? result.tally.players
+          : [];
+        players.forEach((player) => {
+          rosterValues.set(
+            getKey(player.name, playDate),
+            parseParticipantCount(player.participantCount),
+          );
         });
       }
 
-      renderTally(result.tally);
-      setStatus(
-        result.action === "updated"
-          ? "Updated the reservation."
-          : "Added the player.",
-        "success",
-      );
+      renderRosterTable();
+      setStatus("Month loaded.", "success");
     } catch (error) {
+      if (requestId !== latestLoadRequest || monthInput.value !== month) {
+        return;
+      }
+      rosterTable.textContent = "";
+      monthTotal.textContent = "Could not load month";
       setStatus(error.message, "error");
-    } finally {
-      submitButton.disabled = false;
     }
   }
 
-  async function removeReservation(playerName) {
-    const playDate = dateInput.value;
-    if (!playDate || !playerName) {
+  async function saveChanges() {
+    const changes = Array.from(changedValues.entries());
+    if (changes.length === 0) {
       return;
     }
 
-    setStatus("Removing reservation...", "");
+    saveButton.disabled = true;
+    setStatus(`Saving 0 of ${changes.length} changes...`, "");
 
     try {
-      const result = await requestAppsScript({
-        action: "delete",
-        playerName,
-        playDate,
-      });
+      for (let index = 0; index < changes.length; index += 1) {
+        const [key, participantCount] = changes[index];
+        const [playerName, playDate] = key.split("\u0000");
+        setStatus(`Saving ${index + 1} of ${changes.length} changes...`, "");
+        await requestAppsScript({
+          playerName,
+          playDate,
+          participantCount,
+          vote: participantCount > 0 ? "Yes" : "No",
+          confirmOverride: "true",
+          submittedAt: new Date().toISOString(),
+        });
+      }
 
-      renderTally(result.tally);
-      setStatus("Removed the reservation.", "success");
+      await loadMonth(monthInput.value);
+      setStatus(`Saved ${changes.length} changes.`, "success");
     } catch (error) {
       setStatus(error.message, "error");
+      updateChangeCount();
     }
   }
 
   function initialize() {
-    renderPlayerOptions();
-    dateInput.value = formatDate(new Date());
-    participantInput.value = "1";
-    loadTally(dateInput.value);
+    monthInput.value = formatMonth(new Date());
+    loadMonth(monthInput.value);
   }
 
-  dateInput.addEventListener("change", () => {
-    loadTally(dateInput.value);
+  monthInput.addEventListener("change", () => {
+    loadMonth(monthInput.value);
+  });
+
+  playerSearch.addEventListener("input", () => {
+    renderRosterTable();
   });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-
-    const participantCount = Math.min(
-      5,
-      Math.max(1, Number.parseInt(participantInput.value, 10)),
-    );
-
-    submitReservation({
-      playerName: playerInput.value,
-      playDate: dateInput.value,
-      participantCount,
-      vote: "Yes",
-      submittedAt: new Date().toISOString(),
-    });
+    saveChanges();
   });
 
   initialize();
