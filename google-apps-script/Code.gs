@@ -13,7 +13,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Messenger"];
 const PLAYERS = [
   "Alex Yeung",
   "Anh Khoa Tran (Truc Phuong)",
@@ -329,7 +329,7 @@ function getRosterSheet_() {
   if (shouldSeedRoster && sheet.getLastRow() < 2) {
     sheet
       .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
-      .setValues(PLAYERS.map((name) => [name, ""]));
+      .setValues(PLAYERS.map((name) => [name, "", ""]));
   }
 
   return sheet;
@@ -337,7 +337,7 @@ function getRosterSheet_() {
 
 function migrateRosterSheet_(sheet) {
   const lastColumn = sheet.getLastColumn();
-  if (lastColumn < 3) {
+  if (lastColumn < 2) {
     return;
   }
 
@@ -353,7 +353,12 @@ function migrateRosterSheet_(sheet) {
     sheet.getRange(2, 2, lastRow - 1, 1).setValues(venmoValues);
   }
 
-  sheet.deleteColumns(ROSTER_HEADERS.length + 1, lastColumn - ROSTER_HEADERS.length);
+  if (lastColumn > ROSTER_HEADERS.length) {
+    sheet.deleteColumns(
+      ROSTER_HEADERS.length + 1,
+      lastColumn - ROSTER_HEADERS.length,
+    );
+  }
 }
 
 function getRoster_() {
@@ -370,6 +375,7 @@ function getRoster_() {
     .map((row) => ({
       name: String(row[0] || "").trim(),
       venmo: String(row[1] || "").trim(),
+      messenger: String(row[2] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
@@ -406,9 +412,12 @@ function saveRosterMember_(params) {
       required_(params.playerName || params.name, "Missing player name").trim(),
     );
     const venmo = sanitizeText_(required_(params.venmo, "Missing Venmo").trim());
+    const messenger = sanitizeText_(
+      required_(params.messenger, "Missing Messenger").trim(),
+    );
     const sheet = getRosterSheet_();
     const row = findRosterRow_(sheet, name);
-    const values = [name, venmo];
+    const values = [name, venmo, messenger];
 
     if (row) {
       sheet.getRange(row, 1, 1, ROSTER_HEADERS.length).setValues([values]);

@@ -15,7 +15,7 @@
         </div>
 
         <form id="roster-form" class="form">
-          <div class="roster-form-grid compact-roster-form-grid">
+          <div class="roster-form-grid">
             <label class="field">
               <span>Name</span>
               <input
@@ -34,6 +34,17 @@
                 name="venmo"
                 autocomplete="off"
                 placeholder="@username"
+                required
+              />
+            </label>
+
+            <label class="field">
+              <span>Messenger</span>
+              <input
+                id="messenger"
+                name="messenger"
+                autocomplete="off"
+                placeholder="Profile URL or handle"
                 required
               />
             </label>
@@ -65,6 +76,6 @@
       </section>
     </main>
 
-    <script src="./roster.js?v=20260605-2"></script>
+    <script src="./roster.js?v=20260605-3"></script>
   </body>
 </html>

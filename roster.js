@@ -5,6 +5,7 @@
   const form = document.querySelector("#roster-form");
   const nameInput = document.querySelector("#member-name");
   const venmoInput = document.querySelector("#venmo");
+  const messengerInput = document.querySelector("#messenger");
   const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
   const memberCount = document.querySelector("#member-count");
@@ -109,6 +110,7 @@
   function fillForm(member) {
     nameInput.value = member.name || "";
     venmoInput.value = member.venmo || "";
+    messengerInput.value = member.messenger || "";
     nameInput.focus();
   }
 
@@ -128,7 +130,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Name", "Venmo", ""].forEach((header) => {
+    ["Name", "Venmo", "Messenger", ""].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -142,6 +144,7 @@
 
       appendCell(row, "td", member.name || "");
       appendCell(row, "td", member.venmo || "");
+      appendCell(row, "td", member.messenger || "");
 
       actions.className = "roster-actions-cell";
       editButton.className = "secondary-button inline-button";
@@ -232,6 +235,7 @@
     const payload = {
       playerName: nameInput.value.trim(),
       venmo: venmoInput.value.trim(),
+      messenger: messengerInput.value.trim(),
     };
 
     if (!payload.playerName) {
@@ -241,6 +245,11 @@
 
     if (!payload.venmo) {
       setStatus("Enter a Venmo handle.", "error");
+      return;
+    }
+
+    if (!payload.messenger) {
+      setStatus("Enter a Messenger contact.", "error");
       return;
     }
 
