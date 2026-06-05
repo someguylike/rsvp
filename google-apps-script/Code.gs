@@ -2,12 +2,13 @@ const SHEET_NAME = "RSVPs";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
-const EXPORT_MIN_HEADCOUNT = 2;
+const EXPORT_MIN_PARTICIPANTS = 2;
 const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
   "Play Date",
   "Player Name",
   "Vote",
+  "Participant Count",
   "Submitted At",
   "Updated At",
 ];
@@ -187,8 +188,16 @@ function upsertRsvpWithLock_(params) {
   );
   validatePlayerName_(playerName);
   const vote = sanitizeText_(params.vote || "Yes");
+  const participantCount = Math.max(
+    1,
+    Math.trunc(Number(params.participantCount || 1)),
+  );
   const submittedAt = params.submittedAt || new Date().toISOString();
   const updatedAt = new Date().toISOString();
+
+  if (!Number.isFinite(participantCount)) {
+    throw new Error("Invalid participant count");
+  }
 
   const sheet = getSheet_();
   const matchingRows = findExistingRows_(sheet, playDate, playerName);
@@ -214,7 +223,14 @@ function upsertRsvpWithLock_(params) {
     };
   }
 
-  const values = [playDate, playerName, vote, submittedAt, updatedAt];
+  const values = [
+    playDate,
+    playerName,
+    vote,
+    participantCount,
+    submittedAt,
+    updatedAt,
+  ];
 
   if (row) {
     deleteDuplicateRows_(sheet, matchingRows, row);
@@ -227,8 +243,8 @@ function upsertRsvpWithLock_(params) {
       };
     }
 
-    const originalSubmittedAt = sheet.getRange(row, 4).getValue() || submittedAt;
-    values[3] = originalSubmittedAt;
+    const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
+    values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
     return { action: "updated", row, tally: getTally_(playDate) };
   }
@@ -302,8 +318,9 @@ function getRsvpAtRow_(sheet, row) {
     playDate: normalizeDate_(values[0]),
     playerName: String(values[1] || "").trim(),
     vote: String(values[2] || "").trim(),
-    submittedAt: String(values[3] || ""),
-    updatedAt: String(values[4] || ""),
+    participantCount: Math.max(1, Number(values[3] || 1)),
+    submittedAt: String(values[4] || ""),
+    updatedAt: String(values[5] || ""),
   };
 }
 
@@ -382,7 +399,7 @@ function exportMonthRoster_(month) {
   const totalsByDate = {};
   const monthDates = getExportDatesForMonth_(sourceSheet, month).filter((date) => {
     totalsByDate[date] = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
-    return getTotalHeadcount_(totalsByDate[date]) >= EXPORT_MIN_HEADCOUNT;
+    return getTotalParticipants_(totalsByDate[date]) >= EXPORT_MIN_PARTICIPANTS;
   });
   const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
   const matrix = [header].concat(
@@ -509,23 +526,26 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
     return totals;
   }
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
   rows.forEach((row) => {
     const rowDate = normalizeDate_(row[0]);
     const playerName = String(row[1] || "").trim();
     const vote = normalize_(row[2]);
+    const participantCount = Math.max(1, Math.trunc(Number(row[3] || 1)));
 
     if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;
     }
 
-    totals[normalize_(playerName)] = 1;
+    totals[normalize_(playerName)] = Number.isFinite(participantCount)
+      ? participantCount
+      : 1;
   });
 
   return totals;
 }
 
-function getTotalHeadcount_(totalsByPlayer) {
+function getTotalParticipants_(totalsByPlayer) {
   return Object.keys(totalsByPlayer).reduce(
     (sum, player) => sum + Number(totalsByPlayer[player] || 0),
     0,
@@ -583,12 +603,13 @@ function getTally_(playDate) {
     return tally;
   }
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
 
   rows.forEach((row) => {
     const rowDate = normalizeDate_(row[0]);
     const playerName = String(row[1] || "").trim();
     const vote = normalize_(row[2]);
+    const participantCount = Math.max(1, Number(row[3] || 1));
 
     if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;
@@ -600,17 +621,26 @@ function getTally_(playDate) {
     );
 
     if (existingPlayer) {
+      existingPlayer.participantCount += Number.isFinite(participantCount)
+        ? participantCount
+        : 1;
       return;
     } else {
       tally.players.push({
         name: playerName,
+        participantCount: Number.isFinite(participantCount)
+          ? participantCount
+          : 1,
       });
     }
   });
 
   tally.players.sort((first, second) => first.name.localeCompare(second.name));
   tally.playerCount = tally.players.length;
-  tally.totalCount = tally.playerCount;
+  tally.totalCount = tally.players.reduce(
+    (sum, player) => sum + player.participantCount,
+    0,
+  );
 
   return tally;
 }

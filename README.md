@@ -7,6 +7,7 @@ Static RSVP page for weekly play sessions.
 - Player name is limited to a fixed roster dropdown.
 - Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an optional calendar picker.
 - Vote defaults to `Yes`.
+- Reserved spots defaults to `1` for the player; increase it to include guests.
 - A `No` vote removes that player/date RSVP instead of storing a `No` row.
 - Submit writes to Google Sheets through Apps Script.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
@@ -122,7 +123,7 @@ Before launching for real use, clear testing RSVP rows from the Google Sheet:
 5. Click Run.
 6. Deploy a **New version** of the Web App.
 
-This removes all rows below the `RSVPs` header and removes old extra columns such as `Guest Count`.
+This removes all rows below the `RSVPs` header and removes old extra columns.
 
 ## Admin Export
 
@@ -137,7 +138,7 @@ Output format:
 - Tab name: `Month YYYY`, for example `March 2026`.
 - Row 1: `Name` plus play dates with at least 2 participants.
 - Rows: one row per player.
-- Cell value: blank when not joining, `1` when the player joins.
+- Cell value: blank when not joining, otherwise the total reserved spots for that player.
 
 ## Notes From Tool Research
 

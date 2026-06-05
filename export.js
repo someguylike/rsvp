@@ -184,15 +184,15 @@
 
     model.dates.forEach((date, dateIndex) => {
       model.players.forEach((player) => {
-        const headcount = Number(player.values[dateIndex] || 0);
-        if (!headcount) {
+        const participantCount = Number(player.values[dateIndex] || 0);
+        if (!participantCount) {
           return;
         }
 
         rows.push({
           date,
           player: player.name,
-          participants: headcount,
+          participants: participantCount,
         });
       });
     });

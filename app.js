@@ -56,6 +56,7 @@
   const dateOptions = document.querySelector("#date-options");
   const customDateField = document.querySelector("#custom-date-field");
   const customDateInput = document.querySelector("#custom-play-date");
+  const participantInput = document.querySelector("#participant-count");
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
   const tallyCount = document.querySelector("#tally-count");
@@ -322,6 +323,10 @@
       playerName: String(formData.get("playerName") || "").trim(),
       playDate: String(formData.get("playDate") || ""),
       vote: String(formData.get("vote") || "Yes"),
+      participantCount: Number.parseInt(
+        String(formData.get("participantCount") || "1"),
+        10,
+      ),
       submittedAt: new Date().toISOString(),
     };
   }
@@ -336,6 +341,10 @@
       ["Player", detailsSource.playerName],
       ["Date", detailsSource.playDate],
       ["Vote", detailsSource.vote],
+      [
+        "Reserved spots",
+        formatParticipantCount(Number(detailsSource.participantCount || 1)),
+      ],
     ];
 
     container.replaceChildren(
@@ -357,6 +366,7 @@
       playerName: payload.playerName,
       playDate: payload.playDate,
       vote: "No",
+      participantCount: 1,
     };
 
     if (
@@ -550,22 +560,26 @@
 
   function renderTally(tally) {
     const players = Array.isArray(tally?.players) ? tally.players : [];
-    const playerCount = Number(tally?.playerCount || 0);
+    const totalCount = Number(tally?.totalCount || 0);
 
     tallyCount.textContent =
-      playerCount > 0
-        ? formatParticipantCount(playerCount)
+      totalCount > 0
+        ? formatParticipantCount(totalCount)
         : "No Yes RSVPs yet";
 
     tallyList.replaceChildren(
       ...players.map((player) => {
         const item = document.createElement("li");
         const name = document.createElement("span");
+        const participants = document.createElement("span");
+        const participantCount = Math.max(1, Number(player.participantCount || 1));
 
         name.className = "tally-name";
+        participants.className = "tally-participants";
         name.textContent = player.name;
+        participants.textContent = formatParticipantCount(participantCount);
 
-        item.append(name);
+        item.append(name, participants);
         return item;
       }),
     );
@@ -614,6 +628,7 @@
       playerInput.value = lastRsvp.playerName;
     }
 
+    participantInput.value = "1";
     playerInput.focus();
   }
 
@@ -621,7 +636,11 @@
     event.preventDefault();
 
     const payload = collectPayload();
-    if (!payload.playerName || !payload.playDate) {
+    if (
+      !payload.playerName ||
+      !payload.playDate ||
+      Number.isNaN(payload.participantCount)
+    ) {
       setStatus("Please fill out the required fields.", "error");
       return;
     }
@@ -635,6 +654,8 @@
       setStatus("Choose today or a future date.", "error");
       return;
     }
+
+    payload.participantCount = Math.max(1, payload.participantCount);
 
     submitRsvp(payload);
   });

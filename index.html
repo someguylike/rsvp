@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Who’s In This Week?</title>
-    <link rel="stylesheet" href="./styles.css?v=20260602-14" />
+    <link rel="stylesheet" href="./styles.css?v=20260604-2" />
   </head>
   <body>
     <main class="shell">
@@ -57,6 +57,21 @@
             </div>
           </fieldset>
 
+          <label class="field">
+            <span>Reserved spots</span>
+            <input
+              id="participant-count"
+              name="participantCount"
+              type="number"
+              min="1"
+              max="21"
+              step="1"
+              inputmode="numeric"
+              value="1"
+              required
+            />
+          </label>
+
           <button id="submit-button" type="submit">Submit RSVP</button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
         </form>
@@ -100,6 +115,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260604-1"></script>
+    <script src="./app.js?v=20260604-2"></script>
   </body>
 </html>
