@@ -312,20 +312,30 @@
   }
 
   function updateMonthTotal() {
-    const totals = monthDates.map((date) =>
-      PLAYERS.reduce((sum, player) => {
-        const key = getKey(player, date);
-        const value = changedValues.has(key)
-          ? changedValues.get(key)
-          : rosterValues.get(key) || 0;
-        return sum + value;
-      }, 0),
-    );
+    const totals = monthDates.map((date) => getDateTotal(date));
     const total = totals.reduce((sum, value) => sum + value, 0);
     monthTotal.textContent =
       total === 0
         ? "No reserved spots this month"
         : `${total} reserved spots this month`;
+  }
+
+  function getDateTotal(date) {
+    return PLAYERS.reduce((sum, player) => {
+      const key = getKey(player, date);
+      const value = changedValues.has(key)
+        ? changedValues.get(key)
+        : rosterValues.get(key) || 0;
+      return sum + value;
+    }, 0);
+  }
+
+  function updateSummaryRow() {
+    rosterTable
+      .querySelectorAll(".summary-row td[data-date]")
+      .forEach((cell) => {
+        cell.textContent = String(getDateTotal(cell.dataset.date));
+      });
   }
 
   function renderRosterTable() {
@@ -388,6 +398,7 @@
           cell.classList.toggle("roster-edit-dirty", changedValues.has(key));
           updateChangeCount();
           updateMonthTotal();
+          updateSummaryRow();
         });
 
         cell.append(select);
@@ -396,6 +407,23 @@
 
       tbody.append(row);
     });
+
+    const summaryRow = document.createElement("tr");
+    const summaryLabel = document.createElement("td");
+    summaryRow.className = "summary-row";
+    summaryLabel.textContent = "Total";
+    summaryLabel.dataset.label = "Name";
+    summaryRow.append(summaryLabel);
+
+    monthDates.forEach((date) => {
+      const total = getDateTotal(date);
+      const cell = document.createElement("td");
+      cell.textContent = String(total);
+      cell.dataset.date = date;
+      cell.dataset.label = formatDisplayDate(date);
+      summaryRow.append(cell);
+    });
+    tbody.append(summaryRow);
 
     rosterTable.replaceChildren(thead, tbody);
     updateChangeCount();
