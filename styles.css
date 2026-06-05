@@ -557,12 +557,6 @@ button:disabled {
   font-weight: 700;
 }
 
-.tally-guests {
-  color: var(--muted);
-  flex: 0 0 auto;
-  font-size: 0.88rem;
-}
-
 .page-footer {
   margin-top: 20px;
   text-align: center;

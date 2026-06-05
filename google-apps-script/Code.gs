@@ -8,7 +8,6 @@ const HEADERS = [
   "Play Date",
   "Player Name",
   "Vote",
-  "Guest Count",
   "Submitted At",
   "Updated At",
 ];
@@ -188,13 +187,8 @@ function upsertRsvpWithLock_(params) {
   );
   validatePlayerName_(playerName);
   const vote = sanitizeText_(params.vote || "Yes");
-  const guestCount = Math.max(0, Number(params.guestCount || 0));
   const submittedAt = params.submittedAt || new Date().toISOString();
   const updatedAt = new Date().toISOString();
-
-  if (!Number.isFinite(guestCount)) {
-    throw new Error("Invalid guest count");
-  }
 
   const sheet = getSheet_();
   const matchingRows = findExistingRows_(sheet, playDate, playerName);
@@ -220,7 +214,7 @@ function upsertRsvpWithLock_(params) {
     };
   }
 
-  const values = [playDate, playerName, vote, guestCount, submittedAt, updatedAt];
+  const values = [playDate, playerName, vote, submittedAt, updatedAt];
 
   if (row) {
     deleteDuplicateRows_(sheet, matchingRows, row);
@@ -233,8 +227,8 @@ function upsertRsvpWithLock_(params) {
       };
     }
 
-    const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
-    values[4] = originalSubmittedAt;
+    const originalSubmittedAt = sheet.getRange(row, 4).getValue() || submittedAt;
+    values[3] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
     return { action: "updated", row, tally: getTally_(playDate) };
   }
@@ -303,14 +297,13 @@ function deleteDuplicateRows_(sheet, rows, keepRow) {
 }
 
 function getRsvpAtRow_(sheet, row) {
-  const values = sheet.getRange(row, 1, 1, 6).getValues()[0];
+  const values = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
   return {
     playDate: normalizeDate_(values[0]),
     playerName: String(values[1] || "").trim(),
     vote: String(values[2] || "").trim(),
-    guestCount: Math.max(0, Number(values[3] || 0)),
-    submittedAt: String(values[4] || ""),
-    updatedAt: String(values[5] || ""),
+    submittedAt: String(values[3] || ""),
+    updatedAt: String(values[4] || ""),
   };
 }
 
@@ -340,6 +333,33 @@ function cleanupNonRosterRows_() {
     return {
       deletedCount: deletedNames.length,
       deletedNames,
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function resetRsvpDataForProduction() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const sheet = getSheet_();
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow > 1) {
+      sheet.deleteRows(2, lastRow - 1);
+    }
+
+    if (sheet.getLastColumn() > HEADERS.length) {
+      sheet.deleteColumns(
+        HEADERS.length + 1,
+        sheet.getLastColumn() - HEADERS.length,
+      );
+    }
+
+    return {
+      clearedRows: Math.max(0, lastRow - 1),
     };
   } finally {
     lock.releaseLock();
@@ -489,18 +509,17 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
     return totals;
   }
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
   rows.forEach((row) => {
     const rowDate = normalizeDate_(row[0]);
     const playerName = String(row[1] || "").trim();
     const vote = normalize_(row[2]);
-    const guestCount = Math.max(0, Math.trunc(Number(row[3] || 0)));
 
     if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;
     }
 
-    totals[normalize_(playerName)] = 1 + (Number.isFinite(guestCount) ? guestCount : 0);
+    totals[normalize_(playerName)] = 1;
   });
 
   return totals;
@@ -556,7 +575,6 @@ function getTally_(playDate) {
   const tally = {
     playDate,
     playerCount: 0,
-    guestCount: 0,
     totalCount: 0,
     players: [],
   };
@@ -565,13 +583,12 @@ function getTally_(playDate) {
     return tally;
   }
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
 
   rows.forEach((row) => {
     const rowDate = normalizeDate_(row[0]);
     const playerName = String(row[1] || "").trim();
     const vote = normalize_(row[2]);
-    const guestCount = Math.max(0, Number(row[3] || 0));
 
     if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
       return;
@@ -583,22 +600,17 @@ function getTally_(playDate) {
     );
 
     if (existingPlayer) {
-      existingPlayer.guestCount += Number.isFinite(guestCount) ? guestCount : 0;
+      return;
     } else {
       tally.players.push({
         name: playerName,
-        guestCount: Number.isFinite(guestCount) ? guestCount : 0,
       });
     }
   });
 
   tally.players.sort((first, second) => first.name.localeCompare(second.name));
   tally.playerCount = tally.players.length;
-  tally.guestCount = tally.players.reduce(
-    (sum, player) => sum + player.guestCount,
-    0,
-  );
-  tally.totalCount = tally.playerCount + tally.guestCount;
+  tally.totalCount = tally.playerCount;
 
   return tally;
 }

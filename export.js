@@ -192,8 +192,7 @@
         rows.push({
           date,
           player: player.name,
-          guests: Math.max(0, headcount - 1),
-          headcount,
+          participants: headcount,
         });
       });
     });
@@ -293,7 +292,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Date", "Player", "Guests", "Headcount"].forEach((header) => {
+    ["Date", "Player", "Participants"].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -303,8 +302,7 @@
       const row = document.createElement("tr");
       appendCell(row, "td", entry.date);
       appendCell(row, "td", entry.player);
-      appendCell(row, "td", String(entry.guests));
-      appendCell(row, "td", String(entry.headcount));
+      appendCell(row, "td", String(entry.participants));
       tbody.append(row);
     });
 

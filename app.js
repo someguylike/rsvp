@@ -56,7 +56,6 @@
   const dateOptions = document.querySelector("#date-options");
   const customDateField = document.querySelector("#custom-date-field");
   const customDateInput = document.querySelector("#custom-play-date");
-  const guestInput = document.querySelector("#guest-count");
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
   const tallyCount = document.querySelector("#tally-count");
@@ -323,14 +322,12 @@
       playerName: String(formData.get("playerName") || "").trim(),
       playDate: String(formData.get("playDate") || ""),
       vote: String(formData.get("vote") || "Yes"),
-      guestCount: Number.parseInt(String(formData.get("guestCount") || "0"), 10),
       submittedAt: new Date().toISOString(),
     };
   }
 
-  function formatGuestLabel(guestCount) {
-    const count = Number(guestCount || 0);
-    return count === 1 ? "1 guest" : `${count} guests`;
+  function formatParticipantCount(count) {
+    return count === 1 ? "1 participant" : `${count} participants`;
   }
 
   function renderRsvpDetails(container, rsvp) {
@@ -339,12 +336,6 @@
       ["Player", detailsSource.playerName],
       ["Date", detailsSource.playDate],
       ["Vote", detailsSource.vote],
-      [
-        "Guests",
-        detailsSource.guestCount == null
-          ? formatGuestLabel(0)
-          : formatGuestLabel(detailsSource.guestCount),
-      ],
     ];
 
     container.replaceChildren(
@@ -366,7 +357,6 @@
       playerName: payload.playerName,
       playDate: payload.playDate,
       vote: "No",
-      guestCount: 0,
     };
 
     if (
@@ -561,29 +551,21 @@
   function renderTally(tally) {
     const players = Array.isArray(tally?.players) ? tally.players : [];
     const playerCount = Number(tally?.playerCount || 0);
-    const guestCount = Number(tally?.guestCount || 0);
-    const totalCount = Number(tally?.totalCount || 0);
 
     tallyCount.textContent =
-      totalCount > 0
-        ? `${totalCount} total (${playerCount} players, ${guestCount} guests)`
+      playerCount > 0
+        ? formatParticipantCount(playerCount)
         : "No Yes RSVPs yet";
 
     tallyList.replaceChildren(
       ...players.map((player) => {
         const item = document.createElement("li");
         const name = document.createElement("span");
-        const guests = document.createElement("span");
 
         name.className = "tally-name";
-        guests.className = "tally-guests";
         name.textContent = player.name;
-        guests.textContent =
-          Number(player.guestCount || 0) > 0
-            ? `+${player.guestCount} guests`
-            : "No guests";
 
-        item.append(name, guests);
+        item.append(name);
         return item;
       }),
     );
@@ -632,7 +614,6 @@
       playerInput.value = lastRsvp.playerName;
     }
 
-    guestInput.value = "0";
     playerInput.focus();
   }
 
@@ -640,7 +621,7 @@
     event.preventDefault();
 
     const payload = collectPayload();
-    if (!payload.playerName || !payload.playDate || Number.isNaN(payload.guestCount)) {
+    if (!payload.playerName || !payload.playDate) {
       setStatus("Please fill out the required fields.", "error");
       return;
     }
@@ -654,8 +635,6 @@
       setStatus("Choose today or a future date.", "error");
       return;
     }
-
-    payload.guestCount = Math.max(0, payload.guestCount);
 
     submitRsvp(payload);
   });

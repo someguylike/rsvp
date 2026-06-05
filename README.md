@@ -8,7 +8,6 @@ Static RSVP page for weekly play sessions.
 - Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an optional calendar picker.
 - Vote defaults to `Yes`.
 - A `No` vote removes that player/date RSVP instead of storing a `No` row.
-- Guest count defaults to `0`.
 - Submit writes to Google Sheets through Apps Script.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
@@ -112,6 +111,19 @@ Apps Script deployment is manual:
 
 The Web App URL must stay in both `app.js` and `export.js`.
 
+## Production Reset
+
+Before launching for real use, clear testing RSVP rows from the Google Sheet:
+
+1. Open the RSVP Google Sheet.
+2. Go to `Extensions > Apps Script`.
+3. Replace `Code.gs` with the repo version and save.
+4. In the function dropdown, choose `resetRsvpDataForProduction`.
+5. Click Run.
+6. Deploy a **New version** of the Web App.
+
+This removes all rows below the `RSVPs` header and removes old extra columns such as `Guest Count`.
+
 ## Admin Export
 
 Open `export.html`, choose a month, and click `Export Month`. After export, the page shows a shareable month URL like `export.html?month=2026-06`; opening that URL renders the existing exported tab.
@@ -123,9 +135,9 @@ Each export recreates the selected month tab as a clean attendance table. It doe
 Output format:
 
 - Tab name: `Month YYYY`, for example `March 2026`.
-- Row 1: `Name` plus play dates with at least 2 total headcount.
+- Row 1: `Name` plus play dates with at least 2 participants.
 - Rows: one row per player.
-- Cell value: blank when not joining, `1` when the player joins alone, `n` when the player brings `n - 1` guests.
+- Cell value: blank when not joining, `1` when the player joins.
 
 ## Notes From Tool Research
 
