@@ -805,6 +805,10 @@ button:disabled {
     padding: 20px;
   }
 
+  .admin-panel {
+    width: 100%;
+  }
+
   .heading {
     margin-bottom: 18px;
   }
@@ -814,6 +818,11 @@ button:disabled {
     line-height: 1.08;
   }
 
+  .form {
+    gap: 14px;
+  }
+
+  .admin-controls,
   .roster-form-grid {
     grid-template-columns: 1fr;
     gap: 12px;
@@ -867,6 +876,11 @@ button:disabled {
     text-align: left;
   }
 
+  .page-footer {
+    line-height: 1.8;
+  }
+
+  .roster-edit-wrap,
   .compact-table-wrap {
     max-height: none;
     overflow: visible;
@@ -874,21 +888,33 @@ button:disabled {
     background: transparent;
   }
 
+  .roster-edit-table,
+  .heatmap-table,
+  .audit-table,
   .roster-member-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
   }
 
+  .roster-edit-table thead,
+  .heatmap-table thead,
+  .audit-table thead,
   .roster-member-table thead {
     display: none;
   }
 
+  .roster-edit-table tbody,
+  .heatmap-table tbody,
+  .audit-table tbody,
   .roster-member-table tbody {
     display: grid;
     gap: 10px;
   }
 
+  .roster-edit-table tr,
+  .heatmap-table tr,
+  .audit-table tr,
   .roster-member-table tr {
     display: grid;
     gap: 0;
@@ -898,6 +924,20 @@ button:disabled {
     background: white;
   }
 
+  .roster-edit-table th,
+  .roster-edit-table td,
+  .roster-edit-table th:first-child,
+  .roster-edit-table td:first-child,
+  .heatmap-table th,
+  .heatmap-table td,
+  .heatmap-table th:first-child,
+  .heatmap-table td:first-child,
+  .audit-table th,
+  .audit-table td,
+  .audit-table th:first-child,
+  .audit-table td:first-child,
+  .audit-table th:nth-child(2),
+  .audit-table td:nth-child(2),
   .roster-member-table th,
   .roster-member-table td,
   .roster-member-table th:first-child,
@@ -917,22 +957,46 @@ button:disabled {
     border-bottom: 1px solid var(--line);
     padding: 9px 10px;
     text-align: left;
+    overflow-wrap: anywhere;
     white-space: normal;
   }
 
+  .roster-edit-table td:first-child,
+  .heatmap-table td:first-child,
+  .audit-table td:first-child,
   .roster-member-table td:first-child {
     background: white;
   }
 
+  .roster-edit-table td:last-child,
+  .heatmap-table td:last-child,
+  .audit-table td:last-child,
   .roster-member-table td:last-child {
     border-bottom: 0;
   }
 
+  .roster-edit-table td::before,
+  .heatmap-table td::before,
+  .audit-table td::before,
   .roster-member-table td::before {
     content: attr(data-label);
     color: var(--muted);
     font-size: 0.74rem;
     font-weight: 800;
+  }
+
+  .roster-edit-table td:first-child,
+  .heatmap-table td:first-child,
+  .audit-table td:first-child {
+    font-weight: 800;
+  }
+
+  .heatmap-table td.heat-0 {
+    display: none;
+  }
+
+  .roster-edit-select {
+    width: 100%;
   }
 
   .roster-member-table a {

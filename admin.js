@@ -294,6 +294,7 @@
       const row = document.createElement("tr");
       const name = document.createElement("td");
       name.textContent = player;
+      name.dataset.label = "Name";
       row.append(name);
 
       monthDates.forEach((date) => {
@@ -307,6 +308,7 @@
 
         cell.className = value > 0 ? "roster-edit-active" : "";
         cell.classList.toggle("roster-edit-dirty", changedValues.has(key));
+        cell.dataset.label = formatDisplayDate(date);
         select.className = "roster-edit-select";
         select.dataset.player = player;
         select.dataset.date = date;

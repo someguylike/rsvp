@@ -262,14 +262,15 @@
     const tbody = document.createElement("tbody");
     activePlayers.forEach((player) => {
       const row = document.createElement("tr");
-      appendCell(row, "td", player.name);
-      player.values.forEach((value) => {
-        appendCell(
+      appendCell(row, "td", player.name).dataset.label = "Name";
+      player.values.forEach((value, index) => {
+        const cell = appendCell(
           row,
           "td",
           value ? String(value) : "",
           getHeatClass(value, maxValue),
         );
+        cell.dataset.label = model.dates[index];
       });
       tbody.append(row);
     });
@@ -300,9 +301,10 @@
     const tbody = document.createElement("tbody");
     rows.forEach((entry) => {
       const row = document.createElement("tr");
-      appendCell(row, "td", entry.date);
-      appendCell(row, "td", entry.player);
-      appendCell(row, "td", String(entry.participants));
+      appendCell(row, "td", entry.date).dataset.label = "Date";
+      appendCell(row, "td", entry.player).dataset.label = "Player";
+      appendCell(row, "td", String(entry.participants)).dataset.label =
+        "Participants";
       tbody.append(row);
     });
 
