@@ -133,7 +133,10 @@
     const prefix = date <= endOfThisWeek ? "This" : "Next";
 
     return {
-      day: date.getTime() === today.getTime() ? "Today" : `${prefix} ${day}`,
+      day:
+        date.getTime() === today.getTime()
+          ? "Today @ 6AM"
+          : `${prefix} ${day} @ 6AM`,
       full,
     };
   }
