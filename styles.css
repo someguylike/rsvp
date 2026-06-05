@@ -587,11 +587,18 @@ button:disabled {
 }
 
 .roster-edit-solo {
-  background: #e3f7e8;
+  background: #9fe7b2;
 }
 
 .roster-edit-party {
-  background: #d9ecff;
+  background: #83c5ff;
+}
+
+.roster-edit-solo .roster-edit-select,
+.roster-edit-party .roster-edit-select {
+  border-color: rgb(16 24 40 / 22%);
+  background: rgb(255 255 255 / 76%);
+  font-weight: 800;
 }
 
 .roster-edit-dirty {
