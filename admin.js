@@ -1,6 +1,7 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
+  const ADMIN_AUTH_KEY = "play-rsvp.adminAuth";
   const PLAY_DAYS = [2, 4, 5, 0];
   let PLAYERS = [
     "Alex Yeung",
@@ -49,6 +50,12 @@
   ];
 
   const form = document.querySelector("#admin-form");
+  const loginPanel = document.querySelector("#admin-login-panel");
+  const loginForm = document.querySelector("#admin-login-form");
+  const passwordInput = document.querySelector("#admin-password");
+  const loginStatus = document.querySelector("#admin-login-status");
+  const adminContent = document.querySelector("#admin-content");
+  const logoutButton = document.querySelector("#admin-logout-button");
   const monthInput = document.querySelector("#roster-month");
   const playerSearch = document.querySelector("#player-search");
   const changeCount = document.querySelector("#change-count");
@@ -60,6 +67,44 @@
   let rosterValues = new Map();
   const changedValues = new Map();
   let latestLoadRequest = 0;
+  let adminToken = "";
+
+  function readAdminAuth() {
+    try {
+      const auth = JSON.parse(localStorage.getItem(ADMIN_AUTH_KEY));
+      return auth && auth.token ? auth : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeAdminAuth(auth) {
+    localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(auth));
+  }
+
+  function clearAdminAuth() {
+    adminToken = "";
+    localStorage.removeItem(ADMIN_AUTH_KEY);
+  }
+
+  function setLoginStatus(message, type) {
+    loginStatus.textContent = message;
+    loginStatus.className = `status ${type || ""}`.trim();
+  }
+
+  function setAdminLocked(message) {
+    adminContent.hidden = true;
+    loginPanel.hidden = false;
+    if (message) {
+      setLoginStatus(message, "error");
+    }
+  }
+
+  function setAdminUnlocked() {
+    loginPanel.hidden = true;
+    adminContent.hidden = false;
+    setLoginStatus("", "");
+  }
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -254,7 +299,7 @@
     const count = changedValues.size;
     changeCount.textContent =
       count === 0 ? "No changes" : `${count} pending changes`;
-    saveButton.disabled = count === 0;
+    saveButton.disabled = count === 0 || !adminToken;
   }
 
   function updateMonthTotal() {
@@ -405,6 +450,8 @@
           "loading",
         );
         await requestAppsScript({
+          action: "adminUpsertRsvp",
+          adminToken,
           playerName,
           playDate,
           participantCount,
@@ -423,10 +470,64 @@
   }
 
   async function initialize() {
+    const auth = readAdminAuth();
+    if (!auth?.token) {
+      setAdminLocked("");
+      return;
+    }
+
+    try {
+      await requestAppsScript({
+        action: "validateAdmin",
+        adminToken: auth.token,
+      });
+      adminToken = auth.token;
+      setAdminUnlocked();
+    } catch (error) {
+      clearAdminAuth();
+      setAdminLocked(error.message);
+      return;
+    }
+
     await loadRoster();
     monthInput.value = formatMonth(new Date());
     loadMonth(monthInput.value);
   }
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setLoginStatus("Logging in...", "loading");
+
+    try {
+      const result = await requestAppsScript({
+        action: "adminLogin",
+        password: passwordInput.value,
+      });
+      adminToken = result.token;
+      writeAdminAuth({
+        token: result.token,
+        expiresAt: result.expiresAt,
+      });
+      passwordInput.value = "";
+      setAdminUnlocked();
+      await loadRoster();
+      monthInput.value = formatMonth(new Date());
+      loadMonth(monthInput.value);
+    } catch (error) {
+      clearAdminAuth();
+      setLoginStatus(error.message, "error");
+    }
+  });
+
+  logoutButton.addEventListener("click", () => {
+    clearAdminAuth();
+    changedValues.clear();
+    rosterTable.textContent = "";
+    monthTotal.textContent = "Login required";
+    setStatus("", "");
+    updateChangeCount();
+    setAdminLocked("");
+  });
 
   monthInput.addEventListener("change", () => {
     loadMonth(monthInput.value);

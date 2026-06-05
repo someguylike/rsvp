@@ -21,6 +21,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -410,6 +414,33 @@ button:disabled {
 .status.loading {
   color: var(--error);
   font-weight: 800;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.auth-form,
+.auth-session {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.auth-session {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.compact-auth-panel {
+  margin-bottom: 16px;
 }
 
 .admin-preview {
@@ -923,6 +954,11 @@ button:disabled {
   .admin-roster-actions {
     display: grid;
     gap: 10px;
+  }
+
+  .auth-form,
+  .auth-session {
+    grid-template-columns: 1fr;
   }
 
   .admin-roster-actions button {

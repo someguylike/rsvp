@@ -4,6 +4,7 @@ const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
 const EXPORT_MIN_PARTICIPANTS = 2;
+const ADMIN_TOKEN_TTL_SECONDS = 21600;
 const PLAY_DAYS = [2, 4, 5, 0];
 const HEADERS = [
   "Play Date",
@@ -65,6 +66,23 @@ function doGet(event) {
   const callback = params.callback || "callback";
 
   try {
+    if (params.action === "adminLogin") {
+      const result = adminLogin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        token: result.token,
+        expiresAt: result.expiresAt,
+      });
+    }
+
+    if (params.action === "validateAdmin") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "validateAdmin",
+      });
+    }
+
     if (params.action === "listRoster") {
       return jsonp_(callback, {
         ok: true,
@@ -82,12 +100,25 @@ function doGet(event) {
     }
 
     if (params.action === "removeRosterMember") {
+      requireAdmin_(params);
       const result = removeRosterMember_(params);
       return jsonp_(callback, {
         ok: true,
         action: "removeRosterMember",
         removed: result.removed,
         roster: result.roster,
+      });
+    }
+
+    if (params.action === "adminUpsertRsvp") {
+      requireAdmin_(params);
+      const result = upsertRsvp_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: result.action,
+        row: result.row,
+        existing: result.existing || null,
+        tally: result.tally,
       });
     }
 
@@ -175,6 +206,45 @@ function upsertRsvp_(params) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function adminLogin_(params) {
+  const password = required_(params.password, "Missing password");
+  const expectedPassword = PropertiesService.getScriptProperties().getProperty(
+    "ADMIN_PASSWORD",
+  );
+
+  if (!expectedPassword) {
+    throw new Error("Admin password is not configured");
+  }
+
+  if (password !== expectedPassword) {
+    throw new Error("Incorrect admin password");
+  }
+
+  const token = Utilities.getUuid();
+  const expiresAt = Date.now() + ADMIN_TOKEN_TTL_SECONDS * 1000;
+  CacheService.getScriptCache().put(
+    getAdminTokenCacheKey_(token),
+    "true",
+    ADMIN_TOKEN_TTL_SECONDS,
+  );
+
+  return { token, expiresAt };
+}
+
+function requireAdmin_(params) {
+  const token = required_(params.adminToken, "Admin login required");
+  const isValid =
+    CacheService.getScriptCache().get(getAdminTokenCacheKey_(token)) === "true";
+
+  if (!isValid) {
+    throw new Error("Admin login expired. Please log in again.");
+  }
+}
+
+function getAdminTokenCacheKey_(token) {
+  return `admin:${token}`;
 }
 
 function deleteRsvp_(params) {

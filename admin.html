@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Update Attendance</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-14" />
+    <link rel="stylesheet" href="./styles.css?v=20260605-15" />
   </head>
   <body>
     <main class="shell">
@@ -24,49 +24,74 @@
           </div>
         </nav>
 
-        <form id="admin-form" class="form">
-          <div class="admin-controls">
+        <section id="admin-login-panel" class="auth-panel">
+          <form id="admin-login-form" class="auth-form">
             <label class="field">
-              <span>Month</span>
-              <input id="roster-month" name="month" type="month" required />
-            </label>
-
-            <label class="field">
-              <span>Find players</span>
+              <span>Admin password</span>
               <input
-                id="player-search"
-                autocomplete="off"
-                placeholder="Search roster"
-                type="search"
+                id="admin-password"
+                autocomplete="current-password"
+                type="password"
+                required
               />
             </label>
-          </div>
-
-          <div class="admin-roster-actions">
-            <p id="change-count" class="status">No changes</p>
-            <button id="save-button" type="submit" disabled>Save Changes</button>
-          </div>
-
-          <p id="status" class="status" role="status" aria-live="polite"></p>
-        </form>
-
-        <section class="admin-preview">
-          <div class="preview-heading">
-            <h2>Month Roster</h2>
-            <p id="month-total">Loading...</p>
-          </div>
-          <p class="field-help">
-            Each cell is the total attendance for that player on that date:
-            0 = not attending, 1 = player only, 2-5 = player plus guests.
-          </p>
-          <div class="table-wrap roster-edit-wrap">
-            <table id="roster-table" class="export-table roster-edit-table"></table>
-          </div>
+            <button id="admin-login-button" type="submit">Log In</button>
+          </form>
+          <p id="admin-login-status" class="status" role="status" aria-live="polite"></p>
         </section>
+
+        <div id="admin-content" hidden>
+          <div class="auth-session">
+            <p class="status success">Admin access enabled</p>
+            <button id="admin-logout-button" class="secondary-button" type="button">
+              Log Out
+            </button>
+          </div>
+
+          <form id="admin-form" class="form">
+            <div class="admin-controls">
+              <label class="field">
+                <span>Month</span>
+                <input id="roster-month" name="month" type="month" required />
+              </label>
+
+              <label class="field">
+                <span>Find players</span>
+                <input
+                  id="player-search"
+                  autocomplete="off"
+                  placeholder="Search roster"
+                  type="search"
+                />
+              </label>
+            </div>
+
+            <div class="admin-roster-actions">
+              <p id="change-count" class="status">No changes</p>
+              <button id="save-button" type="submit" disabled>Save Changes</button>
+            </div>
+
+            <p id="status" class="status" role="status" aria-live="polite"></p>
+          </form>
+
+          <section class="admin-preview">
+            <div class="preview-heading">
+              <h2>Month Roster</h2>
+              <p id="month-total">Loading...</p>
+            </div>
+            <p class="field-help">
+              Each cell is the total attendance for that player on that date:
+              0 = not attending, 1 = player only, 2-5 = player plus guests.
+            </p>
+            <div class="table-wrap roster-edit-wrap">
+              <table id="roster-table" class="export-table roster-edit-table"></table>
+            </div>
+          </section>
+        </div>
 
       </section>
     </main>
 
-    <script src="./admin.js?v=20260605-6"></script>
+    <script src="./admin.js?v=20260605-7"></script>
   </body>
 </html>
