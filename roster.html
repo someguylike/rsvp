@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Roster</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260605-4" />
   </head>
   <body>
     <main class="shell">
@@ -15,7 +15,7 @@
         </div>
 
         <form id="roster-form" class="form">
-          <div class="roster-form-grid">
+          <div class="roster-form-grid compact-roster-form-grid">
             <label class="field">
               <span>Name</span>
               <input
@@ -28,22 +28,13 @@
             </label>
 
             <label class="field">
-              <span>Payment info</span>
-              <input
-                id="payment-info"
-                name="paymentInfo"
-                autocomplete="off"
-                placeholder="Cash, Zelle, note, etc."
-              />
-            </label>
-
-            <label class="field">
               <span>Venmo</span>
               <input
                 id="venmo"
                 name="venmo"
                 autocomplete="off"
                 placeholder="@username"
+                required
               />
             </label>
           </div>
@@ -74,6 +65,6 @@
       </section>
     </main>
 
-    <script src="./roster.js?v=20260605-1"></script>
+    <script src="./roster.js?v=20260605-2"></script>
   </body>
 </html>

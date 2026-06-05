@@ -332,6 +332,10 @@ button:disabled {
   gap: 14px;
 }
 
+.compact-roster-form-grid {
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.8fr);
+}
+
 .status {
   min-height: 22px;
   margin: 0;
@@ -488,12 +492,6 @@ button:disabled {
 
 .roster-member-table th:nth-child(2),
 .roster-member-table td:nth-child(2) {
-  min-width: 240px;
-  text-align: left;
-}
-
-.roster-member-table th:nth-child(3),
-.roster-member-table td:nth-child(3) {
   min-width: 160px;
   text-align: left;
 }

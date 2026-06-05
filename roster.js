@@ -4,7 +4,6 @@
 
   const form = document.querySelector("#roster-form");
   const nameInput = document.querySelector("#member-name");
-  const paymentInput = document.querySelector("#payment-info");
   const venmoInput = document.querySelector("#venmo");
   const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
@@ -109,7 +108,6 @@
 
   function fillForm(member) {
     nameInput.value = member.name || "";
-    paymentInput.value = member.paymentInfo || "";
     venmoInput.value = member.venmo || "";
     nameInput.focus();
   }
@@ -130,7 +128,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Name", "Payment info", "Venmo", ""].forEach((header) => {
+    ["Name", "Venmo", ""].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -143,7 +141,6 @@
       const removeButton = document.createElement("button");
 
       appendCell(row, "td", member.name || "");
-      appendCell(row, "td", member.paymentInfo || "");
       appendCell(row, "td", member.venmo || "");
 
       actions.className = "roster-actions-cell";
@@ -234,12 +231,16 @@
     event.preventDefault();
     const payload = {
       playerName: nameInput.value.trim(),
-      paymentInfo: paymentInput.value.trim(),
       venmo: venmoInput.value.trim(),
     };
 
     if (!payload.playerName) {
       setStatus("Enter a member name.", "error");
+      return;
+    }
+
+    if (!payload.venmo) {
+      setStatus("Enter a Venmo handle.", "error");
       return;
     }
 

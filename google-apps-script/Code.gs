@@ -13,7 +13,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Payment Info", "Venmo"];
+const ROSTER_HEADERS = ["Name", "Venmo"];
 const PLAYERS = [
   "Alex Yeung",
   "Anh Khoa Tran (Truc Phuong)",
@@ -313,6 +313,8 @@ function getRosterSheet_() {
     shouldSeedRoster = true;
   }
 
+  migrateRosterSheet_(sheet);
+
   const headerRange = sheet.getRange(1, 1, 1, ROSTER_HEADERS.length);
   const currentHeaders = headerRange.getValues()[0];
   const needsHeaders = ROSTER_HEADERS.some(
@@ -327,10 +329,31 @@ function getRosterSheet_() {
   if (shouldSeedRoster && sheet.getLastRow() < 2) {
     sheet
       .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
-      .setValues(PLAYERS.map((name) => [name, "", ""]));
+      .setValues(PLAYERS.map((name) => [name, ""]));
   }
 
   return sheet;
+}
+
+function migrateRosterSheet_(sheet) {
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < 3) {
+    return;
+  }
+
+  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  const hasLegacyPaymentInfo =
+    headers[0] === "Name" &&
+    headers[1] === "Payment Info" &&
+    headers[2] === "Venmo";
+
+  if (hasLegacyPaymentInfo && sheet.getLastRow() >= 2) {
+    const lastRow = sheet.getLastRow();
+    const venmoValues = sheet.getRange(2, 3, lastRow - 1, 1).getValues();
+    sheet.getRange(2, 2, lastRow - 1, 1).setValues(venmoValues);
+  }
+
+  sheet.deleteColumns(ROSTER_HEADERS.length + 1, lastColumn - ROSTER_HEADERS.length);
 }
 
 function getRoster_() {
@@ -346,8 +369,7 @@ function getRoster_() {
     .getValues()
     .map((row) => ({
       name: String(row[0] || "").trim(),
-      paymentInfo: String(row[1] || "").trim(),
-      venmo: String(row[2] || "").trim(),
+      venmo: String(row[1] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
@@ -383,11 +405,10 @@ function saveRosterMember_(params) {
     const name = sanitizeText_(
       required_(params.playerName || params.name, "Missing player name").trim(),
     );
-    const paymentInfo = sanitizeText_(params.paymentInfo || "");
-    const venmo = sanitizeText_(params.venmo || "");
+    const venmo = sanitizeText_(required_(params.venmo, "Missing Venmo").trim());
     const sheet = getRosterSheet_();
     const row = findRosterRow_(sheet, name);
-    const values = [name, paymentInfo, venmo];
+    const values = [name, venmo];
 
     if (row) {
       sheet.getRange(row, 1, 1, ROSTER_HEADERS.length).setValues([values]);
