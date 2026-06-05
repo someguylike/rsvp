@@ -53,6 +53,11 @@ body {
   width: min(100%, 1180px);
 }
 
+.rsvp-panel .form,
+.rsvp-panel .tally {
+  max-width: 520px;
+}
+
 .heading {
   margin-bottom: 26px;
 }
