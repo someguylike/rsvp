@@ -13,7 +13,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo", "Messenger"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Messenger", "Cellphone"];
 const PLAYERS = [
   "Alex Yeung",
   "Anh Khoa Tran (Truc Phuong)",
@@ -329,7 +329,7 @@ function getRosterSheet_() {
   if (shouldSeedRoster && sheet.getLastRow() < 2) {
     sheet
       .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
-      .setValues(PLAYERS.map((name) => [name, "", ""]));
+      .setValues(PLAYERS.map((name) => [name, "", "", ""]));
   }
 
   return sheet;
@@ -376,6 +376,7 @@ function getRoster_() {
       name: String(row[0] || "").trim(),
       venmo: String(row[1] || "").trim(),
       messenger: String(row[2] || "").trim(),
+      cellphone: String(row[3] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
@@ -415,9 +416,10 @@ function saveRosterMember_(params) {
     const messenger = sanitizeText_(
       required_(params.messenger, "Missing Messenger").trim(),
     );
+    const cellphone = sanitizeText_(params.cellphone || "");
     const sheet = getRosterSheet_();
     const row = findRosterRow_(sheet, name);
-    const values = [name, venmo, messenger];
+    const values = [name, venmo, messenger, cellphone];
 
     if (row) {
       sheet.getRange(row, 1, 1, ROSTER_HEADERS.length).setValues([values]);

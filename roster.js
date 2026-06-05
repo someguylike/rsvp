@@ -6,6 +6,7 @@
   const nameInput = document.querySelector("#member-name");
   const venmoInput = document.querySelector("#venmo");
   const messengerInput = document.querySelector("#messenger");
+  const cellphoneInput = document.querySelector("#cellphone");
   const memberSearch = document.querySelector("#member-search");
   const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
@@ -112,6 +113,7 @@
     nameInput.value = member.name || "";
     venmoInput.value = member.venmo || "";
     messengerInput.value = member.messenger || "";
+    cellphoneInput.value = member.cellphone || "";
     nameInput.focus();
   }
 
@@ -140,7 +142,7 @@
     }
 
     return roster.filter((member) =>
-      [member.name, member.venmo, member.messenger].some((value) =>
+      [member.name, member.venmo, member.messenger, member.cellphone].some((value) =>
         normalizeSearchText(value).includes(query),
       ),
     );
@@ -157,7 +159,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Name", "Venmo", "Messenger", ""].forEach((header) => {
+    ["Name", "Venmo", "Messenger", "Cellphone", ""].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -168,10 +170,25 @@
       const actions = document.createElement("td");
       const editButton = document.createElement("button");
       const removeButton = document.createElement("button");
+      const cellphoneCell = document.createElement("td");
+      const cellphoneText = document.createElement("span");
+      const revealButton = document.createElement("button");
 
       appendCell(row, "td", member.name || "");
       appendCell(row, "td", member.venmo || "");
       appendCell(row, "td", member.messenger || "");
+      cellphoneText.textContent = member.cellphone ? "***" : "";
+      revealButton.className = "secondary-button inline-button";
+      revealButton.type = "button";
+      revealButton.textContent = "Show";
+      revealButton.hidden = !member.cellphone;
+      revealButton.addEventListener("click", () => {
+        const isHidden = cellphoneText.textContent === "***";
+        cellphoneText.textContent = isHidden ? member.cellphone : "***";
+        revealButton.textContent = isHidden ? "Hide" : "Show";
+      });
+      cellphoneCell.className = "roster-cellphone-cell";
+      cellphoneCell.append(cellphoneText, revealButton);
 
       actions.className = "roster-actions-cell";
       editButton.className = "secondary-button inline-button";
@@ -189,6 +206,7 @@
       });
 
       actions.append(editButton, removeButton);
+      row.append(cellphoneCell);
       row.append(actions);
       tbody.append(row);
     });
@@ -263,6 +281,7 @@
       playerName: nameInput.value.trim(),
       venmo: venmoInput.value.trim(),
       messenger: messengerInput.value.trim(),
+      cellphone: cellphoneInput.value.trim(),
     };
 
     if (!payload.playerName) {
