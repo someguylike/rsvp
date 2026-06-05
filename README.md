@@ -13,7 +13,7 @@ Static RSVP page for weekly play sessions.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
 - After submit and when the date changes, the page shows the reserved participant tally for that date.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
-- `admin.html` lets an admin edit the current month roster in a player-by-date table.
+- `admin.html` lets an admin edit the current month attendance in a player-by-date table.
 - `roster.html` lets an admin add, remove, and update roster Venmo and Messenger details.
 
 ## Recommended Hosting
