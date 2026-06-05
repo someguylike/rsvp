@@ -100,6 +100,12 @@ legend {
   font-weight: 760;
 }
 
+.field-help {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 input,
 select {
   width: 100%;

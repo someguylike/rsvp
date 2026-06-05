@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Who’s In This Week?</title>
-    <link rel="stylesheet" href="./styles.css?v=20260604-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260604-3" />
   </head>
   <body>
     <main class="shell">
@@ -48,15 +48,20 @@
             <select
               id="participant-count"
               name="participantCount"
+              aria-describedby="participant-count-help"
+              title="0 = not going, 1 = going by yourself, 2-5 = total spots including guests"
               required
             >
               <option value="0">0</option>
-              <option value="1">1</option>
+              <option value="1" selected>1</option>
               <option value="2">2</option>
               <option value="3">3</option>
               <option value="4">4</option>
               <option value="5">5</option>
             </select>
+            <small id="participant-count-help" class="field-help">
+              0 = not going, 1 = going by yourself, 2-5 = total spots including guests.
+            </small>
           </label>
 
           <button id="submit-button" type="submit">Submit RSVP</button>
