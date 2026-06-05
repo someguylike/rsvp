@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manage Roster</title>
+    <link rel="stylesheet" href="./styles.css?v=20260605-3" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel admin-panel" aria-labelledby="page-title">
+        <div class="heading">
+          <p class="eyebrow">Admin</p>
+          <h1 id="page-title">Manage Roster</h1>
+        </div>
+
+        <form id="roster-form" class="form">
+          <div class="roster-form-grid">
+            <label class="field">
+              <span>Name</span>
+              <input
+                id="member-name"
+                name="playerName"
+                autocomplete="off"
+                required
+                placeholder="Player name"
+              />
+            </label>
+
+            <label class="field">
+              <span>Payment info</span>
+              <input
+                id="payment-info"
+                name="paymentInfo"
+                autocomplete="off"
+                placeholder="Cash, Zelle, note, etc."
+              />
+            </label>
+
+            <label class="field">
+              <span>Venmo</span>
+              <input
+                id="venmo"
+                name="venmo"
+                autocomplete="off"
+                placeholder="@username"
+              />
+            </label>
+          </div>
+
+          <div class="admin-roster-actions">
+            <p id="status" class="status" role="status" aria-live="polite"></p>
+            <button id="save-button" type="submit">Save Member</button>
+          </div>
+        </form>
+
+        <section class="admin-preview">
+          <div class="preview-heading">
+            <h2>Members</h2>
+            <p id="member-count">Loading...</p>
+          </div>
+          <div class="table-wrap compact-table-wrap">
+            <table id="member-table" class="export-table roster-member-table"></table>
+          </div>
+        </section>
+
+        <footer class="page-footer">
+          <a href="./admin.html">Update roster</a>
+          <span aria-hidden="true"> · </span>
+          <a href="./index.html">RSVP page</a>
+          <span aria-hidden="true"> · </span>
+          <a href="./export.html">Monthly export</a>
+        </footer>
+      </section>
+    </main>
+
+    <script src="./roster.js?v=20260605-1"></script>
+  </body>
+</html>

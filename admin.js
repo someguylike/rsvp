@@ -2,7 +2,7 @@
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
   const PLAY_DAYS = [2, 4, 5, 0];
-  const PLAYERS = [
+  let PLAYERS = [
     "Alex Yeung",
     "Anh Khoa Tran (Truc Phuong)",
     "Bao Ta",
@@ -223,6 +223,23 @@
     );
   }
 
+  async function loadRoster() {
+    try {
+      const result = await requestAppsScript({
+        action: "listRoster",
+      });
+      const roster = Array.isArray(result.roster) ? result.roster : [];
+      const names = roster
+        .map((member) => String(member.name || "").trim())
+        .filter(Boolean);
+      if (names.length > 0) {
+        PLAYERS = names;
+      }
+    } catch {
+      // Keep the built-in roster as a fallback when Apps Script is unavailable.
+    }
+  }
+
   function getParticipantOptions(selectedValue) {
     return [0, 1, 2, 3, 4, 5].map((value) => {
       const option = document.createElement("option");
@@ -397,7 +414,8 @@
     }
   }
 
-  function initialize() {
+  async function initialize() {
+    await loadRoster();
     monthInput.value = formatMonth(new Date());
     loadMonth(monthInput.value);
   }

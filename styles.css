@@ -326,6 +326,12 @@ button:disabled {
   gap: 12px;
 }
 
+.roster-form-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 1fr) minmax(180px, 0.8fr);
+  gap: 14px;
+}
+
 .status {
   min-height: 22px;
   margin: 0;
@@ -473,6 +479,34 @@ button:disabled {
 .roster-edit-dirty .roster-edit-select {
   border-color: #c98200;
   background: #fffaf0;
+}
+
+.roster-member-table th:first-child,
+.roster-member-table td:first-child {
+  min-width: 220px;
+}
+
+.roster-member-table th:nth-child(2),
+.roster-member-table td:nth-child(2) {
+  min-width: 240px;
+  text-align: left;
+}
+
+.roster-member-table th:nth-child(3),
+.roster-member-table td:nth-child(3) {
+  min-width: 160px;
+  text-align: left;
+}
+
+.roster-actions-cell {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.danger-button {
+  border-color: #f1b8b3;
+  color: var(--error);
 }
 
 .heatmap-grid {

@@ -1,4 +1,5 @@
 const SHEET_NAME = "RSVPs";
+const ROSTER_SHEET_NAME = "Roster";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
@@ -12,6 +13,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
+const ROSTER_HEADERS = ["Name", "Payment Info", "Venmo"];
 const PLAYERS = [
   "Alex Yeung",
   "Anh Khoa Tran (Truc Phuong)",
@@ -63,6 +65,32 @@ function doGet(event) {
   const callback = params.callback || "callback";
 
   try {
+    if (params.action === "listRoster") {
+      return jsonp_(callback, {
+        ok: true,
+        roster: getRoster_(),
+      });
+    }
+
+    if (params.action === "saveRosterMember") {
+      const result = saveRosterMember_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: result.action,
+        roster: result.roster,
+      });
+    }
+
+    if (params.action === "removeRosterMember") {
+      const result = removeRosterMember_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "removeRosterMember",
+        removed: result.removed,
+        roster: result.roster,
+      });
+    }
+
     if (params.action === "list") {
       return jsonp_(callback, {
         ok: true,
@@ -275,6 +303,133 @@ function getSheet_() {
   return sheet;
 }
 
+function getRosterSheet_() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = spreadsheet.getSheetByName(ROSTER_SHEET_NAME);
+  let shouldSeedRoster = false;
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(ROSTER_SHEET_NAME);
+    shouldSeedRoster = true;
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, ROSTER_HEADERS.length);
+  const currentHeaders = headerRange.getValues()[0];
+  const needsHeaders = ROSTER_HEADERS.some(
+    (header, index) => currentHeaders[index] !== header,
+  );
+
+  if (needsHeaders) {
+    headerRange.setValues([ROSTER_HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+
+  if (shouldSeedRoster && sheet.getLastRow() < 2) {
+    sheet
+      .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
+      .setValues(PLAYERS.map((name) => [name, "", ""]));
+  }
+
+  return sheet;
+}
+
+function getRoster_() {
+  const sheet = getRosterSheet_();
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, ROSTER_HEADERS.length)
+    .getValues()
+    .map((row) => ({
+      name: String(row[0] || "").trim(),
+      paymentInfo: String(row[1] || "").trim(),
+      venmo: String(row[2] || "").trim(),
+    }))
+    .filter((member) => member.name)
+    .sort((first, second) => first.name.localeCompare(second.name));
+}
+
+function getRosterNames_() {
+  return getRoster_().map((member) => member.name);
+}
+
+function findRosterRow_(sheet, playerName) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return null;
+  }
+
+  const normalizedName = normalize_(playerName);
+  const rows = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+
+  for (let index = 0; index < rows.length; index += 1) {
+    if (normalize_(rows[index][0]) === normalizedName) {
+      return index + 2;
+    }
+  }
+
+  return null;
+}
+
+function saveRosterMember_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const name = sanitizeText_(
+      required_(params.playerName || params.name, "Missing player name").trim(),
+    );
+    const paymentInfo = sanitizeText_(params.paymentInfo || "");
+    const venmo = sanitizeText_(params.venmo || "");
+    const sheet = getRosterSheet_();
+    const row = findRosterRow_(sheet, name);
+    const values = [name, paymentInfo, venmo];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, ROSTER_HEADERS.length).setValues([values]);
+      return {
+        action: "updated",
+        roster: getRoster_(),
+      };
+    }
+
+    sheet.appendRow(values);
+    return {
+      action: "created",
+      roster: getRoster_(),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function removeRosterMember_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const name = required_(params.playerName || params.name, "Missing player name")
+      .trim();
+    const sheet = getRosterSheet_();
+    const row = findRosterRow_(sheet, name);
+
+    if (row) {
+      sheet.deleteRow(row);
+    }
+
+    return {
+      removed: Boolean(row),
+      roster: getRoster_(),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function findExistingRow_(sheet, playDate, playerName) {
   const rows = findExistingRows_(sheet, playDate, playerName);
   return rows[0] || null;
@@ -401,7 +556,7 @@ function exportMonthRoster_(month) {
   });
   const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
   const matrix = [header].concat(
-    PLAYERS.map((player) => {
+    getRosterNames_().map((player) => {
       const normalizedPlayer = normalize_(player);
       return [player].concat(
         monthDates.map((date) => {
@@ -666,7 +821,7 @@ function formatDate_(date) {
 
 function isRosterPlayer_(playerName) {
   const normalizedName = normalize_(playerName);
-  return PLAYERS.some((player) => normalize_(player) === normalizedName);
+  return getRosterNames_().some((player) => normalize_(player) === normalizedName);
 }
 
 function validatePlayerName_(playerName) {
@@ -677,7 +832,7 @@ function validatePlayerName_(playerName) {
 
 function sanitizeText_(value) {
   const text = String(value || "").trim();
-  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+  return /^[=+\-]/.test(text) ? `'${text}` : text;
 }
 
 function normalizeDate_(value) {

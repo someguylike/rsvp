@@ -14,6 +14,7 @@ Static RSVP page for weekly play sessions.
 - After submit and when the date changes, the page shows the reserved participant tally for that date.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
 - `admin.html` lets an admin edit the current month roster in a player-by-date table.
+- `roster.html` lets an admin add, remove, and update roster payment/Venmo details.
 
 ## Recommended Hosting
 
@@ -25,6 +26,7 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 
 - `index.html`, `app.js`, `styles.css`: public RSVP page.
 - `admin.html`, `admin.js`: admin page for editing player/date attendance counts.
+- `roster.html`, `roster.js`: admin page for roster membership and payment details.
 - `export.html`, `export.js`: admin page for monthly roster export.
 - `google-apps-script/Code.gs`: Apps Script backend source. Paste this into Apps Script and deploy it as the Web App backend.
 
@@ -77,11 +79,12 @@ Then open:
 
 - RSVP page: `http://localhost:8000/`
 - Admin add page: `http://localhost:8000/admin.html`
+- Roster management page: `http://localhost:8000/roster.html`
 - Export page: `http://localhost:8000/export.html`
 
 Development workflow:
 
-1. Edit `index.html`, `app.js`, `admin.html`, `admin.js`, `export.html`, `export.js`, or `styles.css`.
+1. Edit `index.html`, `app.js`, `admin.html`, `admin.js`, `roster.html`, `roster.js`, `export.html`, `export.js`, or `styles.css`.
 2. If frontend assets change, bump the query string on the referenced JS/CSS file in the HTML to avoid stale GitHub Pages/browser cache.
 3. If backend behavior changes, edit `google-apps-script/Code.gs`.
 4. Paste the full `Code.gs` into Apps Script.
