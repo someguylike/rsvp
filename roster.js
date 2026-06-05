@@ -154,14 +154,11 @@
   }
 
   function getMessengerUrl(value) {
-    const text = String(value || "").trim();
-    if (!text) {
+    const contact = normalizeMessengerContact(value);
+    if (!contact) {
       return "";
     }
-    if (/^https?:\/\//i.test(text)) {
-      return text;
-    }
-    return `https://www.facebook.com/${text.replace(/^@/, "")}`;
+    return contact.url;
   }
 
   function appendLinkCell(row, text, href, warningMessage) {
@@ -199,6 +196,43 @@
     const match = text.match(/^(?:https?:\/\/)?(?:(?:www|account)\.)?venmo\.com\/(?:u\/)?([A-Za-z0-9_.-]+)\/?$/i);
     const handle = match ? match[1] : text.replace(/^@/, "");
     return /^[A-Za-z0-9_.-]{2,30}$/.test(handle) ? handle : "";
+  }
+
+  function normalizeMessengerContact(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return null;
+    }
+
+    const messengerMatch = text.match(
+      /^(?:https?:\/\/)?m\.me\/([A-Za-z0-9._-]{3,80})\/?(?:[?#].*)?$/i,
+    );
+    if (messengerMatch) {
+      return {
+        value: `@${messengerMatch[1]}`,
+        url: `https://www.facebook.com/${messengerMatch[1]}`,
+      };
+    }
+
+    const profileIdMatch = text.match(
+      /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:facebook|fb)\.com\/profile\.php\?id=([0-9]+)(?:[&#].*)?$/i,
+    );
+    if (profileIdMatch) {
+      const url = `https://www.facebook.com/profile.php?id=${profileIdMatch[1]}`;
+      return { value: url, url };
+    }
+
+    const facebookMatch = text.match(
+      /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:facebook|fb)\.com\/([A-Za-z0-9._-]{3,80})\/?(?:[?#].*)?$/i,
+    );
+    const handle = facebookMatch ? facebookMatch[1] : text.replace(/^@/, "");
+    return /^[A-Za-z0-9._-]{3,80}$/.test(handle) &&
+      handle.toLowerCase() !== "profile.php"
+      ? {
+          value: `@${handle}`,
+          url: `https://www.facebook.com/${handle}`,
+        }
+      : null;
   }
 
   function normalizeSearchText(value) {
@@ -255,10 +289,14 @@
           ? "Invalid Venmo handle or profile URL. Use a normal hyphen, not a long dash."
           : "",
       );
+      const messengerUrl = getMessengerUrl(member.messenger);
       appendLinkCell(
         row,
         member.messenger || "",
-        getMessengerUrl(member.messenger),
+        messengerUrl,
+        member.messenger && !messengerUrl
+          ? "Invalid Messenger or Facebook profile URL. Use a plain handle or profile URL."
+          : "",
       );
 
       actions.className = "roster-actions-cell";
@@ -381,6 +419,12 @@
       setStatus("Enter a Messenger contact.", "error");
       return;
     }
+    const messengerContact = normalizeMessengerContact(payload.messenger);
+    if (!messengerContact) {
+      setStatus("Enter a valid Messenger or Facebook profile URL.", "error");
+      return;
+    }
+    payload.messenger = messengerContact.value;
 
     saveMember(payload);
   });

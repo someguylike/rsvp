@@ -413,8 +413,8 @@ function saveRosterMember_(params) {
       required_(params.playerName || params.name, "Missing player name").trim(),
     );
     const venmo = normalizeVenmo_(required_(params.venmo, "Missing Venmo"));
-    const messenger = sanitizeText_(
-      required_(params.messenger, "Missing Messenger").trim(),
+    const messenger = normalizeMessenger_(
+      required_(params.messenger, "Missing Messenger"),
     );
     const cellphone = sanitizeText_(params.cellphone || "");
     const sheet = getRosterSheet_();
@@ -871,6 +871,37 @@ function normalizeVenmo_(value) {
 
   if (!/^[A-Za-z0-9_.-]{2,30}$/.test(handle)) {
     throw new Error("Enter a valid Venmo handle or Venmo profile URL");
+  }
+
+  return `@${handle}`;
+}
+
+function normalizeMessenger_(value) {
+  const text = String(value || "").trim();
+  const messengerMatch = text.match(
+    /^(?:https?:\/\/)?m\.me\/([A-Za-z0-9._-]{3,80})\/?(?:[?#].*)?$/i,
+  );
+  if (messengerMatch) {
+    return `@${messengerMatch[1]}`;
+  }
+
+  const profileIdMatch = text.match(
+    /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:facebook|fb)\.com\/profile\.php\?id=([0-9]+)(?:[&#].*)?$/i,
+  );
+  if (profileIdMatch) {
+    return `https://www.facebook.com/profile.php?id=${profileIdMatch[1]}`;
+  }
+
+  const facebookMatch = text.match(
+    /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:facebook|fb)\.com\/([A-Za-z0-9._-]{3,80})\/?(?:[?#].*)?$/i,
+  );
+  const handle = facebookMatch ? facebookMatch[1] : text.replace(/^@/, "");
+
+  if (
+    !/^[A-Za-z0-9._-]{3,80}$/.test(handle) ||
+    handle.toLowerCase() === "profile.php"
+  ) {
+    throw new Error("Enter a valid Messenger or Facebook profile URL");
   }
 
   return `@${handle}`;
