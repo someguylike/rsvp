@@ -4,6 +4,7 @@
 
   const form = document.querySelector("#roster-form");
   const nameInput = document.querySelector("#member-name");
+  const memberNameList = document.querySelector("#member-name-list");
   const venmoInput = document.querySelector("#venmo");
   const messengerInput = document.querySelector("#messenger");
   const cellphoneInput = document.querySelector("#cellphone");
@@ -115,6 +116,23 @@
     messengerInput.value = member.messenger || "";
     cellphoneInput.value = member.cellphone || "";
     nameInput.focus();
+  }
+
+  function findRosterMemberByName(name) {
+    const normalizedName = normalizeSearchText(name);
+    return roster.find(
+      (member) => normalizeSearchText(member.name) === normalizedName,
+    );
+  }
+
+  function renderMemberNameOptions() {
+    memberNameList.replaceChildren(
+      ...roster.map((member) => {
+        const option = document.createElement("option");
+        option.value = member.name || "";
+        return option;
+      }),
+    );
   }
 
   function appendCell(row, tagName, text, className) {
@@ -250,6 +268,7 @@
         action: "listRoster",
       });
       roster = Array.isArray(result.roster) ? result.roster : [];
+      renderMemberNameOptions();
       renderRoster();
       setStatus("Roster loaded.", "success");
     } catch (error) {
@@ -268,6 +287,7 @@
         ...payload,
       });
       roster = Array.isArray(result.roster) ? result.roster : [];
+      renderMemberNameOptions();
       renderRoster();
       clearForm();
       setStatus(
@@ -293,6 +313,7 @@
         playerName,
       });
       roster = Array.isArray(result.roster) ? result.roster : [];
+      renderMemberNameOptions();
       renderRoster();
       clearForm();
       setStatus(
@@ -329,6 +350,13 @@
     }
 
     saveMember(payload);
+  });
+
+  nameInput.addEventListener("change", () => {
+    const member = findRosterMemberByName(nameInput.value);
+    if (member) {
+      fillForm(member);
+    }
   });
 
   memberSearch.addEventListener("input", () => {

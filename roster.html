@@ -22,9 +22,12 @@
                 id="member-name"
                 name="playerName"
                 autocomplete="off"
+                list="member-name-list"
                 required
-                placeholder="Player name"
+                placeholder="Search existing or type a new name"
+                title="Search existing members or type a new name to add one"
               />
+              <datalist id="member-name-list"></datalist>
             </label>
 
             <label class="field">
@@ -99,6 +102,6 @@
       </section>
     </main>
 
-    <script src="./roster.js?v=20260605-6"></script>
+    <script src="./roster.js?v=20260605-7"></script>
   </body>
 </html>
