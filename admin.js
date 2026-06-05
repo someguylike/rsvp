@@ -147,11 +147,10 @@
     const year = Number(month.slice(0, 4));
     const monthIndex = Number(month.slice(5, 7)) - 1;
     const isCurrentMonth = month === formatMonth(today);
+    const daysUntilThisSunday = (7 - today.getDay()) % 7;
     const endDate = new Date(today);
-    endDate.setDate(today.getDate() + 7);
-    const current = isCurrentMonth
-      ? new Date(today)
-      : new Date(year, monthIndex, 1);
+    endDate.setDate(today.getDate() + daysUntilThisSunday + 7);
+    const current = new Date(year, monthIndex, 1);
     const dates = [];
 
     while (
