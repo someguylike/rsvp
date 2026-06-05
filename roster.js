@@ -127,6 +127,44 @@
     return cell;
   }
 
+  function getVenmoUrl(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+    if (/^https?:\/\//i.test(text)) {
+      return text;
+    }
+    return `https://account.venmo.com/u/${text.replace(/^@/, "")}`;
+  }
+
+  function getMessengerUrl(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+    if (/^https?:\/\//i.test(text)) {
+      return text;
+    }
+    return `https://www.facebook.com/${text.replace(/^@/, "")}`;
+  }
+
+  function appendLinkCell(row, text, href) {
+    const cell = document.createElement("td");
+    if (text && href) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = text;
+      cell.append(link);
+    } else {
+      cell.textContent = text || "";
+    }
+    row.append(cell);
+    return cell;
+  }
+
   function normalizeSearchText(value) {
     return String(value || "")
       .normalize("NFD")
@@ -175,8 +213,12 @@
       const revealButton = document.createElement("button");
 
       appendCell(row, "td", member.name || "");
-      appendCell(row, "td", member.venmo || "");
-      appendCell(row, "td", member.messenger || "");
+      appendLinkCell(row, member.venmo || "", getVenmoUrl(member.venmo));
+      appendLinkCell(
+        row,
+        member.messenger || "",
+        getMessengerUrl(member.messenger),
+      );
       cellphoneText.textContent = member.cellphone ? "***" : "";
       revealButton.className = "secondary-button inline-button";
       revealButton.type = "button";
