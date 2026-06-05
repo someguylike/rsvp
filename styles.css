@@ -45,6 +45,7 @@ body {
 }
 
 .panel {
+  position: relative;
   width: min(100%, 520px);
   border: 1px solid rgb(255 255 255 / 76%);
   border-radius: 8px;
@@ -911,6 +912,7 @@ button:disabled {
   }
 
   .heading {
+    padding-right: 54px;
     margin-bottom: 14px;
   }
 
@@ -924,20 +926,27 @@ button:disabled {
   }
 
   .page-nav {
-    margin: 0 0 18px;
+    margin: 0;
   }
 
   .page-nav-button {
+    position: absolute;
+    top: 18px;
+    right: 18px;
     display: flex;
-    width: 100%;
+    width: 42px;
+    height: 42px;
     cursor: pointer;
+    font-size: 1.28rem;
+    line-height: 1;
+    padding: 0;
   }
 
   .page-nav-links {
     display: none;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    margin-top: 8px;
+    margin: -4px 0 18px;
   }
 
   .page-nav-toggle:checked ~ .page-nav-links {
@@ -947,6 +956,9 @@ button:disabled {
   .page-nav a,
   .page-nav-button {
     min-height: 42px;
+  }
+
+  .page-nav a {
     padding: 8px 10px;
   }
 
