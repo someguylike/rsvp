@@ -146,14 +146,11 @@
   }
 
   function getVenmoUrl(value) {
-    const text = String(value || "").trim();
-    if (!text) {
+    const handle = normalizeVenmoHandle(value);
+    if (!handle) {
       return "";
     }
-    if (/^https?:\/\//i.test(text)) {
-      return text;
-    }
-    return `https://account.venmo.com/u/${text.replace(/^@/, "")}`;
+    return `https://account.venmo.com/u/${handle}`;
   }
 
   function getMessengerUrl(value) {
@@ -181,6 +178,17 @@
     }
     row.append(cell);
     return cell;
+  }
+
+  function normalizeVenmoHandle(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+
+    const match = text.match(/^(?:https?:\/\/)?(?:(?:www|account)\.)?venmo\.com\/(?:u\/)?([A-Za-z0-9_.-]+)\/?$/i);
+    const handle = match ? match[1] : text.replace(/^@/, "");
+    return /^[A-Za-z0-9_.-]{2,30}$/.test(handle) ? handle : "";
   }
 
   function normalizeSearchText(value) {
@@ -343,6 +351,13 @@
       setStatus("Enter a Venmo handle.", "error");
       return;
     }
+
+    const venmoHandle = normalizeVenmoHandle(payload.venmo);
+    if (!venmoHandle) {
+      setStatus("Enter a valid Venmo handle or Venmo profile URL.", "error");
+      return;
+    }
+    payload.venmo = `@${venmoHandle}`;
 
     if (!payload.messenger) {
       setStatus("Enter a Messenger contact.", "error");

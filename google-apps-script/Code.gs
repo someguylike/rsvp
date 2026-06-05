@@ -412,7 +412,7 @@ function saveRosterMember_(params) {
     const name = sanitizeText_(
       required_(params.playerName || params.name, "Missing player name").trim(),
     );
-    const venmo = sanitizeText_(required_(params.venmo, "Missing Venmo").trim());
+    const venmo = normalizeVenmo_(required_(params.venmo, "Missing Venmo"));
     const messenger = sanitizeText_(
       required_(params.messenger, "Missing Messenger").trim(),
     );
@@ -860,6 +860,20 @@ function validatePlayerName_(playerName) {
   if (!isRosterPlayer_(playerName)) {
     throw new Error("Please choose a player from the roster");
   }
+}
+
+function normalizeVenmo_(value) {
+  const text = String(value || "").trim();
+  const match = text.match(
+    /^(?:https?:\/\/)?(?:(?:www|account)\.)?venmo\.com\/(?:u\/)?([A-Za-z0-9_.-]+)\/?$/i,
+  );
+  const handle = match ? match[1] : text.replace(/^@/, "");
+
+  if (!/^[A-Za-z0-9_.-]{2,30}$/.test(handle)) {
+    throw new Error("Enter a valid Venmo handle or Venmo profile URL");
+  }
+
+  return `@${handle}`;
 }
 
 function sanitizeText_(value) {
