@@ -345,14 +345,17 @@
     rosterValues = new Map();
     changedValues.clear();
     rosterTable.textContent = "";
-    setStatus("Loading month...", "");
+    setStatus("Loading month...", "loading");
     monthTotal.textContent = "Loading...";
     updateChangeCount();
 
     try {
       for (let index = 0; index < monthDates.length; index += 1) {
         const playDate = monthDates[index];
-        setStatus(`Loading ${index + 1} of ${monthDates.length} dates...`, "");
+        setStatus(
+          `Loading ${index + 1} of ${monthDates.length} dates...`,
+          "loading",
+        );
         const result = await requestAppsScript({
           action: "list",
           playDate,
@@ -391,13 +394,16 @@
     }
 
     saveButton.disabled = true;
-    setStatus(`Saving 0 of ${changes.length} changes...`, "");
+    setStatus(`Saving 0 of ${changes.length} changes...`, "loading");
 
     try {
       for (let index = 0; index < changes.length; index += 1) {
         const [key, participantCount] = changes[index];
         const [playerName, playDate] = key.split("\u0000");
-        setStatus(`Saving ${index + 1} of ${changes.length} changes...`, "");
+        setStatus(
+          `Saving ${index + 1} of ${changes.length} changes...`,
+          "loading",
+        );
         await requestAppsScript({
           playerName,
           playDate,

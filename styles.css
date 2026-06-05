@@ -383,6 +383,11 @@ button:disabled {
   color: var(--error);
 }
 
+.status.loading {
+  color: var(--error);
+  font-weight: 800;
+}
+
 .admin-preview {
   display: grid;
   gap: 12px;
