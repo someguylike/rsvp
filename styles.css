@@ -307,6 +307,12 @@ button:disabled {
   box-shadow: none;
 }
 
+.inline-button {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
+
 .status {
   min-height: 22px;
   margin: 0;
@@ -555,6 +561,11 @@ button:disabled {
   border-radius: 8px;
   background: white;
   padding: 8px 10px;
+}
+
+.admin-tally-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .tally-name {

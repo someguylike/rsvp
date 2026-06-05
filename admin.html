@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RSVP Admin</title>
+    <link rel="stylesheet" href="./styles.css?v=20260605-1" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel" aria-labelledby="page-title">
+        <div class="heading">
+          <p class="eyebrow">Admin</p>
+          <h1 id="page-title">Add Player</h1>
+        </div>
+
+        <form id="admin-form" class="form">
+          <label class="field">
+            <span>Date to play</span>
+            <input id="play-date" name="playDate" type="date" required />
+          </label>
+
+          <label class="field">
+            <span>Player</span>
+            <select id="player-name" name="playerName" required></select>
+          </label>
+
+          <label class="field">
+            <span>Reserved spots</span>
+            <select
+              id="participant-count"
+              name="participantCount"
+              aria-describedby="participant-count-help"
+              title="Total spots including the player and guests"
+              required
+            >
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+            <small id="participant-count-help" class="field-help">
+              Total spots including the player and guests.
+            </small>
+          </label>
+
+          <button id="submit-button" type="submit">Add Player</button>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </form>
+
+        <section class="tally" aria-labelledby="reservations-title">
+          <div class="tally-header">
+            <h2 id="reservations-title">Reservations</h2>
+            <p id="tally-count">Choose a date</p>
+          </div>
+          <ul id="tally-list" class="tally-list admin-tally-list"></ul>
+        </section>
+
+        <footer class="page-footer">
+          <a href="./index.html">RSVP page</a>
+          <span aria-hidden="true"> · </span>
+          <a href="./export.html">Monthly export</a>
+        </footer>
+      </section>
+    </main>
+
+    <script src="./admin.js?v=20260605-1"></script>
+  </body>
+</html>
