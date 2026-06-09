@@ -418,6 +418,19 @@ button:disabled {
   box-shadow: none;
 }
 
+.remove-rsvp-button {
+  border: 1px solid #f2b8a2;
+  background: #fff4ed;
+  color: var(--error);
+  box-shadow: none;
+}
+
+.remove-rsvp-button:hover {
+  border-color: var(--error);
+  background: #ffe7dd;
+  box-shadow: none;
+}
+
 .inline-button {
   min-height: 32px;
   padding: 6px 10px;

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Who’s In This Week?</title>
-    <link rel="stylesheet" href="./styles.css?v=20260609-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260609-4" />
   </head>
   <body>
     <main class="shell">
@@ -77,6 +77,9 @@
           </label>
 
           <button id="submit-button" type="submit">Submit RSVP</button>
+          <button id="remove-rsvp-button" class="remove-rsvp-button" type="button" hidden>
+            Remove this RSVP
+          </button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
         </form>
 
@@ -116,6 +119,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260609-2"></script>
+    <script src="./app.js?v=20260609-3"></script>
   </body>
 </html>

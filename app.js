@@ -63,6 +63,7 @@
   const participantInput = document.querySelector("#participant-count");
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
+  const removeRsvpButton = document.querySelector("#remove-rsvp-button");
   const tallyCount = document.querySelector("#tally-count");
   const tallyList = document.querySelector("#tally-list");
   const overrideDialog = document.querySelector("#override-dialog");
@@ -74,6 +75,7 @@
   let latestTallyRequest = 0;
   let rememberedPlayerName = "";
   let selectedPlayerName = "";
+  let lastSubmittedPayload = null;
 
   function readJson(key, fallback) {
     try {
@@ -406,6 +408,18 @@
     status.append(link);
   }
 
+  function setRemoveRsvpAction(payload) {
+    lastSubmittedPayload = payload;
+    if (!removeRsvpButton) return;
+    if (!payload || Number(payload.participantCount) <= 0) {
+      removeRsvpButton.hidden = true;
+      removeRsvpButton.textContent = "Remove this RSVP";
+      return;
+    }
+    removeRsvpButton.hidden = false;
+    removeRsvpButton.textContent = `Remove RSVP for ${payload.playerName}`;
+  }
+
   function collectPayload() {
     const formData = new FormData(form);
     return {
@@ -634,10 +648,13 @@
       updatePlayerMemory();
       renderTally(result.tally);
       if (result.action === "deleted") {
+        setRemoveRsvpAction(null);
         setStatus("Removed your RSVP.", "success");
       } else if (result.action === "not_found") {
+        setRemoveRsvpAction(null);
         setStatus("No RSVP was on file for that date.", "");
       } else {
+        setRemoveRsvpAction(payload);
         setStatus(
           result.action === "updated"
             ? "Updated your existing RSVP."
@@ -664,6 +681,9 @@
 
   async function removeExistingRsvp(payload) {
     submitButton.disabled = true;
+    if (removeRsvpButton) {
+      removeRsvpButton.disabled = true;
+    }
     setStatus("Removing RSVP...", "");
 
     try {
@@ -671,14 +691,24 @@
         action: "delete",
         playerName: payload.playerName,
         playDate: payload.playDate,
+        browserId: getBrowserId(),
+        browserSignature: getBrowserSignature(),
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+        clientLanguage: navigator.language || "",
+        clientScreen: getClientScreen(),
+        submittedAt: new Date().toISOString(),
       });
 
       renderTally(result.tally);
+      setRemoveRsvpAction(null);
       setStatus("Removed the existing RSVP.", "success");
     } catch (error) {
       setStatus(error.message, "error");
     } finally {
       submitButton.disabled = false;
+      if (removeRsvpButton) {
+        removeRsvpButton.disabled = false;
+      }
     }
   }
 
@@ -844,5 +874,12 @@
     };
     pendingOverridePayload = null;
     submitRsvp(payload);
+  });
+
+  removeRsvpButton?.addEventListener("click", () => {
+    if (!lastSubmittedPayload) {
+      return;
+    }
+    removeExistingRsvp(lastSubmittedPayload);
   });
 })();
