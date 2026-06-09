@@ -464,6 +464,12 @@
     return `${window.screen?.width || 0}x${window.screen?.height || 0}@${window.devicePixelRatio || 1}`;
   }
 
+  function focusPlayerInput() {
+    if (document.activeElement === playerInput) return;
+    playerInput.focus({ preventScroll: true });
+    playerInput.select?.();
+  }
+
   function formatParticipantCount(count) {
     return count === 1 ? "1 participant" : `${count} participants`;
   }
@@ -791,6 +797,7 @@
   }
 
   async function initialize() {
+    focusPlayerInput();
     await loadRoster();
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
     const lastPlayerName = readString(LAST_PLAYER_KEY) || lastRsvp?.playerName || "";
@@ -802,7 +809,8 @@
     renderDateOptions();
 
     participantInput.value = "1";
-    playerInput.focus();
+    focusPlayerInput();
+    window.setTimeout(focusPlayerInput, 150);
   }
 
   form.addEventListener("submit", async (event) => {
