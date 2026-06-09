@@ -203,16 +203,30 @@
   }
 
   function getReportDateParts(value) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
+    const text = String(value || "").trim();
+    const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    let date = null;
+
+    if (isoMatch) {
+      date = new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T00:00:00`);
+    } else if (slashMatch) {
+      date = new Date(
+        Number(slashMatch[3]),
+        Number(slashMatch[1]) - 1,
+        Number(slashMatch[2]),
+      );
+    }
+
+    if (!date) {
       return {
         weekday: "",
-        day: value || "",
+        day: text,
         week: "",
-        title: value || "",
+        title: text,
       };
     }
 
-    const date = new Date(`${value}T00:00:00`);
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
     const weekOfMonth = Math.ceil((date.getDate() + firstDay.getDay()) / 7);
 
