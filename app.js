@@ -57,6 +57,7 @@
   const playerList = document.querySelector("#player-list");
   const playerMemory = document.querySelector("#player-memory");
   const changePlayerButton = document.querySelector("#change-player-button");
+  const restoreStatus = document.querySelector("#restore-status");
   const rsvpDetails = document.querySelector("#rsvp-details");
   const dateInput = document.querySelector("#play-date");
   const dateOptions = document.querySelector("#date-options");
@@ -373,6 +374,12 @@
     if (tallySection) {
       tallySection.hidden = !showDetails;
     }
+  }
+
+  function setRestoreStatus(message) {
+    if (!restoreStatus) return;
+    restoreStatus.textContent = message;
+    restoreStatus.hidden = !message;
   }
 
   function createSubmitName(name) {
@@ -946,17 +953,35 @@
     ) || window.innerWidth <= 720;
   }
 
-  async function initialize() {
-    await loadRoster();
+  function restoreLastPlayer() {
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
     const lastPlayerName = readString(LAST_PLAYER_KEY) || lastRsvp?.playerName || "";
     if (lastPlayerName && isValidPlayerName(lastPlayerName)) {
       rememberedPlayerName = lastPlayerName;
       selectPlayerName(lastPlayerName, { remember: false, keepFocus: true });
+      setRestoreStatus(`Restored ${lastPlayerName} from this browser.`);
+    } else if (lastPlayerName) {
+      playerInput.value = lastPlayerName;
+      setRestoreStatus(`Restoring ${lastPlayerName} from this browser...`);
+    } else {
+      setRestoreStatus("Loading player list...");
     }
+  }
+
+  async function initialize() {
+    restoreLastPlayer();
     renderDateOptions();
 
     participantInput.value = "1";
+    updatePlayerMemory();
+    await loadRoster();
+    if (playerInput.value && !selectedPlayerName) {
+      const exactMatch = exactPlayerMatch(playerInput.value);
+      if (exactMatch) {
+        selectPlayerName(exactMatch, { remember: false, keepFocus: true });
+      }
+    }
+    setRestoreStatus("");
     updatePlayerMemory();
     if (!selectedPlayerName && !isMobileViewport()) {
       focusPlayerInput();

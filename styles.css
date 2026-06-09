@@ -284,6 +284,15 @@ select:focus {
   color: #ffffff;
 }
 
+.restore-status {
+  min-height: 20px;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
 .change-player-button {
   width: fit-content;
   min-height: 34px;
