@@ -1135,9 +1135,10 @@ function exportMonthRoster_(month) {
   let exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
 
   if (exportSheet) {
-    targetSpreadsheet.deleteSheet(exportSheet);
+    resetExportSheet_(exportSheet);
+  } else {
+    exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
   }
-  exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
 
   const totalsByDate = {};
   const monthDates = getExportDatesForMonth_(sourceSheet, month).filter((date) => {
@@ -1178,6 +1179,12 @@ function exportMonthRoster_(month) {
     previewRows: getPreviewRows_(exportSheet),
     url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
   };
+}
+
+function resetExportSheet_(sheet) {
+  sheet.clear();
+  sheet.setFrozenRows(0);
+  sheet.setFrozenColumns(0);
 }
 
 function viewMonthRoster_(month) {
