@@ -97,6 +97,28 @@
             <p class="field-help">
               Recent submit, update, and remove activity for the selected month.
             </p>
+            <div class="audit-controls">
+              <label class="field">
+                <span>Audit date</span>
+                <select id="audit-date-filter">
+                  <option value="">All dates this month</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Audit player</span>
+                <input
+                  id="audit-player-filter"
+                  autocomplete="off"
+                  list="audit-player-options"
+                  placeholder="All players"
+                  type="search"
+                />
+                <datalist id="audit-player-options"></datalist>
+              </label>
+              <button id="audit-refresh-button" class="secondary-button" type="button">
+                Refresh History
+              </button>
+            </div>
             <div class="table-wrap compact-table-wrap">
               <table id="change-history-table" class="export-table audit-table"></table>
             </div>
@@ -106,6 +128,6 @@
       </section>
     </main>
 
-    <script src="./admin.js?v=20260609-2"></script>
+    <script src="./admin.js?v=20260609-3"></script>
   </body>
 </html>

@@ -473,6 +473,13 @@ button:disabled {
   gap: 12px;
 }
 
+.audit-controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
 .roster-form-grid {
   display: grid;
   grid-template-columns:
@@ -1076,6 +1083,7 @@ button:disabled {
   }
 
   .admin-controls,
+  .audit-controls,
   .roster-form-grid {
     grid-template-columns: 1fr;
     gap: 12px;
@@ -1091,7 +1099,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .admin-roster-actions button {
+  .admin-roster-actions button,
+  .audit-controls button {
     width: 100%;
   }
 

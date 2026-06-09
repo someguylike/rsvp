@@ -65,12 +65,17 @@
   const monthTotal = document.querySelector("#month-total");
   const rosterTable = document.querySelector("#roster-table");
   const auditTotal = document.querySelector("#audit-total");
+  const auditDateFilter = document.querySelector("#audit-date-filter");
+  const auditPlayerFilter = document.querySelector("#audit-player-filter");
+  const auditPlayerOptions = document.querySelector("#audit-player-options");
+  const auditRefreshButton = document.querySelector("#audit-refresh-button");
   const changeHistoryTable = document.querySelector("#change-history-table");
   let monthDates = [];
   let rosterValues = new Map();
   const changedValues = new Map();
   let latestLoadRequest = 0;
   let latestAuditRequest = 0;
+  let auditFilterTimer = 0;
   let adminToken = "";
 
   function readAdminAuth() {
@@ -281,6 +286,16 @@
     );
   }
 
+  function renderAuditPlayerOptions() {
+    auditPlayerOptions.replaceChildren(
+      ...PLAYERS.map((player) => {
+        const option = document.createElement("option");
+        option.value = player;
+        return option;
+      }),
+    );
+  }
+
   async function loadRoster() {
     try {
       const result = await requestAppsScript({
@@ -296,6 +311,7 @@
     } catch {
       // Keep the built-in roster as a fallback when Apps Script is unavailable.
     }
+    renderAuditPlayerOptions();
   }
 
   function getParticipantOptions(selectedValue) {
@@ -399,9 +415,17 @@
 
   function renderAuditTable(entries) {
     changeHistoryTable.textContent = "";
+    const selectedDate = auditDateFilter.value;
+    const selectedPlayer = auditPlayerFilter.value.trim();
+    const filterLabel = [
+      selectedDate === "__all__"
+        ? "all recent dates"
+        : selectedDate || "selected month",
+      selectedPlayer || "all players",
+    ].join(", ");
 
     if (!Array.isArray(entries) || entries.length === 0) {
-      auditTotal.textContent = "No changes this month";
+      auditTotal.textContent = `No changes for ${filterLabel}`;
       return;
     }
 
@@ -425,7 +449,50 @@
     });
 
     changeHistoryTable.append(thead, tbody);
-    auditTotal.textContent = `${entries.length} recent change${entries.length === 1 ? "" : "s"}`;
+    auditTotal.textContent = `${entries.length} recent change${entries.length === 1 ? "" : "s"} for ${filterLabel}`;
+  }
+
+  function renderAuditDateFilter() {
+    const selectedDate = auditDateFilter.value;
+    const options = [
+      {
+        value: "__all__",
+        label: "All recent history",
+      },
+      {
+        value: "",
+        label: "All dates this month",
+      },
+      ...monthDates.map((date) => ({
+        value: date,
+        label: `${formatDisplayDate(date)} (${date})`,
+      })),
+    ];
+
+    auditDateFilter.replaceChildren(
+      ...options.map((item) => {
+        const option = document.createElement("option");
+        option.value = item.value;
+        option.textContent = item.label;
+        option.selected = item.value === selectedDate;
+        return option;
+      }),
+    );
+
+    if (
+      selectedDate &&
+      selectedDate !== "__all__" &&
+      !monthDates.includes(selectedDate)
+    ) {
+      auditDateFilter.value = "";
+    }
+  }
+
+  function scheduleAuditLoad() {
+    window.clearTimeout(auditFilterTimer);
+    auditFilterTimer = window.setTimeout(() => {
+      loadAudit(monthInput.value);
+    }, 250);
   }
 
   async function loadAudit(month) {
@@ -438,16 +505,31 @@
       return;
     }
 
-    auditTotal.textContent = "Loading...";
+    auditRefreshButton.disabled = true;
+    auditTotal.textContent = "Loading history...";
     changeHistoryTable.textContent = "";
+    const playDate = auditDateFilter.value;
+    const playerName = auditPlayerFilter.value.trim();
 
     try {
-      const result = await requestAppsScript({
+      const payload = {
         action: "listAudit",
         adminToken,
-        month,
         limit: "250",
-      });
+      };
+      if (playDate === "__all__") {
+        payload.limit = "500";
+      } else {
+        payload.month = month;
+      }
+      if (playDate && playDate !== "__all__") {
+        payload.playDate = playDate;
+      }
+      if (playerName) {
+        payload.playerName = playerName;
+      }
+
+      const result = await requestAppsScript(payload);
       if (requestId !== latestAuditRequest || monthInput.value !== month) {
         return;
       }
@@ -458,6 +540,10 @@
       }
       auditTotal.textContent = "Could not load history";
       changeHistoryTable.textContent = error.message;
+    } finally {
+      if (requestId === latestAuditRequest) {
+        auditRefreshButton.disabled = false;
+      }
     }
   }
 
@@ -548,14 +634,14 @@
     const requestId = latestLoadRequest + 1;
     latestLoadRequest = requestId;
     monthDates = getPlayDatesForMonth(month);
+    renderAuditDateFilter();
     rosterValues = new Map();
     changedValues.clear();
     rosterTable.textContent = "";
-    changeHistoryTable.textContent = "";
     setStatus("Loading month...", "loading");
     monthTotal.textContent = "Loading...";
-    auditTotal.textContent = "Loading...";
     updateChangeCount();
+    loadAudit(month);
 
     try {
       for (let index = 0; index < monthDates.length; index += 1) {
@@ -584,7 +670,6 @@
       }
 
       renderRosterTable();
-      loadAudit(month);
       setStatus("Month loaded.", "success");
     } catch (error) {
       if (requestId !== latestLoadRequest || monthInput.value !== month) {
@@ -592,7 +677,6 @@
       }
       rosterTable.textContent = "";
       monthTotal.textContent = "Could not load month";
-      auditTotal.textContent = "Could not load history";
       setStatus(error.message, "error");
     }
   }
@@ -698,6 +782,18 @@
 
   monthInput.addEventListener("change", () => {
     loadMonth(monthInput.value);
+  });
+
+  auditDateFilter.addEventListener("change", () => {
+    loadAudit(monthInput.value);
+  });
+
+  auditPlayerFilter.addEventListener("input", () => {
+    scheduleAuditLoad();
+  });
+
+  auditRefreshButton.addEventListener("click", () => {
+    loadAudit(monthInput.value);
   });
 
   playerSearch.addEventListener("input", () => {
