@@ -78,6 +78,18 @@
               />
             </label>
 
+            <label class="field">
+              <span>Note</span>
+              <input
+                id="member-note"
+                name="note"
+                autocomplete="off"
+                disabled
+                placeholder="Friend of..., guest note"
+                title="Optional admin note for identifying the member"
+              />
+            </label>
+
           </div>
 
           <div class="admin-roster-actions">
@@ -96,7 +108,7 @@
             <input
               id="member-search"
               autocomplete="off"
-              placeholder="Search by name, Venmo, or Facebook"
+              placeholder="Search by name, Venmo, Facebook, or note"
               type="search"
             />
           </label>
@@ -109,6 +121,6 @@
     </main>
 
     <script src="./admin-auth.js?v=20260609-3"></script>
-    <script src="./roster.js?v=20260609-11"></script>
+    <script src="./roster.js?v=20260609-12"></script>
   </body>
 </html>

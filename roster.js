@@ -10,6 +10,7 @@
   const venmoInput = document.querySelector("#venmo");
   const messengerInput = document.querySelector("#messenger");
   const cellphoneInput = document.querySelector("#cellphone");
+  const noteInput = document.querySelector("#member-note");
   const memberSearch = document.querySelector("#member-search");
   const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
@@ -26,6 +27,7 @@
 
   function renderAdminState() {
     adminEyebrow.hidden = !adminToken;
+    noteInput.disabled = !adminToken;
     updateSaveButtonLabel();
     renderRoster();
   }
@@ -129,6 +131,7 @@
     venmoInput.value = member.venmo || "";
     messengerInput.value = member.messenger || "";
     cellphoneInput.value = member.cellphone || "";
+    noteInput.value = member.note || "";
     updateSaveButtonLabel();
     nameInput.focus();
   }
@@ -342,8 +345,8 @@
     }
 
     return roster.filter((member) =>
-      [member.name, member.venmo, member.messenger, member.cellphone].some((value) =>
-        normalizeSearchText(value).includes(query),
+      [member.name, member.venmo, member.messenger, member.cellphone, member.note].some(
+        (value) => normalizeSearchText(value).includes(query),
       ),
     );
   }
@@ -369,7 +372,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    const headers = ["Name", "Venmo", "Facebook"];
+    const headers = ["Name", "Venmo", "Facebook", "Note"];
     if (adminToken) {
       headers.push("Cellphone");
       headers.push("Actions");
@@ -410,6 +413,8 @@
           ? "Invalid Facebook profile URL. Use a profile URL or plain profile handle."
           : "",
       ).dataset.label = "Facebook";
+      appendCell(row, "td", member.note || "", "member-note-cell").dataset.label =
+        "Note";
       if (adminToken) {
         appendCell(row, "td", member.cellphone || "").dataset.label = "Cellphone";
 
@@ -579,6 +584,7 @@
       venmo: venmoInput.value.trim(),
       messenger: messengerInput.value.trim(),
       cellphone: cellphoneInput.value.trim(),
+      note: adminToken ? noteInput.value.trim() : "",
     };
 
     if (!payload.playerName) {

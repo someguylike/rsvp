@@ -15,7 +15,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Cellphone"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Cellphone", "Note"];
 const AUDIT_HEADERS = [
   "Logged At",
   "Action",
@@ -736,6 +736,10 @@ function migrateRosterSheet_(sheet) {
     sheet.getRange(2, 2, lastRow - 1, 1).setValues(venmoValues);
   }
 
+  if (headers[4] && headers[4] !== "Note" && sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 5, sheet.getLastRow() - 1, 1).clearContent();
+  }
+
   if (lastColumn > ROSTER_HEADERS.length) {
     sheet.deleteColumns(
       ROSTER_HEADERS.length + 1,
@@ -760,6 +764,7 @@ function getRoster_() {
       venmo: String(row[1] || "").trim(),
       messenger: String(row[2] || "").trim(),
       cellphone: String(row[3] || "").trim(),
+      note: String(row[4] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
@@ -802,10 +807,11 @@ function saveRosterMember_(params) {
       required_(params.messenger, "Missing Facebook profile"),
     );
     const cellphone = sanitizeText_(params.cellphone || "");
+    const note = sanitizeText_(params.note || "");
     const sheet = getRosterSheet_();
     const oldRow = oldName ? findRosterRow_(sheet, oldName) : null;
     const row = findRosterRow_(sheet, name);
-    const values = [name, venmo, messenger, cellphone];
+    const values = [name, venmo, messenger, cellphone, note];
 
     if (oldName && normalize_(oldName) !== normalize_(name)) {
       if (!oldRow) {
