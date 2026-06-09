@@ -58,6 +58,11 @@
     loginPanel.hidden = Boolean(adminToken);
     adminSession.hidden = !adminToken;
     adminEyebrow.hidden = !adminToken;
+    [nameInput, venmoInput, messengerInput, cellphoneInput, photoUrlInput].forEach(
+      (input) => {
+        input.disabled = !adminToken;
+      },
+    );
     updateSaveButtonLabel();
     renderRoster();
   }
@@ -173,6 +178,11 @@
   }
 
   function updateSaveButtonLabel() {
+    saveButton.disabled = !adminToken;
+    if (!adminToken) {
+      saveButton.textContent = "Log In to Edit Members";
+      return;
+    }
     if (isRenamingMember()) {
       saveButton.textContent = "Rename Member";
       return;
@@ -480,6 +490,10 @@
   }
 
   async function saveMember(payload) {
+    if (!adminToken) {
+      setStatus("Log in as admin before changing members.", "error");
+      return;
+    }
     saveButton.disabled = true;
     setStatus("Saving member...", "");
 
@@ -641,7 +655,7 @@
 
   logoutButton.addEventListener("click", () => {
     clearAdminAuth();
-    setLoginStatus("Log in to remove members.", "");
+    setLoginStatus("Log in to create, update, rename, or remove members.", "");
     renderAdminState();
   });
 

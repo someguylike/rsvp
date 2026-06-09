@@ -774,6 +774,7 @@ function saveRosterMember_(params) {
   lock.waitLock(10000);
 
   try {
+    requireAdmin_(params);
     const oldName = sanitizeText_(params.oldPlayerName || params.oldName || "");
     const name = sanitizeText_(
       required_(params.playerName || params.name, "Missing player name").trim(),
@@ -790,7 +791,6 @@ function saveRosterMember_(params) {
     const values = [name, venmo, messenger, cellphone, photoUrl];
 
     if (oldName && normalize_(oldName) !== normalize_(name)) {
-      requireAdmin_(params);
       if (!oldRow) {
         throw new Error("Original roster member was not found");
       }
