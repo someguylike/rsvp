@@ -1020,8 +1020,7 @@ button:disabled {
   min-width: 0;
 }
 
-.calendar-weekday,
-.calendar-week {
+.calendar-weekday {
   color: inherit;
   font-size: 0.62rem;
   font-weight: 800;

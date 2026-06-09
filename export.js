@@ -233,7 +233,7 @@
 
   function formatReportDate(value) {
     const parts = getReportDateParts(value);
-    return [parts.weekday, parts.day, parts.week]
+    return [parts.weekday, parts.day]
       .filter(Boolean)
       .join(" · ");
   }
@@ -243,7 +243,6 @@
     const calendar = document.createElement("span");
     const weekday = document.createElement("span");
     const day = document.createElement("strong");
-    const week = document.createElement("span");
 
     calendar.className = "calendar-date";
     calendar.title = parts.title;
@@ -251,9 +250,7 @@
     weekday.textContent = parts.weekday;
     day.className = "calendar-day";
     day.textContent = parts.day;
-    week.className = "calendar-week";
-    week.textContent = parts.week;
-    calendar.append(weekday, day, week);
+    calendar.append(weekday, day);
     return calendar;
   }
 
