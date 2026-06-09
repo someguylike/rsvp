@@ -965,12 +965,6 @@ button:disabled {
 }
 
 .missing-facebook {
-  border-color: #fedf89;
-  background: #fffaeb;
-  color: #b54708;
-}
-
-.missing-note {
   border-color: var(--line);
   background: #f8fafc;
   color: var(--muted);

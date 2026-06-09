@@ -301,10 +301,6 @@
       cell.append(noteText);
     }
 
-    if (!cell.hasChildNodes()) {
-      cell.append(createMissingContact("note"));
-    }
-
     row.append(cell);
     return cell;
   }
@@ -425,21 +421,27 @@
         row.className = "selected-member-row";
       }
       row.classList.add("member-row");
-      if (!adminToken) {
-        row.tabIndex = 0;
-        row.addEventListener("click", (event) => {
-          if (event.target.closest("a, button")) {
-            return;
-          }
+      row.tabIndex = 0;
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("a, button")) {
+          return;
+        }
+        if (adminToken) {
+          fillForm(member);
+        } else {
           fillMissingInfoForm(member);
-        });
-        row.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
+        }
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          if (adminToken) {
+            fillForm(member);
+          } else {
             fillMissingInfoForm(member);
           }
-        });
-      }
+        }
+      });
       appendMemberNameCell(row, member);
       appendLinkCell(
         row,
