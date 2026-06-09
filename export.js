@@ -255,16 +255,12 @@
   function createCalendarDate(value) {
     const parts = getReportDateParts(value);
     const calendar = document.createElement("span");
-    const weekday = document.createElement("span");
-    const day = document.createElement("strong");
 
     calendar.className = "calendar-date";
     calendar.title = parts.title;
-    weekday.className = "calendar-weekday";
-    weekday.textContent = parts.weekday;
-    day.className = "calendar-day";
-    day.textContent = parts.day;
-    calendar.append(weekday, day);
+    calendar.textContent = [parts.weekday, parts.day]
+      .filter(Boolean)
+      .join(" ");
     return calendar;
   }
 

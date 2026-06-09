@@ -1014,26 +1014,18 @@ button:disabled {
 }
 
 .calendar-date {
-  display: grid;
-  gap: 1px;
-  line-height: 1.1;
+  display: inline-block;
+  line-height: 1.15;
   min-width: 0;
-}
-
-.calendar-weekday {
   color: inherit;
-  font-size: 0.62rem;
-  font-weight: 800;
-  overflow-wrap: normal;
-  white-space: nowrap;
-}
-
-.calendar-day {
-  color: inherit;
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-weight: 900;
   overflow-wrap: normal;
   white-space: nowrap;
+}
+
+.audit-table td:first-child .calendar-date {
+  font-size: 1.05rem;
 }
 
 .audit-table th:nth-child(2),
@@ -1450,9 +1442,13 @@ button:disabled {
 
   .roster-edit-table td:first-child,
   .heatmap-table td:first-child,
-  .audit-table td:first-child,
   .roster-member-table td:first-child {
     background: white;
+  }
+
+  .audit-table td:first-child::before {
+    color: inherit;
+    opacity: 0.82;
   }
 
   .roster-edit-table td:last-child,
