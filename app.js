@@ -82,6 +82,7 @@
   let publicIpPromise = null;
   let activePlayerOptionIndex = -1;
   const rosterContactsByName = new Map();
+  const rosterContactsByNormalizedName = new Map();
 
   function readJson(key, fallback) {
     try {
@@ -339,7 +340,15 @@
       );
     } else if (changedFromRemembered) {
       playerMemory.hidden = false;
-      playerMemory.innerHTML = `Warning: submitting as <strong>${escapeHtml(currentName)}</strong>, not your last used name ${escapeHtml(rememberedPlayerName)}.`;
+      playerMemory.replaceChildren(
+        document.createTextNode("Warning: submitting as "),
+        createSubmitName(currentName),
+        document.createTextNode(`, not your last used name ${rememberedPlayerName}.`),
+      );
+      const identityHint = createPlayerIdentityHint(currentName);
+      if (identityHint) {
+        playerMemory.append(document.createTextNode(" "), identityHint);
+      }
     } else if (selectedValidName) {
       playerMemory.hidden = false;
       playerMemory.replaceChildren(
@@ -419,7 +428,9 @@
   }
 
   function getPlayerIdentityHints(name) {
-    const member = rosterContactsByName.get(name);
+    const member =
+      rosterContactsByName.get(name) ||
+      rosterContactsByNormalizedName.get(normalizeSearchText(name));
     if (!member) {
       return [];
     }
@@ -455,15 +466,6 @@
     );
     const handle = pathMatch ? pathMatch[1] : text.replace(/^@/, "");
     return handle ? `FB ${handle}` : "";
-  }
-
-  function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 
   function rememberPlayerName(name) {
@@ -1076,10 +1078,12 @@
         .map((member) => String(member.name || "").trim())
         .filter(Boolean);
       rosterContactsByName.clear();
+      rosterContactsByNormalizedName.clear();
       roster.forEach((member) => {
         const name = String(member.name || "").trim();
         if (name) {
           rosterContactsByName.set(name, member);
+          rosterContactsByNormalizedName.set(normalizeSearchText(name), member);
         }
       });
       if (names.length > 0) {
