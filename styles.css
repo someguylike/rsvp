@@ -939,6 +939,18 @@ button:disabled {
   color: var(--error);
 }
 
+.missing-facebook {
+  border-color: #fedf89;
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.missing-note {
+  border-color: var(--line);
+  background: #f8fafc;
+  color: var(--muted);
+}
+
 .complete-chip {
   border: 1px solid #badbcc;
   background: #ecfdf3;

@@ -250,7 +250,14 @@
     return contact ? contact.url : String(value || "").trim();
   }
 
-  function appendLinkCell(row, text, href, warningMessage) {
+  function createMissingContact(fieldName) {
+    const missing = document.createElement("span");
+    missing.className = `missing-contact missing-${fieldName}`;
+    missing.textContent = "Missing";
+    return missing;
+  }
+
+  function appendLinkCell(row, text, href, warningMessage, fieldName) {
     const cell = document.createElement("td");
     if (text && href) {
       const link = document.createElement("a");
@@ -262,9 +269,13 @@
       cell.append(link);
     } else {
       const fallback = document.createElement("span");
-      fallback.className = text ? "contact-chip muted-contact" : "missing-contact";
-      fallback.textContent = text || "Missing";
-      cell.append(fallback);
+      if (text) {
+        fallback.className = "contact-chip muted-contact";
+        fallback.textContent = text;
+        cell.append(fallback);
+      } else {
+        cell.append(createMissingContact(fieldName));
+      }
     }
 
     if (warningMessage) {
@@ -302,7 +313,7 @@
     }
 
     if (!cell.hasChildNodes()) {
-      cell.textContent = "";
+      cell.append(createMissingContact("note"));
     }
 
     row.append(cell);
@@ -432,6 +443,7 @@
         member.venmo && !venmoUrl
           ? "Invalid Venmo handle or profile URL. Use a normal hyphen, not a long dash."
           : "",
+        "venmo",
       ).dataset.label = "Venmo";
       const messengerUrl = getMessengerUrl(member.messenger);
       appendLinkCell(
@@ -441,6 +453,7 @@
         member.messenger && !messengerUrl
           ? "Invalid Facebook profile URL. Use a profile URL or plain profile handle."
           : "",
+        "facebook",
       ).dataset.label = "Facebook";
       appendNoteCell(row, member);
       if (adminToken) {
