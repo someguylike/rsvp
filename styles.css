@@ -1018,7 +1018,7 @@ button:disabled {
 .date-audit-list li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 18px;
   align-items: center;
 }
 
@@ -1463,7 +1463,7 @@ button:disabled {
 
   .date-audit-list li {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
+    gap: 16px;
   }
 
   .date-audit-list strong {
