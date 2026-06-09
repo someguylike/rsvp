@@ -124,18 +124,34 @@
     nameInput.focus();
   }
 
-  function fillForm(member) {
+  function focusRelevantMemberField(member) {
+    if (!member.venmo) {
+      venmoInput.focus();
+      return;
+    }
+    if (!member.messenger) {
+      messengerInput.focus();
+      return;
+    }
+    noteInput.focus();
+  }
+
+  function fillForm(member, options) {
     editingOriginalName = member.name || "";
     nameInput.value = member.name || "";
     venmoInput.value = member.venmo || "";
     messengerInput.value = member.messenger || "";
     noteInput.value = member.note || "";
     updateSaveButtonLabel();
-    nameInput.focus();
+    if (options?.focusRelevantField) {
+      focusRelevantMemberField(member);
+    } else {
+      nameInput.focus();
+    }
   }
 
   function fillMissingInfoForm(member) {
-    fillForm(member);
+    fillForm(member, { focusRelevantField: true });
     const missingInfo = getMissingMemberInfo(member);
     setStatus(
       missingInfo.length > 0
@@ -425,7 +441,7 @@
           return;
         }
         if (adminToken) {
-          fillForm(member);
+          fillForm(member, { focusRelevantField: true });
         } else {
           fillMissingInfoForm(member);
         }
@@ -434,7 +450,7 @@
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           if (adminToken) {
-            fillForm(member);
+            fillForm(member, { focusRelevantField: true });
           } else {
             fillMissingInfoForm(member);
           }
