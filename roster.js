@@ -159,7 +159,7 @@
       const selectedMember = findRosterMemberByName(nameInput.value);
       const canUpdateInfo = selectedMember && !isRenamingMember();
       saveButton.disabled = !canUpdateInfo;
-      saveButton.textContent = "Add/Update Info";
+      saveButton.textContent = "Update Info";
       return;
     }
     saveButton.disabled = false;
@@ -291,7 +291,6 @@
   function appendNoteCell(row, member) {
     const cell = document.createElement("td");
     const note = String(member.note || "").trim();
-    const cellphone = String(member.cellphone || "").trim();
 
     cell.className = "member-note-cell";
     cell.dataset.label = "Note";
@@ -300,13 +299,6 @@
       const noteText = document.createElement("span");
       noteText.textContent = note;
       cell.append(noteText);
-    }
-
-    if (adminToken && cellphone) {
-      const phoneText = document.createElement("span");
-      phoneText.className = "member-note-phone";
-      phoneText.textContent = `Cell: ${cellphone}`;
-      cell.append(phoneText);
     }
 
     if (!cell.hasChildNodes()) {
@@ -383,7 +375,7 @@
     }
 
     return roster.filter((member) =>
-      [member.name, member.venmo, member.messenger, member.cellphone, member.note].some(
+      [member.name, member.venmo, member.messenger, member.note].some(
         (value) => normalizeSearchText(value).includes(query),
       ),
     );
@@ -431,6 +423,22 @@
       const venmoUrl = getVenmoUrl(member.venmo);
       if (isSelected) {
         row.className = "selected-member-row";
+      }
+      row.classList.add("member-row");
+      if (!adminToken) {
+        row.tabIndex = 0;
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("a, button")) {
+            return;
+          }
+          fillMissingInfoForm(member);
+        });
+        row.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            fillMissingInfoForm(member);
+          }
+        });
       }
       appendMemberNameCell(row, member);
       appendLinkCell(
@@ -491,13 +499,14 @@
         missingWrap.className = "missing-info-action";
         addButton.className = "secondary-button inline-button";
         addButton.type = "button";
-        addButton.textContent = "Add/Update Info";
+        addButton.textContent = "Update Info";
         addButton.title =
           missingInfo.length > 0
             ? `Missing ${missingInfo.join(", ")}`
             : "Review existing info";
         addButton.disabled = isSelected;
-        addButton.addEventListener("click", () => {
+        addButton.addEventListener("click", (event) => {
+          event.stopPropagation();
           fillMissingInfoForm(member);
         });
         missingWrap.append(addButton);

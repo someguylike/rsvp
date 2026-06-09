@@ -876,11 +876,6 @@ button:disabled {
   color: var(--muted);
 }
 
-.member-note-phone {
-  color: #344054;
-  font-size: 0.78rem;
-}
-
 .roster-member-table th:nth-child(5),
 .roster-member-table td:nth-child(5) {
   min-width: 150px;
@@ -889,6 +884,15 @@ button:disabled {
 
 .selected-member-row td {
   background: #fff8df;
+}
+
+.member-row {
+  cursor: pointer;
+}
+
+.member-row:focus-visible td {
+  outline: 3px solid rgb(0 94 184 / 18%);
+  outline-offset: -3px;
 }
 
 .member-name-cell {

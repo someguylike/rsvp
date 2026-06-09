@@ -15,7 +15,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Cellphone", "Note"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Note"];
 const AUDIT_HEADERS = [
   "Logged At",
   "Action",
@@ -712,7 +712,7 @@ function getRosterSheet_() {
   if (shouldSeedRoster && sheet.getLastRow() < 2) {
     sheet
       .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
-      .setValues(PLAYERS.map((name) => [name, "", "", "", ""]));
+      .setValues(PLAYERS.map((name) => [name, "", "", ""]));
   }
 
   return sheet;
@@ -736,16 +736,45 @@ function migrateRosterSheet_(sheet) {
     sheet.getRange(2, 2, lastRow - 1, 1).setValues(venmoValues);
   }
 
-  if (headers[4] && headers[4] !== "Note" && sheet.getLastRow() >= 2) {
-    sheet.getRange(2, 5, sheet.getLastRow() - 1, 1).clearContent();
+  if (headers[3] === "Cellphone" && headers[4] === "Note") {
+    mergeRosterCellphoneIntoNote_(sheet);
+  } else if (headers[3] && headers[3] !== "Note" && sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 4, sheet.getLastRow() - 1, 1).clearContent();
   }
 
-  if (lastColumn > ROSTER_HEADERS.length) {
+  const currentLastColumn = sheet.getLastColumn();
+  if (currentLastColumn > ROSTER_HEADERS.length) {
     sheet.deleteColumns(
       ROSTER_HEADERS.length + 1,
-      lastColumn - ROSTER_HEADERS.length,
+      currentLastColumn - ROSTER_HEADERS.length,
     );
   }
+}
+
+function mergeRosterCellphoneIntoNote_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    const mergedNotes = values.map((row) => {
+      const cellphone = String(row[3] || "").trim();
+      const note = String(row[4] || "").trim();
+      if (!cellphone) {
+        return [note];
+      }
+      const phoneNote = `Cell: ${cellphone}`;
+      if (!note) {
+        return [phoneNote];
+      }
+      if (note.indexOf(cellphone) !== -1) {
+        return [note];
+      }
+      return [`${note}; ${phoneNote}`];
+    });
+    sheet.getRange(2, 4, mergedNotes.length, 1).setValues(mergedNotes);
+  }
+
+  sheet.getRange(1, 4).setValue("Note");
+  sheet.deleteColumn(5);
 }
 
 function getRoster_() {
@@ -763,8 +792,7 @@ function getRoster_() {
       name: String(row[0] || "").trim(),
       venmo: String(row[1] || "").trim(),
       messenger: String(row[2] || "").trim(),
-      cellphone: String(row[3] || "").trim(),
-      note: String(row[4] || "").trim(),
+      note: String(row[3] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
@@ -804,12 +832,11 @@ function saveRosterMember_(params) {
     );
     const venmo = normalizeVenmo_(required_(params.venmo, "Missing Venmo"));
     const messenger = params.messenger ? normalizeMessenger_(params.messenger) : "";
-    const cellphone = sanitizeText_(params.cellphone || "");
     const note = sanitizeText_(params.note || "");
     const sheet = getRosterSheet_();
     const oldRow = oldName ? findRosterRow_(sheet, oldName) : null;
     const row = findRosterRow_(sheet, name);
-    const values = [name, venmo, messenger, cellphone, note];
+    const values = [name, venmo, messenger, note];
 
     if (oldName && normalize_(oldName) !== normalize_(name)) {
       if (!oldRow) {
@@ -866,13 +893,11 @@ function completeRosterMemberInfo_(params) {
     const current = {
       venmo: String(values[1] || "").trim(),
       messenger: String(values[2] || "").trim(),
-      cellphone: String(values[3] || "").trim(),
-      note: String(values[4] || "").trim(),
+      note: String(values[3] || "").trim(),
     };
     const requested = {
       venmo: params.venmo ? normalizeVenmo_(params.venmo) : "",
       messenger: params.messenger ? normalizeMessenger_(params.messenger) : "",
-      cellphone: sanitizeText_(params.cellphone || ""),
       note: sanitizeText_(params.note || ""),
     };
     const updatedFields = [];
@@ -897,17 +922,8 @@ function completeRosterMemberInfo_(params) {
       }
     }
 
-    if (requested.cellphone) {
-      if (!current.cellphone) {
-        values[3] = requested.cellphone;
-        updatedFields.push("Cellphone");
-      } else if (normalize_(current.cellphone) !== normalize_(requested.cellphone)) {
-        throw new Error("Admin login is required to change an existing cellphone.");
-      }
-    }
-
     if (current.note !== requested.note) {
-      values[4] = requested.note;
+      values[3] = requested.note;
       updatedFields.push("Note");
     }
 
