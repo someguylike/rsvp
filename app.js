@@ -354,11 +354,12 @@
       playerMemory.replaceChildren(
         document.createTextNode("Submitting as "),
         createSubmitName(currentName),
-        document.createTextNode("."),
       );
       const identityHint = createPlayerIdentityHint(currentName);
       if (identityHint) {
         playerMemory.append(document.createTextNode(" "), identityHint);
+      } else {
+        playerMemory.append(document.createTextNode("."));
       }
     } else if (currentName) {
       playerMemory.hidden = false;
@@ -423,7 +424,7 @@
 
     const hint = document.createElement("span");
     hint.className = "player-identity-hint";
-    hint.textContent = `· ${hints.join(" · ")}`;
+    hint.textContent = `(${hints.join(", ")})`;
     return hint;
   }
 
@@ -447,7 +448,7 @@
       /^(?:https?:\/\/)?(?:(?:www|account)\.)?venmo\.com\/(?:u\/)?([A-Za-z0-9_.-]+)\/?$/i,
     );
     const handle = match ? match[1] : text.replace(/^@/, "");
-    return handle ? `@${handle}` : "";
+    return handle ? `Venmo:@${handle}` : "";
   }
 
   function formatFacebookHint(value) {
@@ -458,14 +459,14 @@
 
     const profileIdMatch = text.match(/[?&]id=([0-9]+)/i);
     if (profileIdMatch) {
-      return `FB ${profileIdMatch[1]}`;
+      return `FB: ${profileIdMatch[1]}`;
     }
 
     const pathMatch = text.match(
       /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:facebook|fb)\.com\/([^/?#]+)/i,
     );
     const handle = pathMatch ? pathMatch[1] : text.replace(/^@/, "");
-    return handle ? `FB ${handle}` : "";
+    return handle ? `FB: ${handle}` : "";
   }
 
   function rememberPlayerName(name) {
