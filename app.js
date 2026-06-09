@@ -316,7 +316,7 @@
       playerMemory.innerHTML = `Warning: submitting as <strong>${escapeHtml(currentName)}</strong>, not your last used name ${escapeHtml(rememberedPlayerName)}.`;
     } else if (selectedValidName) {
       playerMemory.hidden = false;
-      playerMemory.innerHTML = `Submitting as <strong>${escapeHtml(currentName)}</strong>.`;
+      playerMemory.innerHTML = `Submitting as <strong class="submit-player-name">${escapeHtml(currentName)}</strong>.`;
     } else if (currentName) {
       playerMemory.hidden = false;
       playerMemory.textContent = "Choose the matching name from the list before submitting.";
