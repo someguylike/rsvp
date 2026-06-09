@@ -103,26 +103,35 @@
     window.setTimeout(clearProgress, 900);
   }
 
-  function setStatusWithLink(message, href, linkText) {
+  function buildShareUrl(month) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("month", month);
+    return url.toString();
+  }
+
+  function appendStatusLink(href, linkText) {
     const link = document.createElement("a");
-    status.textContent = `${message} `;
-    status.className = "status success";
     link.href = href;
     link.target = "_blank";
     link.rel = "noreferrer";
-    link.textContent = linkText || "Open spreadsheet";
+    link.textContent = linkText;
     status.append(link);
   }
 
-  function setReportStatus(message, href) {
-    latestReportStatus = { message, href };
+  function setReportStatus(message, href, month) {
+    latestReportStatus = { message, href, month };
+    status.textContent = `${message} `;
+    status.className = "status success";
+
     if (adminToken && href) {
-      setStatusWithLink(message, href);
-      return;
+      appendStatusLink(href, "Open spreadsheet");
+      status.append(" ");
     }
 
-    status.textContent = message;
-    status.className = "status success";
+    if (month) {
+      appendStatusLink(buildShareUrl(month), "Share Link");
+    }
   }
 
   function renderAccessNotice() {
@@ -142,20 +151,6 @@
     if (exportButton) {
       exportButton.hidden = !adminToken;
     }
-  }
-
-  function setShareLink(month) {
-    const url = new URL(window.location.href);
-    url.search = "";
-    url.searchParams.set("month", month);
-
-    const link = document.createElement("a");
-    link.href = url.toString();
-    link.textContent = url.toString();
-    shareStatus.textContent = "Share this month: ";
-    shareStatus.className = "status success";
-    shareStatus.hidden = false;
-    shareStatus.append(link);
   }
 
   function clearPreview() {
@@ -598,14 +593,14 @@
         return;
       }
       setReportStatus(
-        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates.`,
+        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
         result.url,
+        month,
       );
       finishProgress(
         `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates.`,
       );
       renderPreview(result.previewRows);
-      setShareLink(month);
 
       const url = new URL(window.location.href);
       url.searchParams.set("month", month);
@@ -693,7 +688,11 @@
       return;
     }
     if (latestReportStatus) {
-      setReportStatus(latestReportStatus.message, latestReportStatus.href);
+      setReportStatus(
+        latestReportStatus.message,
+        latestReportStatus.href,
+        latestReportStatus.month,
+      );
     }
   });
 
