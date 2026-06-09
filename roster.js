@@ -25,6 +25,7 @@
   let roster = [];
   let adminToken = "";
   let editingOriginalName = "";
+  const facebookPhotoCache = new Map();
 
   function readAdminAuth() {
     try {
@@ -269,6 +270,7 @@
       image.addEventListener("error", () => {
         image.remove();
         fallback.hidden = false;
+        resolveFacebookProfilePhoto(member, cell, fallback);
       });
       fallback.hidden = true;
       cell.append(image, fallback);
@@ -278,6 +280,47 @@
 
     row.append(cell);
     return cell;
+  }
+
+  async function resolveFacebookProfilePhoto(member, cell, fallback) {
+    const contact = normalizeMessengerContact(member.messenger);
+    if (!contact?.url || facebookPhotoCache.get(contact.url) === "") {
+      return;
+    }
+
+    if (!facebookPhotoCache.has(contact.url)) {
+      try {
+        const result = await requestAppsScript({
+          action: "getFacebookProfilePhoto",
+          facebookUrl: contact.url,
+        });
+        facebookPhotoCache.set(contact.url, result.photoUrl || "");
+      } catch {
+        facebookPhotoCache.set(contact.url, "");
+      }
+    }
+
+    const photoUrl = facebookPhotoCache.get(contact.url);
+    if (!photoUrl || !cell.isConnected || cell.querySelector("img")) {
+      return;
+    }
+
+    const image = document.createElement("img");
+    image.alt = `${member.name || "Member"} Facebook profile`;
+    image.className = "roster-avatar";
+    image.decoding = "async";
+    image.loading = "lazy";
+    image.referrerPolicy = "no-referrer";
+    image.src = photoUrl;
+    image.addEventListener("load", () => {
+      fallback.hidden = true;
+    });
+    image.addEventListener("error", () => {
+      image.remove();
+      fallback.hidden = false;
+      facebookPhotoCache.set(contact.url, "");
+    });
+    cell.prepend(image);
   }
 
   function appendLinkCell(row, text, href, warningMessage) {

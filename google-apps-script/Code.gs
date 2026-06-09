@@ -115,6 +115,14 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "getFacebookProfilePhoto") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "getFacebookProfilePhoto",
+        photoUrl: getFacebookProfilePhoto_(params.facebookUrl),
+      });
+    }
+
     if (params.action === "saveRosterMember") {
       const result = saveRosterMember_(params);
       return jsonp_(callback, {
@@ -1386,6 +1394,49 @@ function normalizePhotoUrl_(value) {
   }
 
   return sanitizeText_(text);
+}
+
+function getFacebookProfilePhoto_(facebookUrl) {
+  const normalizedUrl = normalizeMessenger_(facebookUrl);
+  const cache = CacheService.getScriptCache();
+  const cacheKey = `fb_photo:${Utilities.base64EncodeWebSafe(normalizedUrl).slice(0, 180)}`;
+  const cached = cache.get(cacheKey);
+
+  if (cached !== null) {
+    return cached;
+  }
+
+  try {
+    const response = UrlFetchApp.fetch(normalizedUrl, {
+      followRedirects: true,
+      muteHttpExceptions: true,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+          "(KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+      },
+    });
+    const html = response.getContentText() || "";
+    const match = html.match(
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+    );
+    const photoUrl = match ? decodeHtmlEntities_(match[1]) : "";
+    cache.put(cacheKey, photoUrl, 21600);
+    return photoUrl;
+  } catch (error) {
+    console.warn(`Could not fetch Facebook profile image: ${error.message}`);
+    cache.put(cacheKey, "", 900);
+    return "";
+  }
+}
+
+function decodeHtmlEntities_(value) {
+  return String(value || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 function sanitizeText_(value) {
