@@ -160,6 +160,11 @@ h1 {
   gap: 18px;
 }
 
+.rsvp-details {
+  display: grid;
+  gap: 18px;
+}
+
 .field {
   position: relative;
   display: grid;
@@ -214,7 +219,7 @@ select:focus {
   right: 0;
   left: 0;
   display: grid;
-  max-height: 220px;
+  max-height: min(300px, calc(100vh - 180px));
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -227,12 +232,12 @@ select:focus {
 }
 
 .player-option {
-  min-height: 42px;
+  min-height: 52px;
   border: 0;
   border-radius: 0;
   background: white;
   color: var(--text);
-  padding: 9px 12px;
+  padding: 12px 14px;
   box-shadow: none;
   text-align: left;
   font-weight: 650;
@@ -269,6 +274,23 @@ select:focus {
 
 .player-memory.warning strong {
   color: #8a320d;
+}
+
+.change-player-button {
+  width: fit-content;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent-strong);
+  font-size: 0.84rem;
+  padding: 6px 10px;
+  box-shadow: none;
+}
+
+.change-player-button:hover {
+  border-color: var(--accent);
+  background: white;
+  box-shadow: none;
 }
 
 .segmented {
@@ -402,6 +424,7 @@ button:disabled {
   color: #ffffff;
   font-weight: 900;
   margin-left: 4px;
+  overflow-wrap: anywhere;
   padding: 2px 7px;
 }
 

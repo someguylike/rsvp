@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Who’s In This Week?</title>
-    <link rel="stylesheet" href="./styles.css?v=20260609-4" />
+    <link rel="stylesheet" href="./styles.css?v=20260609-5" />
   </head>
   <body>
     <main class="shell">
@@ -33,58 +33,62 @@
               name="playerName"
               autocomplete="off"
               inputmode="search"
-              autofocus
               required
               placeholder="Search your name"
             />
             <p id="player-memory" class="player-memory" hidden></p>
+            <button id="change-player-button" class="change-player-button" type="button" hidden>
+              Change player
+            </button>
             <div id="player-list" class="player-list" hidden></div>
           </div>
 
-          <fieldset class="field">
-            <legend>Date to play</legend>
-            <input id="play-date" name="playDate" type="hidden" required />
-            <div
-              id="date-options"
-              class="date-options"
-              role="radiogroup"
-              aria-label="Date to play"
-            ></div>
-            <label id="custom-date-field" class="custom-date-field">
-              <span>Other date</span>
-              <input id="custom-play-date" type="date" />
+          <div id="rsvp-details" class="rsvp-details" hidden>
+            <fieldset class="field">
+              <legend>Date to play</legend>
+              <input id="play-date" name="playDate" type="hidden" required />
+              <div
+                id="date-options"
+                class="date-options"
+                role="radiogroup"
+                aria-label="Date to play"
+              ></div>
+              <label id="custom-date-field" class="custom-date-field">
+                <span>Other date</span>
+                <input id="custom-play-date" type="date" />
+              </label>
+            </fieldset>
+
+            <label class="field">
+              <span>Reserved spots</span>
+              <select
+                id="participant-count"
+                name="participantCount"
+                aria-describedby="participant-count-help"
+                title="0 = not going, 1 = going by yourself, 2-5 = total spots including guests"
+                required
+              >
+                <option value="0">Not going</option>
+                <option value="1" selected>Just me</option>
+                <option value="2">Me + 1</option>
+                <option value="3">Me + 2</option>
+                <option value="4">Me + 3</option>
+                <option value="5">Me + 4</option>
+              </select>
+              <small id="participant-count-help" class="field-help">
+                0 = not going, 1 = going by yourself, 2-5 = total spots including guests.
+              </small>
             </label>
-          </fieldset>
 
-          <label class="field">
-            <span>Reserved spots</span>
-            <select
-              id="participant-count"
-              name="participantCount"
-              aria-describedby="participant-count-help"
-              title="0 = not going, 1 = going by yourself, 2-5 = total spots including guests"
-              required
-            >
-              <option value="0">0</option>
-              <option value="1" selected>1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-            </select>
-            <small id="participant-count-help" class="field-help">
-              0 = not going, 1 = going by yourself, 2-5 = total spots including guests.
-            </small>
-          </label>
-
-          <button id="submit-button" type="submit">Submit RSVP</button>
-          <button id="remove-rsvp-button" class="remove-rsvp-button" type="button" hidden>
-            Remove this RSVP
-          </button>
+            <button id="submit-button" type="submit">Submit RSVP</button>
+            <button id="remove-rsvp-button" class="remove-rsvp-button" type="button" hidden>
+              Remove this RSVP
+            </button>
+          </div>
           <p id="status" class="status" role="status" aria-live="polite"></p>
         </form>
 
-        <section class="tally" aria-labelledby="tally-title">
+        <section id="tally-section" class="tally" aria-labelledby="tally-title" hidden>
           <div class="tally-header">
             <h2 id="tally-title">Joining this date</h2>
             <p id="tally-count">No RSVPs yet</p>
@@ -120,6 +124,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260609-6"></script>
+    <script src="./app.js?v=20260609-8"></script>
   </body>
 </html>

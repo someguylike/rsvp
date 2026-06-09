@@ -56,6 +56,8 @@
   const playerInput = document.querySelector("#player-name");
   const playerList = document.querySelector("#player-list");
   const playerMemory = document.querySelector("#player-memory");
+  const changePlayerButton = document.querySelector("#change-player-button");
+  const rsvpDetails = document.querySelector("#rsvp-details");
   const dateInput = document.querySelector("#play-date");
   const dateOptions = document.querySelector("#date-options");
   const customDateField = document.querySelector("#custom-date-field");
@@ -64,6 +66,7 @@
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
   const removeRsvpButton = document.querySelector("#remove-rsvp-button");
+  const tallySection = document.querySelector("#tally-section");
   const tallyCount = document.querySelector("#tally-count");
   const tallyList = document.querySelector("#tally-list");
   const overrideDialog = document.querySelector("#override-dialog");
@@ -160,7 +163,7 @@
   function selectPlayDate(value, options) {
     const isCustom = Boolean(options?.isCustom);
     dateInput.value = value;
-    if (customDateInput && customDateInput.value !== value) {
+    if (isCustom && customDateInput && customDateInput.value !== value) {
       customDateInput.value = value;
     }
     customDateField?.classList.toggle("active", isCustom);
@@ -171,6 +174,8 @@
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-checked", String(isActive));
     });
+    setRemoveRsvpAction(null);
+    updatePlayerMemory();
     loadTally(value);
   }
 
@@ -178,6 +183,8 @@
     customDateField?.classList.add("active");
     dateInput.value = customDateInput?.value || "";
     latestTallyRequest += 1;
+    setRemoveRsvpAction(null);
+    updatePlayerMemory();
     tallyCount.textContent = "Choose a date";
     tallyList.replaceChildren();
     dateOptions.querySelectorAll(".date-option").forEach((button) => {
@@ -232,11 +239,6 @@
     otherTitle.textContent = "Other date";
     otherButton.append(otherTitle);
     otherButton.addEventListener("click", () => {
-      if (customDateInput?.value) {
-        selectPlayDate(customDateInput.value, { isCustom: true });
-        return;
-      }
-
       selectCustomDateOption();
     });
     dateOptions.append(otherButton);
@@ -263,7 +265,7 @@
   function getPlayerMatches(query) {
     const normalizedQuery = normalizeSearchText(query);
     if (!normalizedQuery) {
-      return prioritizeRememberedPlayer(PLAYERS);
+      return rememberedPlayerName ? [rememberedPlayerName] : [];
     }
 
     return prioritizeRememberedPlayer(
@@ -302,6 +304,9 @@
       selectedValidName && rememberedPlayerName && currentName !== rememberedPlayerName;
 
     playerMemory.classList.toggle("warning", Boolean(changedFromRemembered));
+    if (changePlayerButton) {
+      changePlayerButton.hidden = !selectedValidName;
+    }
 
     if (!currentName && rememberedPlayerName) {
       playerMemory.hidden = false;
@@ -320,14 +325,31 @@
       playerMemory.textContent = "";
     }
 
+    updateSubmitButton(selectedValidName ? currentName : "");
+    updateSectionVisibility(selectedValidName);
+  }
+
+  function updateSubmitButton(playerName) {
     submitButton.replaceChildren();
-    if (selectedValidName) {
-      submitButton.append(
-        document.createTextNode("Submit RSVP for "),
-        createSubmitName(currentName),
-      );
-    } else {
+    if (!playerName) {
       submitButton.textContent = "Submit RSVP";
+      return;
+    }
+
+    const count = Number(participantInput.value || 1);
+    const countText = count === 1 ? "1 spot" : `${count} spots`;
+    submitButton.append(
+      document.createTextNode(count === 0 ? "Mark not going for " : `Reserve ${countText} for `),
+      createSubmitName(playerName),
+    );
+  }
+
+  function updateSectionVisibility(showDetails) {
+    if (rsvpDetails) {
+      rsvpDetails.hidden = !showDetails;
+    }
+    if (tallySection) {
+      tallySection.hidden = !showDetails;
     }
   }
 
@@ -361,6 +383,11 @@
     if (!options?.keepFocus) {
       playerInput.blur();
     }
+    if (options?.scrollToDetails && isMobileViewport()) {
+      window.setTimeout(() => {
+        rsvpDetails?.scrollIntoView({ block: "start", behavior: "smooth" });
+      }, 160);
+    }
   }
 
   function renderPlayerMatches(query) {
@@ -374,12 +401,12 @@
         option.addEventListener("pointerdown", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          selectPlayerName(name);
+          selectPlayerName(name, { scrollToDetails: true });
         });
         option.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          selectPlayerName(name);
+          selectPlayerName(name, { scrollToDetails: true });
         });
         return option;
       }),
@@ -390,6 +417,13 @@
 
   function isValidPlayerName(name) {
     return PLAYERS.some((player) => player === name);
+  }
+
+  function exactPlayerMatch(value) {
+    const normalizedValue = normalizeSearchText(value);
+    if (!normalizedValue) return "";
+    const matches = PLAYERS.filter((player) => normalizeSearchText(player) === normalizedValue);
+    return matches.length === 1 ? matches[0] : "";
   }
 
   function setStatus(message, type) {
@@ -417,7 +451,19 @@
       return;
     }
     removeRsvpButton.hidden = false;
-    removeRsvpButton.textContent = `Remove RSVP for ${payload.playerName}`;
+    removeRsvpButton.textContent = `Remove RSVP for ${payload.playerName} on ${formatShortDisplayDate(payload.playDate)}`;
+  }
+
+  function formatShortDisplayDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
+      return value || "selected date";
+    }
+    const date = new Date(`${value}T00:00:00`);
+    return date.toLocaleDateString(DISPLAY_LOCALE, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
   }
 
   function collectPayload() {
@@ -811,8 +857,14 @@
     }
   }
 
+  function isMobileViewport() {
+    return (
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches
+    ) || window.innerWidth <= 720;
+  }
+
   async function initialize() {
-    focusPlayerInput();
     await loadRoster();
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
     const lastPlayerName = readString(LAST_PLAYER_KEY) || lastRsvp?.playerName || "";
@@ -820,12 +872,14 @@
       rememberedPlayerName = lastPlayerName;
       selectPlayerName(lastPlayerName, { remember: false, keepFocus: true });
     }
-    renderPlayerOptions();
     renderDateOptions();
 
     participantInput.value = "1";
-    focusPlayerInput();
-    window.setTimeout(focusPlayerInput, 150);
+    updatePlayerMemory();
+    if (!selectedPlayerName && !isMobileViewport()) {
+      focusPlayerInput();
+      renderPlayerMatches("");
+    }
   }
 
   form.addEventListener("submit", async (event) => {
@@ -864,15 +918,29 @@
   });
 
   playerInput.addEventListener("focus", () => {
+    if (selectedPlayerName && playerInput.value.trim() === selectedPlayerName) {
+      hidePlayerList();
+      return;
+    }
     renderPlayerMatches(playerInput.value);
   });
 
   playerInput.addEventListener("input", () => {
-    if (playerInput.value.trim() !== selectedPlayerName) {
+    const exactMatch = exactPlayerMatch(playerInput.value);
+    if (exactMatch) {
+      playerInput.value = exactMatch;
+      selectedPlayerName = exactMatch;
+    } else if (playerInput.value.trim() !== selectedPlayerName) {
       selectedPlayerName = "";
     }
+    setRemoveRsvpAction(null);
     updatePlayerMemory();
     renderPlayerMatches(playerInput.value);
+  });
+
+  participantInput.addEventListener("change", () => {
+    setRemoveRsvpAction(null);
+    updatePlayerMemory();
   });
 
   playerInput.addEventListener("blur", () => {
@@ -904,5 +972,14 @@
       return;
     }
     removeExistingRsvp(lastSubmittedPayload);
+  });
+
+  changePlayerButton?.addEventListener("click", () => {
+    selectedPlayerName = "";
+    playerInput.value = "";
+    setRemoveRsvpAction(null);
+    updatePlayerMemory();
+    focusPlayerInput();
+    hidePlayerList();
   });
 })();
