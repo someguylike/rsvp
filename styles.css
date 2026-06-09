@@ -396,11 +396,13 @@ button:disabled {
 }
 
 .submit-player-name {
-  color: #ffdfd6;
+  display: inline-block;
+  border-radius: 6px;
+  background: #b42318;
+  color: #ffffff;
   font-weight: 900;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
+  margin-left: 4px;
+  padding: 2px 7px;
 }
 
 .secondary-button {
