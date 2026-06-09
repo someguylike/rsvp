@@ -292,6 +292,17 @@ select:focus {
   color: #ffffff;
 }
 
+.player-identity-hint {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 .player-memory.warning {
   border: 1px solid #f2b8a2;
   border-radius: 8px;

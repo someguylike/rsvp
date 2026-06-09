@@ -81,6 +81,7 @@
   let lastSubmittedPayload = null;
   let publicIpPromise = null;
   let activePlayerOptionIndex = -1;
+  const rosterContactsByName = new Map();
 
   function readJson(key, fallback) {
     try {
@@ -341,7 +342,15 @@
       playerMemory.innerHTML = `Warning: submitting as <strong>${escapeHtml(currentName)}</strong>, not your last used name ${escapeHtml(rememberedPlayerName)}.`;
     } else if (selectedValidName) {
       playerMemory.hidden = false;
-      playerMemory.innerHTML = `Submitting as <strong class="submit-player-name">${escapeHtml(currentName)}</strong>.`;
+      playerMemory.replaceChildren(
+        document.createTextNode("Submitting as "),
+        createSubmitName(currentName),
+        document.createTextNode("."),
+      );
+      const identityHint = createPlayerIdentityHint(currentName);
+      if (identityHint) {
+        playerMemory.append(document.createTextNode(" "), identityHint);
+      }
     } else if (currentName) {
       playerMemory.hidden = false;
       playerMemory.textContent = "Choose the matching name from the list before submitting.";
@@ -395,6 +404,57 @@
     nameElement.className = "submit-player-name";
     nameElement.textContent = name;
     return nameElement;
+  }
+
+  function createPlayerIdentityHint(name) {
+    const hints = getPlayerIdentityHints(name);
+    if (hints.length === 0) {
+      return null;
+    }
+
+    const hint = document.createElement("span");
+    hint.className = "player-identity-hint";
+    hint.textContent = `· ${hints.join(" · ")}`;
+    return hint;
+  }
+
+  function getPlayerIdentityHints(name) {
+    const member = rosterContactsByName.get(name);
+    if (!member) {
+      return [];
+    }
+
+    return [
+      formatVenmoHint(member.venmo),
+      formatFacebookHint(member.messenger),
+    ].filter(Boolean);
+  }
+
+  function formatVenmoHint(value) {
+    const text = String(value || "").trim();
+    const match = text.match(
+      /^(?:https?:\/\/)?(?:(?:www|account)\.)?venmo\.com\/(?:u\/)?([A-Za-z0-9_.-]+)\/?$/i,
+    );
+    const handle = match ? match[1] : text.replace(/^@/, "");
+    return handle ? `@${handle}` : "";
+  }
+
+  function formatFacebookHint(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+
+    const profileIdMatch = text.match(/[?&]id=([0-9]+)/i);
+    if (profileIdMatch) {
+      return `FB ${profileIdMatch[1]}`;
+    }
+
+    const pathMatch = text.match(
+      /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:facebook|fb)\.com\/([^/?#]+)/i,
+    );
+    const handle = pathMatch ? pathMatch[1] : text.replace(/^@/, "");
+    return handle ? `FB ${handle}` : "";
   }
 
   function escapeHtml(value) {
@@ -1015,6 +1075,13 @@
       const names = roster
         .map((member) => String(member.name || "").trim())
         .filter(Boolean);
+      rosterContactsByName.clear();
+      roster.forEach((member) => {
+        const name = String(member.name || "").trim();
+        if (name) {
+          rosterContactsByName.set(name, member);
+        }
+      });
       if (names.length > 0) {
         PLAYERS = names;
       }
