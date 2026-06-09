@@ -32,6 +32,7 @@
   let progressPercent = 0;
   let autoLoadTimer = 0;
   let latestLoadRequest = 0;
+  let adminAuthReady = false;
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -125,6 +126,16 @@
   }
 
   function renderAccessNotice() {
+    if (!adminAuthReady) {
+      if (staleWarning) {
+        staleWarning.hidden = true;
+      }
+      if (exportButton) {
+        exportButton.hidden = true;
+      }
+      return;
+    }
+
     if (staleWarning) {
       staleWarning.hidden = Boolean(adminToken);
     }
@@ -587,7 +598,7 @@
         return;
       }
       setReportStatus(
-        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
+        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates.`,
         result.url,
       );
       finishProgress(
@@ -660,7 +671,7 @@
       return;
     }
 
-    scheduleReportLoad();
+    scheduleReportLoad("export");
   });
 
   const monthFromUrl = new URLSearchParams(window.location.search).get("month");
@@ -687,7 +698,8 @@
   });
 
   adminAuth.ready.then(() => {
+    adminAuthReady = true;
     renderAccessNotice();
-    scheduleReportLoad();
+    scheduleReportLoad("view");
   });
 })();
