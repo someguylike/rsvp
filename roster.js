@@ -23,6 +23,7 @@
   const memberTable = document.querySelector("#member-table");
   let roster = [];
   let adminToken = "";
+  let editingOriginalName = "";
 
   function readAdminAuth() {
     try {
@@ -56,6 +57,7 @@
     loginPanel.hidden = Boolean(adminToken);
     adminSession.hidden = !adminToken;
     adminEyebrow.hidden = !adminToken;
+    updateSaveButtonLabel();
     renderRoster();
   }
 
@@ -146,15 +148,34 @@
 
   function clearForm() {
     form.reset();
+    editingOriginalName = "";
+    updateSaveButtonLabel();
     nameInput.focus();
   }
 
   function fillForm(member) {
+    editingOriginalName = member.name || "";
     nameInput.value = member.name || "";
     venmoInput.value = member.venmo || "";
     messengerInput.value = member.messenger || "";
     cellphoneInput.value = member.cellphone || "";
+    updateSaveButtonLabel();
     nameInput.focus();
+  }
+
+  function isRenamingMember() {
+    return (
+      editingOriginalName &&
+      normalizeSearchText(editingOriginalName) !== normalizeSearchText(nameInput.value)
+    );
+  }
+
+  function updateSaveButtonLabel() {
+    if (isRenamingMember()) {
+      saveButton.textContent = "Rename Member";
+      return;
+    }
+    saveButton.textContent = editingOriginalName ? "Update Member" : "Save Member";
   }
 
   function findRosterMemberByName(name) {
@@ -394,18 +415,24 @@
     setStatus("Saving member...", "");
 
     try {
+      if (payload.oldPlayerName && !adminToken) {
+        throw new Error("Log in as admin before renaming a member.");
+      }
       const result = await requestAppsScript({
         action: "saveRosterMember",
+        adminToken,
         ...payload,
       });
       roster = Array.isArray(result.roster) ? result.roster : [];
       renderMemberNameOptions();
       renderRoster();
       clearForm();
-      setStatus(
-        result.action === "updated" ? "Updated member." : "Added member.",
-        "success",
-      );
+      const messages = {
+        created: "Added member.",
+        updated: "Updated member.",
+        renamed: "Renamed member. Past RSVPs and audit rows were left unchanged.",
+      };
+      setStatus(messages[result.action] || "Saved member.", "success");
     } catch (error) {
       setStatus(error.message, "error");
     } finally {
@@ -474,8 +501,15 @@
       return;
     }
     payload.messenger = messengerContact.value;
+    if (isRenamingMember()) {
+      payload.oldPlayerName = editingOriginalName;
+    }
 
     saveMember(payload);
+  });
+
+  nameInput.addEventListener("input", () => {
+    updateSaveButtonLabel();
   });
 
   nameInput.addEventListener("change", () => {

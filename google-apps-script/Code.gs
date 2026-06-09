@@ -772,6 +772,7 @@ function saveRosterMember_(params) {
   lock.waitLock(10000);
 
   try {
+    const oldName = sanitizeText_(params.oldPlayerName || params.oldName || "");
     const name = sanitizeText_(
       required_(params.playerName || params.name, "Missing player name").trim(),
     );
@@ -781,8 +782,25 @@ function saveRosterMember_(params) {
     );
     const cellphone = sanitizeText_(params.cellphone || "");
     const sheet = getRosterSheet_();
+    const oldRow = oldName ? findRosterRow_(sheet, oldName) : null;
     const row = findRosterRow_(sheet, name);
     const values = [name, venmo, messenger, cellphone];
+
+    if (oldName && normalize_(oldName) !== normalize_(name)) {
+      requireAdmin_(params);
+      if (!oldRow) {
+        throw new Error("Original roster member was not found");
+      }
+      if (row) {
+        throw new Error("A roster member with the new name already exists");
+      }
+
+      sheet.getRange(oldRow, 1, 1, ROSTER_HEADERS.length).setValues([values]);
+      return {
+        action: "renamed",
+        roster: getRoster_(),
+      };
+    }
 
     if (row) {
       sheet.getRange(row, 1, 1, ROSTER_HEADERS.length).setValues([values]);
