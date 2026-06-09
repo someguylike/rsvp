@@ -423,7 +423,7 @@
       row.classList.add("member-row");
       row.tabIndex = 0;
       row.addEventListener("click", (event) => {
-        if (event.target.closest("a, button")) {
+        if (event.target.closest("button")) {
           return;
         }
         if (adminToken) {
