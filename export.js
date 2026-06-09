@@ -194,6 +194,72 @@
     return cell;
   }
 
+  function getReportDateParts(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
+      return {
+        weekday: "",
+        day: value || "",
+        week: "",
+        title: value || "",
+      };
+    }
+
+    const date = new Date(`${value}T00:00:00`);
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+    const weekOfMonth = Math.ceil((date.getDate() + firstDay.getDay()) / 7);
+
+    return {
+      weekday: date.toLocaleDateString("en-US", { weekday: "short" }),
+      day: date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+      week: `Week ${weekOfMonth}`,
+      title: date.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+    };
+  }
+
+  function formatReportDate(value) {
+    const parts = getReportDateParts(value);
+    return [parts.weekday, parts.day, parts.week]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function createCalendarDate(value) {
+    const parts = getReportDateParts(value);
+    const calendar = document.createElement("span");
+    const weekday = document.createElement("span");
+    const day = document.createElement("strong");
+    const week = document.createElement("span");
+
+    calendar.className = "calendar-date";
+    calendar.title = parts.title;
+    weekday.className = "calendar-weekday";
+    weekday.textContent = parts.weekday;
+    day.className = "calendar-day";
+    day.textContent = parts.day;
+    week.className = "calendar-week";
+    week.textContent = parts.week;
+    calendar.append(weekday, day, week);
+    return calendar;
+  }
+
+  function appendDateCell(row, tagName, value, className) {
+    const cell = document.createElement(tagName);
+    if (className) {
+      cell.className = className;
+    }
+    cell.append(createCalendarDate(value));
+    row.append(cell);
+    return cell;
+  }
+
   function getDateTotals(model) {
     return model.dates.map((date, dateIndex) => ({
       date,
@@ -293,13 +359,12 @@
 
     totals.forEach((item) => {
       const tile = document.createElement("button");
-      const date = document.createElement("span");
+      const date = createCalendarDate(item.date);
       const total = document.createElement("strong");
       const isSelected = selectedDate === item.date;
       tile.type = "button";
       tile.className = `heatmap-tile ${getHeatClass(item.total, maxTotal)}`;
       tile.setAttribute("aria-pressed", String(isSelected));
-      date.textContent = item.date;
       total.textContent = `${item.total}`;
       tile.append(date, total);
       tile.addEventListener("click", () => {
@@ -310,7 +375,7 @@
     });
 
     heatmapNote.textContent = selectedDate
-      ? `${selectedDate} selected. Click again to clear.`
+      ? `${formatReportDate(selectedDate)} selected. Click again to clear.`
       : `${totals.length} dates, peak turnout ${maxTotal}.`;
     heatmapSection.hidden = false;
   }
@@ -333,7 +398,7 @@
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
     appendCell(headerRow, "th", "Name");
-    model.dates.forEach((date) => appendCell(headerRow, "th", date));
+    model.dates.forEach((date) => appendDateCell(headerRow, "th", date));
     thead.append(headerRow);
 
     const tbody = document.createElement("tbody");
@@ -347,14 +412,14 @@
           value ? String(value) : "",
           getHeatClass(value, maxValue),
         );
-        cell.dataset.label = model.dates[index];
+        cell.dataset.label = formatReportDate(model.dates[index]);
       });
       tbody.append(row);
     });
 
     individualTable.append(thead, tbody);
     individualNote.textContent = selectedDate
-      ? `${activePlayers.length} players on ${selectedDate}.`
+      ? `${activePlayers.length} players on ${formatReportDate(selectedDate)}.`
       : `${activePlayers.length} players with at least one RSVP.`;
     individualSection.hidden = false;
   }
@@ -393,7 +458,7 @@
       const playersCell = document.createElement("td");
       const playerList = document.createElement("ul");
 
-      appendCell(row, "td", group.date, getHeatClass(group.total, maxTotal))
+      appendDateCell(row, "td", group.date, getHeatClass(group.total, maxTotal))
         .dataset.label = "Date";
       playerList.className = "date-audit-list";
       group.players.forEach((player) => {
@@ -420,7 +485,7 @@
     auditTable.append(thead, tbody);
     auditNote.textContent = [
       playerFilter.value ? playerFilter.value : "All players",
-      selectedDate || "all dates",
+      selectedDate ? formatReportDate(selectedDate) : "all dates",
       `${groups.length} date${groups.length === 1 ? "" : "s"}`,
     ].join(" · ");
     auditSection.hidden = false;

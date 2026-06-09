@@ -953,13 +953,13 @@ button:disabled {
   outline-offset: 2px;
 }
 
-.heatmap-tile span {
+.heatmap-tile > span {
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 700;
 }
 
-.heatmap-tile strong {
+.heatmap-tile > strong {
   color: var(--text);
   font-size: 1.55rem;
   line-height: 1;
@@ -999,6 +999,25 @@ button:disabled {
 .heat-5 span,
 .heat-5 strong {
   color: white;
+}
+
+.calendar-date {
+  display: grid;
+  gap: 1px;
+  line-height: 1.1;
+}
+
+.calendar-weekday,
+.calendar-week {
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.calendar-day {
+  color: inherit;
+  font-size: 0.94rem;
+  font-weight: 900;
 }
 
 .audit-table th:nth-child(2),
