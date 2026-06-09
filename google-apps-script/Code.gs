@@ -15,7 +15,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo", "Messenger", "Cellphone"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Cellphone", "Photo URL"];
 const AUDIT_HEADERS = [
   "Logged At",
   "Action",
@@ -693,7 +693,7 @@ function getRosterSheet_() {
   if (shouldSeedRoster && sheet.getLastRow() < 2) {
     sheet
       .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
-      .setValues(PLAYERS.map((name) => [name, "", "", ""]));
+      .setValues(PLAYERS.map((name) => [name, "", "", "", ""]));
   }
 
   return sheet;
@@ -741,6 +741,7 @@ function getRoster_() {
       venmo: String(row[1] || "").trim(),
       messenger: String(row[2] || "").trim(),
       cellphone: String(row[3] || "").trim(),
+      photoUrl: String(row[4] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
@@ -779,13 +780,14 @@ function saveRosterMember_(params) {
     );
     const venmo = normalizeVenmo_(required_(params.venmo, "Missing Venmo"));
     const messenger = normalizeMessenger_(
-      required_(params.messenger, "Missing Messenger"),
+      required_(params.messenger, "Missing Facebook profile"),
     );
     const cellphone = sanitizeText_(params.cellphone || "");
+    const photoUrl = normalizePhotoUrl_(params.photoUrl || "");
     const sheet = getRosterSheet_();
     const oldRow = oldName ? findRosterRow_(sheet, oldName) : null;
     const row = findRosterRow_(sheet, name);
-    const values = [name, venmo, messenger, cellphone];
+    const values = [name, venmo, messenger, cellphone, photoUrl];
 
     if (oldName && normalize_(oldName) !== normalize_(name)) {
       requireAdmin_(params);
@@ -1348,7 +1350,7 @@ function normalizeMessenger_(value) {
     /^(?:https?:\/\/)?m\.me\/([A-Za-z0-9._-]{3,80})\/?(?:[?#].*)?$/i,
   );
   if (messengerMatch) {
-    return `@${messengerMatch[1]}`;
+    return `https://www.facebook.com/${messengerMatch[1]}`;
   }
 
   const profileIdMatch = text.match(
@@ -1367,10 +1369,23 @@ function normalizeMessenger_(value) {
     !/^[A-Za-z0-9._-]{3,80}$/.test(handle) ||
     handle.toLowerCase() === "profile.php"
   ) {
-    throw new Error("Enter a valid Messenger or Facebook profile URL");
+    throw new Error("Enter a valid Facebook profile URL or profile handle");
   }
 
-  return `@${handle}`;
+  return `https://www.facebook.com/${handle}`;
+}
+
+function normalizePhotoUrl_(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  if (!/^https?:\/\/[^ ]+$/i.test(text)) {
+    throw new Error("Enter a valid photo URL or leave it blank");
+  }
+
+  return sanitizeText_(text);
 }
 
 function sanitizeText_(value) {

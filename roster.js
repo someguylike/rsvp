@@ -16,6 +16,7 @@
   const venmoInput = document.querySelector("#venmo");
   const messengerInput = document.querySelector("#messenger");
   const cellphoneInput = document.querySelector("#cellphone");
+  const photoUrlInput = document.querySelector("#photo-url");
   const memberSearch = document.querySelector("#member-search");
   const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
@@ -159,6 +160,7 @@
     venmoInput.value = member.venmo || "";
     messengerInput.value = member.messenger || "";
     cellphoneInput.value = member.cellphone || "";
+    photoUrlInput.value = member.photoUrl || "";
     updateSaveButtonLabel();
     nameInput.focus();
   }
@@ -223,7 +225,7 @@
 
   function getMessengerDisplayValue(value) {
     const contact = normalizeMessengerContact(value);
-    return contact ? contact.value : String(value || "").trim();
+    return contact ? contact.url : String(value || "").trim();
   }
 
   function getInitials(name) {
@@ -239,20 +241,21 @@
     const cell = document.createElement("td");
     const fallback = document.createElement("span");
     const contact = normalizeMessengerContact(member.messenger);
+    const photoUrl = normalizePhotoUrl(member.photoUrl) || contact?.pictureUrl || "";
 
     cell.className = "roster-photo-cell";
     cell.dataset.label = "Photo";
     fallback.className = "roster-avatar-fallback";
     fallback.textContent = getInitials(member.name) || "?";
 
-    if (contact?.pictureUrl) {
+    if (photoUrl) {
       const image = document.createElement("img");
       image.alt = `${member.name || "Member"} Facebook profile`;
       image.className = "roster-avatar";
       image.decoding = "async";
       image.loading = "lazy";
       image.referrerPolicy = "no-referrer";
-      image.src = contact.pictureUrl;
+      image.src = photoUrl;
       image.addEventListener("error", () => {
         image.remove();
         fallback.hidden = false;
@@ -315,9 +318,10 @@
     );
     if (messengerMatch) {
       const handle = messengerMatch[1];
+      const url = `https://www.facebook.com/${handle}`;
       return {
-        value: `@${handle}`,
-        url: `https://www.facebook.com/${handle}`,
+        value: url,
+        url,
         pictureUrl: getFacebookPictureUrl(handle),
       };
     }
@@ -338,11 +342,24 @@
     return /^[A-Za-z0-9._-]{3,80}$/.test(handle) &&
       handle.toLowerCase() !== "profile.php"
       ? {
-          value: `@${handle}`,
+          value: `https://www.facebook.com/${handle}`,
           url: `https://www.facebook.com/${handle}`,
           pictureUrl: getFacebookPictureUrl(handle),
         }
       : null;
+  }
+
+  function normalizePhotoUrl(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+    try {
+      const url = new URL(text);
+      return /^https?:$/.test(url.protocol) ? url.toString() : "";
+    } catch {
+      return "";
+    }
   }
 
   function getFacebookPictureUrl(identifier) {
@@ -383,7 +400,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Photo", "Name", "Venmo", "Messenger", "Actions"].forEach((header) => {
+    ["Photo", "Name", "Venmo", "Facebook", "Actions"].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -412,9 +429,9 @@
         getMessengerDisplayValue(member.messenger),
         messengerUrl,
         member.messenger && !messengerUrl
-          ? "Invalid Messenger or Facebook profile URL. Use a plain handle or profile URL."
+          ? "Invalid Facebook profile URL. Use a profile URL or plain profile handle."
           : "",
-      ).dataset.label = "Messenger";
+      ).dataset.label = "Facebook";
 
       actions.className = "roster-actions-cell";
       actions.dataset.label = "Actions";
@@ -538,6 +555,7 @@
       venmo: venmoInput.value.trim(),
       messenger: messengerInput.value.trim(),
       cellphone: cellphoneInput.value.trim(),
+      photoUrl: photoUrlInput.value.trim(),
     };
 
     if (!payload.playerName) {
@@ -558,15 +576,23 @@
     payload.venmo = `@${venmoHandle}`;
 
     if (!payload.messenger) {
-      setStatus("Enter a Messenger contact.", "error");
+      setStatus("Enter a Facebook profile.", "error");
       return;
     }
     const messengerContact = normalizeMessengerContact(payload.messenger);
     if (!messengerContact) {
-      setStatus("Enter a valid Messenger or Facebook profile URL.", "error");
+      setStatus("Enter a valid Facebook profile URL or profile handle.", "error");
       return;
     }
-    payload.messenger = messengerContact.value;
+    payload.messenger = messengerContact.url;
+    if (payload.photoUrl) {
+      const photoUrl = normalizePhotoUrl(payload.photoUrl);
+      if (!photoUrl) {
+        setStatus("Enter a valid photo URL or leave it blank.", "error");
+        return;
+      }
+      payload.photoUrl = photoUrl;
+    }
     if (isRenamingMember()) {
       payload.oldPlayerName = editingOriginalName;
     }

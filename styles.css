@@ -506,7 +506,8 @@ button:disabled {
     minmax(180px, 0.9fr)
     minmax(160px, 0.8fr)
     minmax(220px, 1fr)
-    minmax(150px, 0.7fr);
+    minmax(150px, 0.7fr)
+    minmax(180px, 0.9fr);
   gap: 14px;
 }
 

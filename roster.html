@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Roster</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260609-8" />
+    <link rel="stylesheet" href="./styles.css?v=20260609-9" />
   </head>
   <body>
     <main class="shell">
@@ -55,13 +55,13 @@
             </label>
 
             <label class="field">
-              <span>Messenger</span>
+              <span>Facebook Profile</span>
               <input
                 id="messenger"
                 name="messenger"
                 autocomplete="off"
-                placeholder="Profile URL or handle"
-                title="Used to contact the member about play sessions"
+                placeholder="Facebook profile URL"
+                title="Used to identify and contact the member"
                 required
               />
             </label>
@@ -75,6 +75,17 @@
                 inputmode="tel"
                 placeholder="Optional"
                 title="Optional phone number. Hidden in the table by default."
+              />
+            </label>
+
+            <label class="field">
+              <span>Photo URL</span>
+              <input
+                id="photo-url"
+                name="photoUrl"
+                autocomplete="off"
+                placeholder="Optional direct image URL"
+                title="Optional direct image URL. Facebook photo pages usually cannot be embedded."
               />
             </label>
           </div>
@@ -95,7 +106,7 @@
             <input
               id="member-search"
               autocomplete="off"
-              placeholder="Search by name, Venmo, or Messenger"
+              placeholder="Search by name, Venmo, or Facebook"
               type="search"
             />
           </label>
@@ -132,6 +143,6 @@
       </section>
     </main>
 
-    <script src="./roster.js?v=20260609-3"></script>
+    <script src="./roster.js?v=20260609-4"></script>
   </body>
 </html>
