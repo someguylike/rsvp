@@ -447,11 +447,8 @@
 
         if (missingInfo.length > 0) {
           const missingWrap = document.createElement("div");
-          const missingLabel = document.createElement("span");
           const addButton = document.createElement("button");
           missingWrap.className = "missing-info-action";
-          missingLabel.className = "missing-info-label";
-          missingLabel.textContent = missingInfo.join(", ");
           addButton.className = "secondary-button inline-button";
           addButton.type = "button";
           addButton.textContent = isSelected ? "Selected" : "Add Missing Info";
@@ -460,7 +457,7 @@
           addButton.addEventListener("click", () => {
             fillMissingInfoForm(member);
           });
-          missingWrap.append(missingLabel, addButton);
+          missingWrap.append(addButton);
           missingInfoCell.append(missingWrap);
         } else {
           const complete = document.createElement("span");

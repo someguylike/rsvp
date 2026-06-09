@@ -852,13 +852,6 @@ button:disabled {
   justify-items: center;
 }
 
-.missing-info-label {
-  color: var(--error);
-  font-size: 0.75rem;
-  font-weight: 800;
-  white-space: normal;
-}
-
 .roster-actions {
   align-items: center;
   display: flex;
