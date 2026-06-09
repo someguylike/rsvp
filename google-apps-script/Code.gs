@@ -123,6 +123,14 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "getVenmoProfilePhoto") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "getVenmoProfilePhoto",
+        photoUrl: getVenmoProfilePhoto_(params.venmo),
+      });
+    }
+
     if (params.action === "saveRosterMember") {
       const result = saveRosterMember_(params);
       return jsonp_(callback, {
@@ -1425,8 +1433,8 @@ function getFacebookProfilePhoto_(facebookUrl) {
 
 function getFacebookProfilePhotoFromUrls_(urls) {
   for (let index = 0; index < urls.length; index += 1) {
-    const html = fetchFacebookPage_(urls[index]);
-    const photoUrl = extractFacebookImageFromHtml_(html);
+    const html = fetchProfilePage_(urls[index]);
+    const photoUrl = extractProfileImageFromHtml_(html);
     if (photoUrl) {
       return photoUrl;
     }
@@ -1434,7 +1442,32 @@ function getFacebookProfilePhotoFromUrls_(urls) {
   return "";
 }
 
-function fetchFacebookPage_(url) {
+function getVenmoProfilePhoto_(venmo) {
+  const handle = normalizeVenmo_(venmo).replace(/^@/, "");
+  const cache = CacheService.getScriptCache();
+  const cacheKey = `venmo_photo_v1:${handle}`;
+  const cached = cache.get(cacheKey);
+
+  if (cached !== null) {
+    return cached;
+  }
+
+  try {
+    const photoUrl = getFacebookProfilePhotoFromUrls_([
+      `https://account.venmo.com/u/${handle}`,
+      `https://venmo.com/u/${handle}`,
+      `https://venmo.com/${handle}`,
+    ]);
+    cache.put(cacheKey, photoUrl, 21600);
+    return photoUrl;
+  } catch (error) {
+    console.warn(`Could not fetch Venmo profile image: ${error.message}`);
+    cache.put(cacheKey, "", 900);
+    return "";
+  }
+}
+
+function fetchProfilePage_(url) {
   const response = UrlFetchApp.fetch(url, {
     followRedirects: true,
     muteHttpExceptions: true,
@@ -1450,12 +1483,16 @@ function fetchFacebookPage_(url) {
   return response.getContentText() || "";
 }
 
-function extractFacebookImageFromHtml_(html) {
+function extractProfileImageFromHtml_(html) {
   const text = String(html || "");
   const ogImage = text.match(
     /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
   ) || text.match(
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+  ) || text.match(
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+  ) || text.match(
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
   );
   if (ogImage) {
     return decodeHtmlEntities_(ogImage[1]);

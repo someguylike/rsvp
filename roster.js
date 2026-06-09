@@ -26,6 +26,7 @@
   let adminToken = "";
   let editingOriginalName = "";
   const facebookPhotoCache = new Map();
+  const venmoPhotoCache = new Map();
 
   function readAdminAuth() {
     try {
@@ -271,22 +272,30 @@
       image.addEventListener("error", () => {
         image.remove();
         fallback.hidden = false;
-        resolveFacebookProfilePhoto(member, cell, fallback);
+        resolveFallbackProfilePhoto(member, cell, fallback);
       });
       fallback.hidden = true;
       cell.append(image, fallback);
     } else {
       cell.append(fallback);
+      resolveFallbackProfilePhoto(member, cell, fallback);
     }
 
     row.append(cell);
     return cell;
   }
 
+  async function resolveFallbackProfilePhoto(member, cell, fallback) {
+    if (await resolveFacebookProfilePhoto(member, cell, fallback)) {
+      return;
+    }
+    await resolveVenmoProfilePhoto(member, cell, fallback);
+  }
+
   async function resolveFacebookProfilePhoto(member, cell, fallback) {
     const contact = normalizeMessengerContact(member.messenger);
     if (!contact?.url || facebookPhotoCache.get(contact.url) === "") {
-      return;
+      return false;
     }
 
     if (!facebookPhotoCache.has(contact.url)) {
@@ -303,11 +312,53 @@
 
     const photoUrl = facebookPhotoCache.get(contact.url);
     if (!photoUrl || !cell.isConnected || cell.querySelector("img")) {
-      return;
+      return false;
     }
 
+    renderResolvedPhoto(
+      cell,
+      fallback,
+      photoUrl,
+      `${member.name || "Member"} profile`,
+    );
+    return true;
+  }
+
+  async function resolveVenmoProfilePhoto(member, cell, fallback) {
+    const handle = normalizeVenmoHandle(member.venmo);
+    if (!handle || venmoPhotoCache.get(handle) === "") {
+      return false;
+    }
+
+    if (!venmoPhotoCache.has(handle)) {
+      try {
+        const result = await requestAppsScript({
+          action: "getVenmoProfilePhoto",
+          venmo: handle,
+        });
+        venmoPhotoCache.set(handle, result.photoUrl || "");
+      } catch {
+        venmoPhotoCache.set(handle, "");
+      }
+    }
+
+    const photoUrl = venmoPhotoCache.get(handle);
+    if (!photoUrl || !cell.isConnected || cell.querySelector("img")) {
+      return false;
+    }
+
+    renderResolvedPhoto(
+      cell,
+      fallback,
+      photoUrl,
+      `${member.name || "Member"} Venmo profile`,
+    );
+    return true;
+  }
+
+  function renderResolvedPhoto(cell, fallback, photoUrl, altText) {
     const image = document.createElement("img");
-    image.alt = `${member.name || "Member"} Facebook profile`;
+    image.alt = altText;
     image.className = "roster-avatar";
     image.decoding = "async";
     image.loading = "lazy";
@@ -319,7 +370,6 @@
     image.addEventListener("error", () => {
       image.remove();
       fallback.hidden = false;
-      facebookPhotoCache.set(contact.url, "");
     });
     cell.prepend(image);
   }
