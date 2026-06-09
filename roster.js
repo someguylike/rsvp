@@ -374,7 +374,7 @@
       headers.push("Cellphone");
       headers.push("Actions");
     } else {
-      headers.push("Missing Info");
+      headers.push("Action");
     }
     headers.forEach((header) => {
       appendCell(headerRow, "th", header);
@@ -443,7 +443,7 @@
         const missingInfo = getMissingMemberInfo(member);
         const missingInfoCell = document.createElement("td");
         missingInfoCell.className = "roster-actions-cell";
-        missingInfoCell.dataset.label = "Missing Info";
+        missingInfoCell.dataset.label = "Action";
 
         if (missingInfo.length > 0) {
           const missingWrap = document.createElement("div");
