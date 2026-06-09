@@ -361,6 +361,18 @@
 
   function renderAuditTable(model) {
     const groups = getAuditGroups(model);
+    const maxTotal = groups.reduce(
+      (maxValue, group) => Math.max(maxValue, group.total),
+      0,
+    );
+    const maxParticipantCount = groups.reduce(
+      (maxValue, group) =>
+        Math.max(
+          maxValue,
+          ...group.players.map((player) => player.participants),
+        ),
+      0,
+    );
     auditTable.textContent = "";
 
     if (groups.length === 0) {
@@ -381,13 +393,18 @@
       const playersCell = document.createElement("td");
       const playerList = document.createElement("ul");
 
-      appendCell(row, "td", group.date).dataset.label = "Date";
+      appendCell(row, "td", group.date, getHeatClass(group.total, maxTotal))
+        .dataset.label = "Date";
       playerList.className = "date-audit-list";
       group.players.forEach((player) => {
         const item = document.createElement("li");
         const name = document.createElement("span");
         const participants = document.createElement("strong");
         name.textContent = player.name;
+        participants.className = getHeatClass(
+          player.participants,
+          maxParticipantCount,
+        );
         participants.textContent = String(player.participants);
         item.append(name, participants);
         playerList.append(item);
@@ -395,7 +412,8 @@
       playersCell.dataset.label = "Players";
       playersCell.append(playerList);
       row.append(playersCell);
-      appendCell(row, "td", String(group.total)).dataset.label = "Total";
+      appendCell(row, "td", String(group.total), getHeatClass(group.total, maxTotal))
+        .dataset.label = "Total";
       tbody.append(row);
     });
 
