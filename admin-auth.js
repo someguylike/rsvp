@@ -105,7 +105,7 @@
       return;
     }
 
-    button.textContent = state.isLoggedIn ? "Admin" : "Log In";
+    button.textContent = state.isLoggedIn ? "Admin" : "Admin Login";
     button.classList.toggle("is-admin", state.isLoggedIn);
     panel.dataset.state = state.isLoggedIn ? "signed-in" : "signed-out";
     logout.hidden = !state.isLoggedIn;
@@ -175,7 +175,7 @@
     widget.id = "admin-auth-widget";
     widget.className = "admin-auth-widget";
     widget.innerHTML = [
-      '<button id="admin-auth-button" class="admin-auth-button" type="button" aria-expanded="false" aria-controls="admin-auth-panel">Log In</button>',
+      '<button id="admin-auth-button" class="admin-auth-button" type="button" aria-expanded="false" aria-controls="admin-auth-panel">Admin Login</button>',
       '<div id="admin-auth-panel" class="admin-auth-panel" hidden>',
       '<form id="admin-auth-form" class="admin-auth-form">',
       '<label class="field">',
@@ -189,8 +189,13 @@
       "</div>",
     ].join("");
 
+    const navLinks = document.querySelector(".page-nav-links");
     const panel = document.querySelector(".panel") || document.body;
-    panel.prepend(widget);
+    if (navLinks) {
+      navLinks.append(widget);
+    } else {
+      panel.prepend(widget);
+    }
 
     const { button, form, password, logout: logoutButton } = getWidgetElements();
     button.addEventListener("click", () => {
