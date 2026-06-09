@@ -424,6 +424,7 @@ function getAuditSheet_() {
     headerRange.setValues([AUDIT_HEADERS]);
     sheet.setFrozenRows(1);
   }
+  sheet.getRange("C:C").setNumberFormat("@");
 
   return sheet;
 }
@@ -494,7 +495,7 @@ function auditRowToEntry_(row, sheetRow) {
     row: sheetRow,
     loggedAt: formatAuditValue_(row[0]),
     action: String(row[1] || ""),
-    playDate: String(row[2] || ""),
+    playDate: normalizeDate_(row[2]),
     playerName: String(row[3] || ""),
     participantCount: String(row[4] || ""),
     rsvpRow: String(row[5] || ""),
