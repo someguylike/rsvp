@@ -395,6 +395,14 @@ button:disabled {
   opacity: 0.65;
 }
 
+.submit-player-name {
+  color: #ffdfd6;
+  font-weight: 900;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 .secondary-button {
   border: 1px solid var(--line);
   background: var(--surface);

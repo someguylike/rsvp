@@ -318,9 +318,22 @@
       playerMemory.textContent = "";
     }
 
-    submitButton.textContent = selectedValidName
-      ? `Submit RSVP for ${currentName}`
-      : "Submit RSVP";
+    submitButton.replaceChildren();
+    if (selectedValidName) {
+      submitButton.append(
+        document.createTextNode("Submit RSVP for "),
+        createSubmitName(currentName),
+      );
+    } else {
+      submitButton.textContent = "Submit RSVP";
+    }
+  }
+
+  function createSubmitName(name) {
+    const nameElement = document.createElement("span");
+    nameElement.className = "submit-player-name";
+    nameElement.textContent = name;
+    return nameElement;
   }
 
   function escapeHtml(value) {
