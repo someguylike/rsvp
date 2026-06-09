@@ -264,6 +264,29 @@ select:focus {
   color: var(--accent-strong);
 }
 
+.last-used-player-button {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  padding: 0;
+  box-shadow: none;
+  font: inherit;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.last-used-player-button:hover,
+.last-used-player-button:focus {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent);
+  outline: 0;
+  transform: none;
+}
+
 .player-memory .submit-player-name {
   color: #ffffff;
 }
@@ -282,19 +305,6 @@ select:focus {
 
 .player-memory.warning .submit-player-name {
   color: #ffffff;
-}
-
-.restore-status {
-  min-height: 20px;
-  margin: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: 0.82rem;
-  font-weight: 800;
-  line-height: 1.35;
-  padding: 8px 10px;
 }
 
 .change-player-button {

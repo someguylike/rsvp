@@ -57,7 +57,6 @@
   const playerList = document.querySelector("#player-list");
   const playerMemory = document.querySelector("#player-memory");
   const changePlayerButton = document.querySelector("#change-player-button");
-  const restoreStatus = document.querySelector("#restore-status");
   const rsvpDetails = document.querySelector("#rsvp-details");
   const dateInput = document.querySelector("#play-date");
   const dateOptions = document.querySelector("#date-options");
@@ -81,7 +80,6 @@
   let selectedPlayerName = "";
   let lastSubmittedPayload = null;
   let publicIpPromise = null;
-  let restoredPlayerFromStorage = false;
 
   function readJson(key, fallback) {
     try {
@@ -321,8 +319,19 @@
     }
 
     if (!currentName && rememberedPlayerName) {
+      const lastUsedButton = document.createElement("button");
+      lastUsedButton.type = "button";
+      lastUsedButton.className = "last-used-player-button";
+      lastUsedButton.textContent = rememberedPlayerName;
+      lastUsedButton.addEventListener("click", () => {
+        selectPlayerName(rememberedPlayerName, { scrollToDetails: true });
+      });
+
       playerMemory.hidden = false;
-      playerMemory.innerHTML = `Last used: <strong>${escapeHtml(rememberedPlayerName)}</strong>`;
+      playerMemory.replaceChildren(
+        document.createTextNode("Last used: "),
+        lastUsedButton,
+      );
     } else if (changedFromRemembered) {
       playerMemory.hidden = false;
       playerMemory.innerHTML = `Warning: submitting as <strong>${escapeHtml(currentName)}</strong>, not your last used name ${escapeHtml(rememberedPlayerName)}.`;
@@ -375,12 +384,6 @@
     if (tallySection) {
       tallySection.hidden = !showDetails;
     }
-  }
-
-  function setRestoreStatus(message) {
-    if (!restoreStatus) return;
-    restoreStatus.textContent = message;
-    restoreStatus.hidden = !message;
   }
 
   function createSubmitName(name) {
@@ -958,16 +961,10 @@
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
     const lastPlayerName = readString(LAST_PLAYER_KEY) || lastRsvp?.playerName || "";
     if (lastPlayerName && isValidPlayerName(lastPlayerName)) {
-      restoredPlayerFromStorage = true;
       rememberedPlayerName = lastPlayerName;
       selectPlayerName(lastPlayerName, { remember: false, keepFocus: true });
-      setRestoreStatus(`Using previous player saved in this browser: ${lastPlayerName}`);
     } else if (lastPlayerName) {
-      restoredPlayerFromStorage = true;
       playerInput.value = lastPlayerName;
-      setRestoreStatus(`Checking previous player saved in this browser: ${lastPlayerName}`);
-    } else {
-      setRestoreStatus("Loading player list...");
     }
   }
 
@@ -982,11 +979,7 @@
       const exactMatch = exactPlayerMatch(playerInput.value);
       if (exactMatch) {
         selectPlayerName(exactMatch, { remember: false, keepFocus: true });
-        setRestoreStatus(`Using previous player saved in this browser: ${exactMatch}`);
       }
-    }
-    if (!restoredPlayerFromStorage) {
-      setRestoreStatus("");
     }
     updatePlayerMemory();
     if (!selectedPlayerName && !isMobileViewport()) {
@@ -1039,7 +1032,6 @@
   });
 
   playerInput.addEventListener("input", () => {
-    setRestoreStatus("");
     const exactMatch = exactPlayerMatch(playerInput.value);
     if (exactMatch) {
       playerInput.value = exactMatch;
