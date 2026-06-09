@@ -9,7 +9,6 @@
   const memberNameList = document.querySelector("#member-name-list");
   const venmoInput = document.querySelector("#venmo");
   const messengerInput = document.querySelector("#messenger");
-  const cellphoneInput = document.querySelector("#cellphone");
   const noteInput = document.querySelector("#member-note");
   const memberSearch = document.querySelector("#member-search");
   const saveButton = document.querySelector("#save-button");
@@ -130,7 +129,6 @@
     nameInput.value = member.name || "";
     venmoInput.value = member.venmo || "";
     messengerInput.value = member.messenger || "";
-    cellphoneInput.value = member.cellphone || "";
     noteInput.value = member.note || "";
     updateSaveButtonLabel();
     nameInput.focus();
@@ -138,8 +136,11 @@
 
   function fillMissingInfoForm(member) {
     fillForm(member);
+    const missingInfo = getMissingMemberInfo(member);
     setStatus(
-      "Add only the blank contact info for this existing member. Admin login is required to change existing info.",
+      missingInfo.length > 0
+        ? "Existing info is prefilled. Without admin, only blank contact info can be added."
+        : "Existing info is prefilled. Admin login is required to change saved info.",
       "",
     );
     renderRoster();
@@ -161,7 +162,7 @@
         !isRenamingMember() &&
         getMissingMemberInfo(selectedMember).length > 0;
       saveButton.disabled = !canAddMissingInfo;
-      saveButton.textContent = "Add Missing Info";
+      saveButton.textContent = "Add/Update Info";
       return;
     }
     saveButton.disabled = false;
@@ -472,29 +473,25 @@
       } else {
         const missingInfo = getMissingMemberInfo(member);
         const missingInfoCell = document.createElement("td");
+        const missingWrap = document.createElement("div");
+        const addButton = document.createElement("button");
+
         missingInfoCell.className = "roster-actions-cell";
         missingInfoCell.dataset.label = "Action";
-
-        if (missingInfo.length > 0) {
-          const missingWrap = document.createElement("div");
-          const addButton = document.createElement("button");
-          missingWrap.className = "missing-info-action";
-          addButton.className = "secondary-button inline-button";
-          addButton.type = "button";
-          addButton.textContent = isSelected ? "Selected" : "Add Missing Info";
-          addButton.title = `Missing ${missingInfo.join(", ")}`;
-          addButton.disabled = isSelected;
-          addButton.addEventListener("click", () => {
-            fillMissingInfoForm(member);
-          });
-          missingWrap.append(addButton);
-          missingInfoCell.append(missingWrap);
-        } else {
-          const complete = document.createElement("span");
-          complete.className = "complete-chip";
-          complete.textContent = "Complete";
-          missingInfoCell.append(complete);
-        }
+        missingWrap.className = "missing-info-action";
+        addButton.className = "secondary-button inline-button";
+        addButton.type = "button";
+        addButton.textContent = "Add/Update Info";
+        addButton.title =
+          missingInfo.length > 0
+            ? `Missing ${missingInfo.join(", ")}`
+            : "Review existing info";
+        addButton.disabled = isSelected;
+        addButton.addEventListener("click", () => {
+          fillMissingInfoForm(member);
+        });
+        missingWrap.append(addButton);
+        missingInfoCell.append(missingWrap);
 
         row.append(missingInfoCell);
       }
@@ -608,7 +605,6 @@
       playerName: nameInput.value.trim(),
       venmo: venmoInput.value.trim(),
       messenger: messengerInput.value.trim(),
-      cellphone: cellphoneInput.value.trim(),
       note: adminToken ? noteInput.value.trim() : "",
     };
 
@@ -635,16 +631,14 @@
     }
     payload.venmo = `@${venmoHandle}`;
 
-    if (!payload.messenger) {
-      setStatus("Enter a Facebook profile.", "error");
-      return;
+    if (payload.messenger) {
+      const messengerContact = normalizeMessengerContact(payload.messenger);
+      if (!messengerContact) {
+        setStatus("Enter a valid Facebook profile URL or profile handle.", "error");
+        return;
+      }
+      payload.messenger = messengerContact.url;
     }
-    const messengerContact = normalizeMessengerContact(payload.messenger);
-    if (!messengerContact) {
-      setStatus("Enter a valid Facebook profile URL or profile handle.", "error");
-      return;
-    }
-    payload.messenger = messengerContact.url;
     if (isRenamingMember()) {
       payload.oldPlayerName = editingOriginalName;
     }

@@ -803,9 +803,7 @@ function saveRosterMember_(params) {
       required_(params.playerName || params.name, "Missing player name").trim(),
     );
     const venmo = normalizeVenmo_(required_(params.venmo, "Missing Venmo"));
-    const messenger = normalizeMessenger_(
-      required_(params.messenger, "Missing Facebook profile"),
-    );
+    const messenger = params.messenger ? normalizeMessenger_(params.messenger) : "";
     const cellphone = sanitizeText_(params.cellphone || "");
     const note = sanitizeText_(params.note || "");
     const sheet = getRosterSheet_();
