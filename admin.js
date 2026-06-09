@@ -2,6 +2,7 @@
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
   const ADMIN_AUTH_KEY = "play-rsvp.adminAuth";
+  const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
   let PLAYERS = [
@@ -77,6 +78,7 @@
   let latestAuditRequest = 0;
   let auditFilterTimer = 0;
   let adminToken = "";
+  let publicIpPromise = null;
 
   function readAdminAuth() {
     try {
@@ -94,6 +96,109 @@
   function clearAdminAuth() {
     adminToken = "";
     localStorage.removeItem(ADMIN_AUTH_KEY);
+  }
+
+  function readString(key) {
+    return localStorage.getItem(key) || "";
+  }
+
+  function writeString(key, value) {
+    localStorage.setItem(key, value);
+  }
+
+  function getBrowserId() {
+    let browserId = readString(BROWSER_ID_KEY);
+    if (!browserId) {
+      browserId =
+        window.crypto?.randomUUID?.() ||
+        `browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      writeString(BROWSER_ID_KEY, browserId);
+    }
+    return browserId;
+  }
+
+  function getClientDeviceClass() {
+    const userAgent = navigator.userAgent || "";
+    const hasCoarsePointer =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    const narrowViewport =
+      Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 820;
+    if (
+      /Mobi|Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent) ||
+      (hasCoarsePointer && narrowViewport)
+    ) {
+      return "mobile";
+    }
+    return "desktop";
+  }
+
+  function getClientScreen() {
+    return `${window.screen?.width || 0}x${window.screen?.height || 0}@${window.devicePixelRatio || 1}`;
+  }
+
+  function getBrowserSignature() {
+    return [
+      navigator.userAgent || "",
+      navigator.platform || "",
+      navigator.vendor || "",
+      navigator.language || "",
+      getClientDeviceClass(),
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      getClientScreen(),
+    ].join(" | ");
+  }
+
+  function withTimeout(promise, timeoutMs, fallback) {
+    return new Promise((resolve) => {
+      const timeout = window.setTimeout(() => resolve(fallback), timeoutMs);
+      promise
+        .then((value) => resolve(value))
+        .catch(() => resolve(fallback))
+        .finally(() => window.clearTimeout(timeout));
+    });
+  }
+
+  function getPublicIpInfo() {
+    if (!publicIpPromise) {
+      publicIpPromise = withTimeout(
+        fetch("https://api.ipify.org?format=json", {
+          cache: "no-store",
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
+        })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => ({
+            ip: String(data?.ip || ""),
+            source: data?.ip ? "api.ipify.org" : "unavailable",
+          })),
+        900,
+        {
+          ip: "",
+          source: "timeout_or_blocked",
+        },
+      );
+    }
+    return publicIpPromise;
+  }
+
+  async function getAuditMetadata() {
+    const publicIp = await getPublicIpInfo();
+    return {
+      browserId: getBrowserId(),
+      browserSignature: getBrowserSignature(),
+      clientDeviceClass: getClientDeviceClass(),
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      clientLanguage: navigator.language || "",
+      clientScreen: getClientScreen(),
+      clientUserAgent: navigator.userAgent || "",
+      clientPlatform: navigator.platform || "",
+      clientVendor: navigator.vendor || "",
+      clientReferrer: document.referrer || "",
+      clientPageUrl: window.location.href || "",
+      clientPublicIp: publicIp.ip,
+      clientPublicIpSource: publicIp.source,
+    };
   }
 
   function setLoginStatus(message, type) {
@@ -431,7 +536,9 @@
           latest.action,
         ).toLowerCase()} ${latest.playDate || "unknown date"}.`
       : "";
-    return `Audit sheet has ${rowCount} saved row${rowCount === 1 ? "" : "s"}.${latestText}`;
+    return `Audit sheet has ${rowCount} saved row${
+      rowCount === 1 ? "" : "s"
+    }.${latestText}`;
   }
 
   function renderAuditTable(entries, diagnostics) {
@@ -455,9 +562,11 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["When", "Player", "Date", "Change", "Spots", "Device"].forEach((header) => {
-      appendCell(headerRow, "th", header);
-    });
+    ["When", "Player", "Date", "Change", "Spots", "Device", "IP"].forEach(
+      (header) => {
+        appendCell(headerRow, "th", header);
+      },
+    );
     thead.append(headerRow);
 
     const tbody = document.createElement("tbody");
@@ -469,6 +578,8 @@
       appendCell(row, "td", formatAuditAction(entry.action)).dataset.label = "Change";
       appendCell(row, "td", formatAuditCount(entry)).dataset.label = "Spots";
       appendCell(row, "td", entry.clientDevice || "").dataset.label = "Device";
+      appendCell(row, "td", entry.clientPublicIp || entry.clientIp || "").dataset.label =
+        "IP";
       tbody.append(row);
     });
 
@@ -718,6 +829,7 @@
     setStatus(`Saving 0 of ${changes.length} changes...`, "loading");
 
     try {
+      const auditMetadata = await getAuditMetadata();
       for (let index = 0; index < changes.length; index += 1) {
         const [key, participantCount] = changes[index];
         const [playerName, playDate] = key.split("\u0000");
@@ -734,6 +846,7 @@
           vote: participantCount > 0 ? "Yes" : "No",
           confirmOverride: "true",
           submittedAt: new Date().toISOString(),
+          ...auditMetadata,
         });
       }
 

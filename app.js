@@ -79,6 +79,7 @@
   let rememberedPlayerName = "";
   let selectedPlayerName = "";
   let lastSubmittedPayload = null;
+  let publicIpPromise = null;
 
   function readJson(key, fallback) {
     try {
@@ -485,6 +486,53 @@
       clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
       clientLanguage: navigator.language || "",
       clientScreen: getClientScreen(),
+      clientUserAgent: navigator.userAgent || "",
+      clientPlatform: navigator.platform || "",
+      clientVendor: navigator.vendor || "",
+      clientReferrer: document.referrer || "",
+      clientPageUrl: window.location.href || "",
+    };
+  }
+
+  function withTimeout(promise, timeoutMs, fallback) {
+    return new Promise((resolve) => {
+      const timeout = window.setTimeout(() => resolve(fallback), timeoutMs);
+      promise
+        .then((value) => resolve(value))
+        .catch(() => resolve(fallback))
+        .finally(() => window.clearTimeout(timeout));
+    });
+  }
+
+  function getPublicIpInfo() {
+    if (!publicIpPromise) {
+      publicIpPromise = withTimeout(
+        fetch("https://api.ipify.org?format=json", {
+          cache: "no-store",
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
+        })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => ({
+            ip: String(data?.ip || ""),
+            source: data?.ip ? "api.ipify.org" : "unavailable",
+          })),
+        900,
+        {
+          ip: "",
+          source: "timeout_or_blocked",
+        },
+      );
+    }
+    return publicIpPromise;
+  }
+
+  async function enrichPayloadWithAuditMetadata(payload) {
+    const publicIp = await getPublicIpInfo();
+    return {
+      ...payload,
+      clientPublicIp: publicIp.ip,
+      clientPublicIpSource: publicIp.source,
     };
   }
 
@@ -517,7 +565,10 @@
       typeof window.matchMedia === "function" &&
       window.matchMedia("(pointer: coarse)").matches;
     const narrowViewport = Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 820;
-    if (/Mobi|Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent) || (hasCoarsePointer && narrowViewport)) {
+    if (
+      /Mobi|Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent) ||
+      (hasCoarsePointer && narrowViewport)
+    ) {
       return "mobile";
     }
     return "desktop";
@@ -756,18 +807,25 @@
     setStatus("Removing RSVP...", "");
 
     try {
-      const result = await requestAppsScript({
-        action: "delete",
-        playerName: payload.playerName,
-        playDate: payload.playDate,
-        browserId: getBrowserId(),
-        browserSignature: getBrowserSignature(),
-        clientDeviceClass: getClientDeviceClass(),
-        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-        clientLanguage: navigator.language || "",
-        clientScreen: getClientScreen(),
-        submittedAt: new Date().toISOString(),
-      });
+      const result = await requestAppsScript(
+        await enrichPayloadWithAuditMetadata({
+          action: "delete",
+          playerName: payload.playerName,
+          playDate: payload.playDate,
+          browserId: getBrowserId(),
+          browserSignature: getBrowserSignature(),
+          clientDeviceClass: getClientDeviceClass(),
+          clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+          clientLanguage: navigator.language || "",
+          clientScreen: getClientScreen(),
+          clientUserAgent: navigator.userAgent || "",
+          clientPlatform: navigator.platform || "",
+          clientVendor: navigator.vendor || "",
+          clientReferrer: document.referrer || "",
+          clientPageUrl: window.location.href || "",
+          submittedAt: new Date().toISOString(),
+        }),
+      );
 
       renderTally(result.tally);
       setRemoveRsvpAction(null);
@@ -917,7 +975,7 @@
     payload.participantCount = Math.min(5, Math.max(0, payload.participantCount));
     payload.vote = payload.participantCount > 0 ? "Yes" : "No";
 
-    submitRsvp(payload);
+    submitRsvp(await enrichPayloadWithAuditMetadata(payload));
   });
 
   playerInput.addEventListener("focus", () => {

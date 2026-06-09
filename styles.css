@@ -264,6 +264,10 @@ select:focus {
   color: var(--accent-strong);
 }
 
+.player-memory .submit-player-name {
+  color: #ffffff;
+}
+
 .player-memory.warning {
   border: 1px solid #f2b8a2;
   border-radius: 8px;
@@ -274,6 +278,10 @@ select:focus {
 
 .player-memory.warning strong {
   color: #8a320d;
+}
+
+.player-memory.warning .submit-player-name {
+  color: #ffffff;
 }
 
 .change-player-button {

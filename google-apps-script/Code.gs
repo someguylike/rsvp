@@ -32,6 +32,13 @@ const AUDIT_HEADERS = [
   "Client IP",
   "Submitted At",
   "Existing RSVP",
+  "Public IP",
+  "Public IP Source",
+  "Client User Agent",
+  "Client Platform",
+  "Client Vendor",
+  "Client Referrer",
+  "Page URL",
 ];
 const PLAYERS = [
   "Alex Yeung",
@@ -471,6 +478,13 @@ function appendAuditLog_(params, action, row, existingRsvp) {
       sanitizeText_(params.clientIp || "Unavailable in Apps Script"),
       sanitizeText_(params.submittedAt || ""),
       existingRsvp ? JSON.stringify(existingRsvp) : "",
+      sanitizeText_(params.clientPublicIp || ""),
+      sanitizeText_(params.clientPublicIpSource || ""),
+      sanitizeText_(params.clientUserAgent || ""),
+      sanitizeText_(params.clientPlatform || ""),
+      sanitizeText_(params.clientVendor || ""),
+      sanitizeText_(params.clientReferrer || ""),
+      sanitizeText_(params.clientPageUrl || ""),
     ];
     sheet.appendRow(values);
     return {
@@ -617,6 +631,13 @@ function auditRowToEntry_(row, sheetRow) {
       ? String(existingRsvp.participantCount || "")
       : "",
     existingVote: existingRsvp ? String(existingRsvp.vote || "") : "",
+    clientPublicIp: String(row[15] || ""),
+    clientPublicIpSource: String(row[16] || ""),
+    clientUserAgent: String(row[17] || ""),
+    clientPlatform: String(row[18] || ""),
+    clientVendor: String(row[19] || ""),
+    clientReferrer: String(row[20] || ""),
+    clientPageUrl: String(row[21] || ""),
   };
 }
 
