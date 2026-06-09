@@ -425,6 +425,18 @@ button:disabled {
   opacity: 0.65;
 }
 
+.submit-action-line,
+.submit-date-line {
+  display: block;
+}
+
+.submit-date-line {
+  margin-top: 4px;
+  color: rgb(255 255 255 / 86%);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .submit-player-name {
   display: inline-block;
   border-radius: 6px;

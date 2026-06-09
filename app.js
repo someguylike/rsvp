@@ -161,6 +161,15 @@
     };
   }
 
+  function formatSubmitDateLine(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
+      return "";
+    }
+
+    const label = formatDateOption(new Date(`${value}T00:00:00`));
+    return `${label.day} · ${label.full}`;
+  }
+
   function selectPlayDate(value, options) {
     const isCustom = Boolean(options?.isCustom);
     dateInput.value = value;
@@ -339,10 +348,22 @@
 
     const count = Number(participantInput.value || 1);
     const countText = count === 1 ? "1 spot" : `${count} spots`;
-    submitButton.append(
+    const actionLine = document.createElement("span");
+    const dateLine = document.createElement("span");
+
+    actionLine.className = "submit-action-line";
+    actionLine.append(
       document.createTextNode(count === 0 ? "Mark not going for " : `Reserve ${countText} for `),
       createSubmitName(playerName),
     );
+    submitButton.append(actionLine);
+
+    const submitDate = formatSubmitDateLine(dateInput.value);
+    if (submitDate) {
+      dateLine.className = "submit-date-line";
+      dateLine.textContent = submitDate;
+      submitButton.append(dateLine);
+    }
   }
 
   function updateSectionVisibility(showDetails) {
