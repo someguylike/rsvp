@@ -935,13 +935,13 @@ button:disabled {
 
 .heatmap-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
   gap: 10px;
 }
 
 .heatmap-tile {
   display: grid;
-  min-height: 92px;
+  min-height: 74px;
   align-content: center;
   gap: 4px;
   border: 1px solid var(--line);
@@ -1023,7 +1023,7 @@ button:disabled {
 .calendar-weekday,
 .calendar-week {
   color: inherit;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 800;
   overflow-wrap: normal;
   white-space: nowrap;
@@ -1031,7 +1031,7 @@ button:disabled {
 
 .calendar-day {
   color: inherit;
-  font-size: 0.88rem;
+  font-size: 0.72rem;
   font-weight: 900;
   overflow-wrap: normal;
   white-space: nowrap;

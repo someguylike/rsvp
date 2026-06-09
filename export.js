@@ -225,9 +225,8 @@
       week: `Week ${weekOfMonth}`,
       title: date.toLocaleDateString("en-US", {
         weekday: "long",
-        month: "short",
+        month: "numeric",
         day: "numeric",
-        year: "numeric",
       }),
     };
   }
