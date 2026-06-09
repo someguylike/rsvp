@@ -542,7 +542,13 @@ function getAuditLog_(params) {
       }
       return true;
     })
-    .sort((first, second) => second.loggedAt.localeCompare(first.loggedAt))
+    .sort((first, second) => {
+      const dateOrder = second.playDate.localeCompare(first.playDate);
+      if (dateOrder !== 0) {
+        return dateOrder;
+      }
+      return second.loggedAt.localeCompare(first.loggedAt);
+    })
     .slice(0, limit);
 
   return {
