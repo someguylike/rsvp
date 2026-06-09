@@ -1003,8 +1003,38 @@ button:disabled {
 
 .audit-table th:nth-child(2),
 .audit-table td:nth-child(2) {
-  min-width: 220px;
+  min-width: 320px;
   text-align: left;
+}
+
+.date-audit-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.date-audit-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.date-audit-list span {
+  overflow-wrap: anywhere;
+}
+
+.date-audit-list strong {
+  display: inline-grid;
+  min-width: 30px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .tally {
@@ -1425,6 +1455,21 @@ button:disabled {
 
   .roster-member-table a {
     overflow-wrap: anywhere;
+  }
+
+  .date-audit-list {
+    gap: 8px;
+  }
+
+  .date-audit-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .date-audit-list strong {
+    min-width: 28px;
+    min-height: 26px;
+    font-size: 0.78rem;
   }
 
   .member-name-cell {

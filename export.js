@@ -253,25 +253,26 @@
     filterSection.hidden = activePlayers.length === 0;
   }
 
-  function getAuditRows(model) {
-    const rows = [];
+  function getAuditGroups(model) {
+    return model.dates
+      .map((date, dateIndex) => {
+        const players = model.players
+          .map((player) => ({
+            name: player.name,
+            participants: Number(player.values[dateIndex] || 0),
+          }))
+          .filter((player) => player.participants > 0);
 
-    model.dates.forEach((date, dateIndex) => {
-      model.players.forEach((player) => {
-        const participantCount = Number(player.values[dateIndex] || 0);
-        if (!participantCount) {
-          return;
-        }
-
-        rows.push({
+        return {
           date,
-          player: player.name,
-          participants: participantCount,
-        });
-      });
-    });
-
-    return rows;
+          total: players.reduce(
+            (sum, player) => sum + player.participants,
+            0,
+          ),
+          players,
+        };
+      })
+      .filter((group) => group.players.length > 0);
   }
 
   function renderGroupHeatmap(model) {
@@ -357,28 +358,42 @@
   }
 
   function renderAuditTable(model) {
-    const rows = getAuditRows(model);
+    const groups = getAuditGroups(model);
     auditTable.textContent = "";
 
-    if (rows.length === 0) {
+    if (groups.length === 0) {
       auditSection.hidden = true;
       return;
     }
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Date", "Player", "Participants"].forEach((header) => {
+    ["Date", "Players", "Total"].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
 
     const tbody = document.createElement("tbody");
-    rows.forEach((entry) => {
+    groups.forEach((group) => {
       const row = document.createElement("tr");
-      appendCell(row, "td", entry.date).dataset.label = "Date";
-      appendCell(row, "td", entry.player).dataset.label = "Player";
-      appendCell(row, "td", String(entry.participants)).dataset.label =
-        "Participants";
+      const playersCell = document.createElement("td");
+      const playerList = document.createElement("ul");
+
+      appendCell(row, "td", group.date).dataset.label = "Date";
+      playerList.className = "date-audit-list";
+      group.players.forEach((player) => {
+        const item = document.createElement("li");
+        const name = document.createElement("span");
+        const participants = document.createElement("strong");
+        name.textContent = player.name;
+        participants.textContent = String(player.participants);
+        item.append(name, participants);
+        playerList.append(item);
+      });
+      playersCell.dataset.label = "Players";
+      playersCell.append(playerList);
+      row.append(playersCell);
+      appendCell(row, "td", String(group.total)).dataset.label = "Total";
       tbody.append(row);
     });
 
@@ -386,7 +401,7 @@
     auditNote.textContent = [
       playerFilter.value ? playerFilter.value : "All players",
       selectedDate || "all dates",
-      `${rows.length} RSVP rows`,
+      `${groups.length} date${groups.length === 1 ? "" : "s"}`,
     ].join(" · ");
     auditSection.hidden = false;
   }
