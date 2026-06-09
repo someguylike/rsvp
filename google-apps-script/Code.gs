@@ -201,13 +201,14 @@ function doGet(event) {
       const result = exportMonthRoster_(
         required_(params.month, "Missing export month"),
       );
+      const canOpenSpreadsheet = hasAdminAccess_(params);
       return jsonp_(callback, {
         ok: true,
         action: "exportMonth",
         sheetName: result.sheetName,
         exportedDates: result.exportedDates,
         previewRows: result.previewRows,
-        url: result.url,
+        url: canOpenSpreadsheet ? result.url : "",
       });
     }
 
@@ -215,13 +216,14 @@ function doGet(event) {
       const result = viewMonthRoster_(
         required_(params.month, "Missing export month"),
       );
+      const canOpenSpreadsheet = hasAdminAccess_(params);
       return jsonp_(callback, {
         ok: true,
         action: "viewMonth",
         sheetName: result.sheetName,
         exportedDates: result.exportedDates,
         previewRows: result.previewRows,
-        url: result.url,
+        url: canOpenSpreadsheet ? result.url : "",
       });
     }
 
@@ -284,12 +286,19 @@ function adminLogin_(params) {
 
 function requireAdmin_(params) {
   const token = required_(params.adminToken, "Admin login required");
-  const isValid =
-    CacheService.getScriptCache().get(getAdminTokenCacheKey_(token)) === "true";
 
-  if (!isValid) {
+  if (!hasAdminToken_(token)) {
     throw new Error("Admin login expired. Please log in again.");
   }
+}
+
+function hasAdminAccess_(params) {
+  const token = params.adminToken;
+  return token ? hasAdminToken_(token) : false;
+}
+
+function hasAdminToken_(token) {
+  return CacheService.getScriptCache().get(getAdminTokenCacheKey_(token)) === "true";
 }
 
 function getAdminTokenCacheKey_(token) {
