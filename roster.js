@@ -119,6 +119,7 @@
     form.reset();
     editingOriginalName = "";
     updateSaveButtonLabel();
+    renderRoster();
     nameInput.focus();
   }
 
@@ -132,6 +133,16 @@
     nameInput.focus();
   }
 
+  function fillMissingInfoForm(member) {
+    fillForm(member);
+    setStatus(
+      "Add only the blank contact info for this existing member. Admin login is required to change existing info.",
+      "",
+    );
+    renderRoster();
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function isRenamingMember() {
     return (
       editingOriginalName &&
@@ -141,7 +152,12 @@
 
   function updateSaveButtonLabel() {
     if (!adminToken) {
-      saveButton.disabled = false;
+      const selectedMember = findRosterMemberByName(nameInput.value);
+      const canAddMissingInfo =
+        selectedMember &&
+        !isRenamingMember() &&
+        getMissingMemberInfo(selectedMember).length > 0;
+      saveButton.disabled = !canAddMissingInfo;
       saveButton.textContent = "Add Missing Info";
       return;
     }
@@ -180,6 +196,35 @@
     return cell;
   }
 
+  function getInitials(name) {
+    return String(name || "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0] || "")
+      .join("")
+      .toUpperCase();
+  }
+
+  function appendMemberNameCell(row, member) {
+    const cell = document.createElement("td");
+    const wrap = document.createElement("div");
+    const initials = document.createElement("span");
+    const name = document.createElement("span");
+
+    cell.dataset.label = "Name";
+    wrap.className = "member-name-cell";
+    initials.className = "member-initials";
+    initials.textContent = getInitials(member.name) || "?";
+    name.className = "member-name-text";
+    name.textContent = member.name || "";
+
+    wrap.append(initials, name);
+    cell.append(wrap);
+    row.append(cell);
+    return cell;
+  }
+
   function getVenmoUrl(value) {
     const handle = normalizeVenmoHandle(value);
     if (!handle) {
@@ -205,13 +250,17 @@
     const cell = document.createElement("td");
     if (text && href) {
       const link = document.createElement("a");
+      link.className = "contact-chip";
       link.href = href;
       link.target = "_blank";
       link.rel = "noreferrer";
       link.textContent = text;
       cell.append(link);
     } else {
-      cell.textContent = text || "";
+      const fallback = document.createElement("span");
+      fallback.className = text ? "contact-chip muted-contact" : "missing-contact";
+      fallback.textContent = text || "Missing";
+      cell.append(fallback);
     }
 
     if (warningMessage) {
@@ -299,6 +348,16 @@
     );
   }
 
+  function getMissingMemberInfo(member) {
+    return [
+      ["Venmo", member.venmo],
+      ["Facebook", member.messenger],
+      ["Cellphone", member.cellphone],
+    ]
+      .filter((entry) => !String(entry[1] || "").trim())
+      .map((entry) => entry[0]);
+  }
+
   function renderRoster() {
     const visibleRoster = getVisibleRoster();
     memberCount.textContent =
@@ -314,6 +373,8 @@
     if (adminToken) {
       headers.push("Cellphone");
       headers.push("Actions");
+    } else {
+      headers.push("Missing Info");
     }
     headers.forEach((header) => {
       appendCell(headerRow, "th", header);
@@ -323,8 +384,15 @@
     const tbody = document.createElement("tbody");
     visibleRoster.forEach((member) => {
       const row = document.createElement("tr");
+      const isSelected =
+        !adminToken &&
+        editingOriginalName &&
+        normalizeSearchText(editingOriginalName) === normalizeSearchText(member.name);
       const venmoUrl = getVenmoUrl(member.venmo);
-      appendCell(row, "td", member.name || "").dataset.label = "Name";
+      if (isSelected) {
+        row.className = "selected-member-row";
+      }
+      appendMemberNameCell(row, member);
       appendLinkCell(
         row,
         member.venmo || "",
@@ -371,6 +439,37 @@
         actionsWrap.append(removeButton);
         actions.append(actionsWrap);
         row.append(actions);
+      } else {
+        const missingInfo = getMissingMemberInfo(member);
+        const missingInfoCell = document.createElement("td");
+        missingInfoCell.className = "roster-actions-cell";
+        missingInfoCell.dataset.label = "Missing Info";
+
+        if (missingInfo.length > 0) {
+          const missingWrap = document.createElement("div");
+          const missingLabel = document.createElement("span");
+          const addButton = document.createElement("button");
+          missingWrap.className = "missing-info-action";
+          missingLabel.className = "missing-info-label";
+          missingLabel.textContent = missingInfo.join(", ");
+          addButton.className = "secondary-button inline-button";
+          addButton.type = "button";
+          addButton.textContent = isSelected ? "Selected" : "Add Missing Info";
+          addButton.title = `Missing ${missingInfo.join(", ")}`;
+          addButton.disabled = isSelected;
+          addButton.addEventListener("click", () => {
+            fillMissingInfoForm(member);
+          });
+          missingWrap.append(missingLabel, addButton);
+          missingInfoCell.append(missingWrap);
+        } else {
+          const complete = document.createElement("span");
+          complete.className = "complete-chip";
+          complete.textContent = "Complete";
+          missingInfoCell.append(complete);
+        }
+
+        row.append(missingInfoCell);
       }
       tbody.append(row);
     });
@@ -521,12 +620,16 @@
 
   nameInput.addEventListener("input", () => {
     updateSaveButtonLabel();
+    if (!adminToken) {
+      renderRoster();
+    }
   });
 
   nameInput.addEventListener("change", () => {
     const member = findRosterMemberByName(nameInput.value);
     if (member) {
       fillForm(member);
+      renderRoster();
     }
   });
 

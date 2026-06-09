@@ -791,7 +791,7 @@ button:disabled {
 
 .roster-member-table th:first-child,
 .roster-member-table td:first-child {
-  min-width: 220px;
+  min-width: 240px;
   text-align: left;
 }
 
@@ -801,7 +801,7 @@ button:disabled {
 
 .roster-member-table th:nth-child(2),
 .roster-member-table td:nth-child(2) {
-  min-width: 160px;
+  min-width: 170px;
   text-align: left;
 }
 
@@ -824,7 +824,7 @@ button:disabled {
 
 .roster-member-table th:nth-child(3),
 .roster-member-table td:nth-child(3) {
-  min-width: 220px;
+  min-width: 250px;
   text-align: left;
 }
 
@@ -834,6 +834,89 @@ button:disabled {
 .roster-member-table td:nth-child(5) {
   min-width: 150px;
   text-align: center;
+}
+
+.selected-member-row td {
+  background: #fff8df;
+}
+
+.member-name-cell {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.member-initials {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #b7d7f4;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.member-name-text {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-weight: 850;
+}
+
+.contact-chip,
+.missing-contact,
+.complete-chip {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  border-radius: 999px;
+  overflow-wrap: anywhere;
+  padding: 5px 10px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: normal;
+}
+
+.contact-chip {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--accent-strong);
+}
+
+.contact-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.muted-contact,
+.missing-contact {
+  border: 1px dashed var(--line-strong);
+  background: #fbfcfd;
+  color: var(--muted);
+}
+
+.complete-chip {
+  border: 1px solid #badbcc;
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.missing-info-action {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.missing-info-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: normal;
 }
 
 .roster-actions {
@@ -1359,6 +1442,28 @@ button:disabled {
 
   .roster-member-table a {
     overflow-wrap: anywhere;
+  }
+
+  .member-name-cell {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .member-initials {
+    width: 30px;
+    height: 30px;
+    font-size: 0.72rem;
+  }
+
+  .contact-chip,
+  .missing-contact,
+  .complete-chip {
+    width: fit-content;
+    min-height: 28px;
+    white-space: normal;
+  }
+
+  .missing-info-action {
+    justify-items: start;
   }
 
   .roster-actions-cell {
