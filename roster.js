@@ -26,7 +26,7 @@
 
   function renderAdminState() {
     adminEyebrow.hidden = !adminToken;
-    noteInput.disabled = !adminToken;
+    noteInput.disabled = false;
     updateSaveButtonLabel();
     renderRoster();
   }
@@ -139,8 +139,8 @@
     const missingInfo = getMissingMemberInfo(member);
     setStatus(
       missingInfo.length > 0
-        ? "Existing info is prefilled. Without admin, only blank contact info can be added."
-        : "Existing info is prefilled. Admin login is required to change saved info.",
+        ? "Existing info is prefilled. Without admin, Venmo/Facebook can only fill blanks; Note can be updated."
+        : "Existing info is prefilled. Note can be updated.",
       "",
     );
     renderRoster();
@@ -157,11 +157,8 @@
   function updateSaveButtonLabel() {
     if (!adminToken) {
       const selectedMember = findRosterMemberByName(nameInput.value);
-      const canAddMissingInfo =
-        selectedMember &&
-        !isRenamingMember() &&
-        getMissingMemberInfo(selectedMember).length > 0;
-      saveButton.disabled = !canAddMissingInfo;
+      const canUpdateInfo = selectedMember && !isRenamingMember();
+      saveButton.disabled = !canUpdateInfo;
       saveButton.textContent = "Add/Update Info";
       return;
     }
@@ -396,7 +393,7 @@
     return [
       ["Venmo", member.venmo],
       ["Facebook", member.messenger],
-      ["Cellphone", member.cellphone],
+      ["Note", member.note],
     ]
       .filter((entry) => !String(entry[1] || "").trim())
       .map((entry) => entry[0]);
@@ -618,7 +615,7 @@
       playerName: nameInput.value.trim(),
       venmo: venmoInput.value.trim(),
       messenger: messengerInput.value.trim(),
-      note: adminToken ? noteInput.value.trim() : "",
+      note: noteInput.value.trim(),
     };
 
     if (!payload.playerName) {

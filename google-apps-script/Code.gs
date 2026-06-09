@@ -867,11 +867,13 @@ function completeRosterMemberInfo_(params) {
       venmo: String(values[1] || "").trim(),
       messenger: String(values[2] || "").trim(),
       cellphone: String(values[3] || "").trim(),
+      note: String(values[4] || "").trim(),
     };
     const requested = {
       venmo: params.venmo ? normalizeVenmo_(params.venmo) : "",
       messenger: params.messenger ? normalizeMessenger_(params.messenger) : "",
       cellphone: sanitizeText_(params.cellphone || ""),
+      note: sanitizeText_(params.note || ""),
     };
     const updatedFields = [];
 
@@ -902,6 +904,11 @@ function completeRosterMemberInfo_(params) {
       } else if (normalize_(current.cellphone) !== normalize_(requested.cellphone)) {
         throw new Error("Admin login is required to change an existing cellphone.");
       }
+    }
+
+    if (current.note !== requested.note) {
+      values[4] = requested.note;
+      updatedFields.push("Note");
     }
 
     if (updatedFields.length === 0) {
