@@ -558,13 +558,12 @@ button:disabled {
   grid-template-columns:
     minmax(180px, 0.9fr)
     minmax(160px, 0.8fr)
-    minmax(220px, 1fr)
-    minmax(260px, 1.25fr);
+    minmax(220px, 1fr);
   gap: 14px;
 }
 
 .roster-note-field {
-  grid-column: span 1;
+  grid-column: 1 / -1;
 }
 
 .status {
