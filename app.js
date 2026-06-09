@@ -447,11 +447,11 @@
     if (!removeRsvpButton) return;
     if (!payload || Number(payload.participantCount) <= 0) {
       removeRsvpButton.hidden = true;
-      removeRsvpButton.textContent = "Remove this RSVP";
+      removeRsvpButton.textContent = "Made a mistake? Remove this RSVP";
       return;
     }
     removeRsvpButton.hidden = false;
-    removeRsvpButton.textContent = `Remove RSVP for ${payload.playerName} on ${formatShortDisplayDate(payload.playDate)}`;
+    removeRsvpButton.textContent = `Made a mistake? Remove RSVP for ${payload.playerName} on ${formatShortDisplayDate(payload.playDate)}`;
   }
 
   function formatShortDisplayDate(value) {
