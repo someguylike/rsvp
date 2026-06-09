@@ -427,10 +427,24 @@
       renderMemberNameOptions();
       renderRoster();
       clearForm();
+      const renameCounts = result.renameCounts || {};
+      const rsvpRows = Number(renameCounts.rsvpRows || 0);
+      const auditRows = Number(renameCounts.auditRows || 0);
+      const auditExistingRows = Number(renameCounts.auditExistingRows || 0);
+      const exportRows = Number(renameCounts.exportRows || 0);
+      const renamedMessage = [
+        "Renamed member.",
+        `${rsvpRows} RSVP row${rsvpRows === 1 ? "" : "s"}`,
+        `${auditRows} audit row${auditRows === 1 ? "" : "s"}`,
+        `${auditExistingRows} audit detail row${
+          auditExistingRows === 1 ? "" : "s"
+        }`,
+        `${exportRows} exported report row${exportRows === 1 ? "" : "s"}`,
+      ].join(" ");
       const messages = {
         created: "Added member.",
         updated: "Updated member.",
-        renamed: "Renamed member. Past RSVPs and audit rows were left unchanged.",
+        renamed: renamedMessage,
       };
       setStatus(messages[result.action] || "Saved member.", "success");
     } catch (error) {

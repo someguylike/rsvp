@@ -120,6 +120,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: result.action,
+        renameCounts: result.renameCounts || null,
         roster: result.roster,
       });
     }
@@ -796,8 +797,10 @@ function saveRosterMember_(params) {
       }
 
       sheet.getRange(oldRow, 1, 1, ROSTER_HEADERS.length).setValues([values]);
+      const renameCounts = renamePlayerEverywhere_(oldName, name);
       return {
         action: "renamed",
+        renameCounts,
         roster: getRoster_(),
       };
     }
@@ -840,6 +843,88 @@ function removeRosterMember_(params) {
     };
   } finally {
     lock.releaseLock();
+  }
+}
+
+function renamePlayerEverywhere_(oldName, newName) {
+  return {
+    rsvpRows: renamePlayerInSheetColumn_(getSheet_(), 2, oldName, newName),
+    auditRows: renamePlayerInSheetColumn_(getAuditSheet_(), 4, oldName, newName),
+    auditExistingRows: renamePlayerInAuditExistingRsvps_(oldName, newName),
+    exportRows: renamePlayerInExportSheets_(oldName, newName),
+  };
+}
+
+function renamePlayerInSheetColumn_(sheet, column, oldName, newName) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return 0;
+  }
+
+  const range = sheet.getRange(2, column, lastRow - 1, 1);
+  const values = range.getValues();
+  let changed = 0;
+
+  values.forEach((row) => {
+    if (normalize_(row[0]) === normalize_(oldName)) {
+      row[0] = newName;
+      changed += 1;
+    }
+  });
+
+  if (changed > 0) {
+    range.setValues(values);
+  }
+
+  return changed;
+}
+
+function renamePlayerInAuditExistingRsvps_(oldName, newName) {
+  const sheet = getAuditSheet_();
+  const lastRow = sheet.getLastRow();
+  const existingRsvpColumn = 15;
+
+  if (lastRow < 2) {
+    return 0;
+  }
+
+  const range = sheet.getRange(2, existingRsvpColumn, lastRow - 1, 1);
+  const values = range.getValues();
+  let changed = 0;
+
+  values.forEach((row) => {
+    const existingRsvp = parseAuditExistingRsvp_(row[0]);
+    if (
+      existingRsvp &&
+      normalize_(existingRsvp.playerName) === normalize_(oldName)
+    ) {
+      existingRsvp.playerName = newName;
+      row[0] = JSON.stringify(existingRsvp);
+      changed += 1;
+    }
+  });
+
+  if (changed > 0) {
+    range.setValues(values);
+  }
+
+  return changed;
+}
+
+function renamePlayerInExportSheets_(oldName, newName) {
+  try {
+    const spreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
+    return spreadsheet
+      .getSheets()
+      .reduce(
+        (total, sheet) =>
+          total + renamePlayerInSheetColumn_(sheet, 1, oldName, newName),
+        0,
+      );
+  } catch (error) {
+    console.warn(`Could not update exported roster names: ${error.message}`);
+    return 0;
   }
 }
 
