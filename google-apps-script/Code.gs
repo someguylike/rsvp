@@ -1399,7 +1399,7 @@ function normalizePhotoUrl_(value) {
 function getFacebookProfilePhoto_(facebookUrl) {
   const normalizedUrl = normalizeMessenger_(facebookUrl);
   const cache = CacheService.getScriptCache();
-  const cacheKey = `fb_photo:${Utilities.base64EncodeWebSafe(normalizedUrl).slice(0, 180)}`;
+  const cacheKey = `fb_photo_v2:${Utilities.base64EncodeWebSafe(normalizedUrl).slice(0, 176)}`;
   const cached = cache.get(cacheKey);
 
   if (cached !== null) {
@@ -1407,20 +1407,13 @@ function getFacebookProfilePhoto_(facebookUrl) {
   }
 
   try {
-    const response = UrlFetchApp.fetch(normalizedUrl, {
-      followRedirects: true,
-      muteHttpExceptions: true,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-          "(KHTML, like Gecko) Chrome/125.0 Safari/537.36",
-      },
-    });
-    const html = response.getContentText() || "";
-    const match = html.match(
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-    );
-    const photoUrl = match ? decodeHtmlEntities_(match[1]) : "";
+    const photoUrl = getFacebookProfilePhotoFromUrls_([
+      normalizedUrl,
+      normalizedUrl.replace(
+        "https://www.facebook.com/",
+        "https://m.facebook.com/",
+      ),
+    ]);
     cache.put(cacheKey, photoUrl, 21600);
     return photoUrl;
   } catch (error) {
@@ -1428,6 +1421,59 @@ function getFacebookProfilePhoto_(facebookUrl) {
     cache.put(cacheKey, "", 900);
     return "";
   }
+}
+
+function getFacebookProfilePhotoFromUrls_(urls) {
+  for (let index = 0; index < urls.length; index += 1) {
+    const html = fetchFacebookPage_(urls[index]);
+    const photoUrl = extractFacebookImageFromHtml_(html);
+    if (photoUrl) {
+      return photoUrl;
+    }
+  }
+  return "";
+}
+
+function fetchFacebookPage_(url) {
+  const response = UrlFetchApp.fetch(url, {
+    followRedirects: true,
+    muteHttpExceptions: true,
+    headers: {
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+    },
+  });
+  return response.getContentText() || "";
+}
+
+function extractFacebookImageFromHtml_(html) {
+  const text = String(html || "");
+  const ogImage = text.match(
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+  ) || text.match(
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+  );
+  if (ogImage) {
+    return decodeHtmlEntities_(ogImage[1]);
+  }
+
+  const profilePic = text.match(/"profilePicURI":"([^"]+)"/);
+  if (profilePic) {
+    return decodeFacebookJsonString_(profilePic[1]);
+  }
+
+  const scontentImage = text.match(
+    /https:\\?\/\\?\/[^"'< ]+scontent[^"'< ]+/,
+  );
+  return scontentImage ? decodeFacebookJsonString_(scontentImage[0]) : "";
+}
+
+function decodeFacebookJsonString_(value) {
+  return decodeHtmlEntities_(String(value || "").replace(/\\\//g, "/"));
 }
 
 function decodeHtmlEntities_(value) {
