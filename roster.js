@@ -465,19 +465,12 @@
       appendNoteCell(row, member);
       if (adminToken) {
         const actions = document.createElement("td");
-        const editButton = document.createElement("button");
         const removeButton = document.createElement("button");
 
         actions.className = "roster-actions-cell";
         actions.dataset.label = "Actions";
         const actionsWrap = document.createElement("div");
         actionsWrap.className = "roster-actions";
-        editButton.className = "secondary-button inline-button";
-        editButton.type = "button";
-        editButton.textContent = "Edit";
-        editButton.addEventListener("click", () => {
-          fillForm(member);
-        });
 
         removeButton.className = "secondary-button inline-button danger-button";
         removeButton.type = "button";
@@ -486,7 +479,6 @@
           removeMember(member.name);
         });
 
-        actionsWrap.append(editButton);
         actionsWrap.append(removeButton);
         actions.append(actionsWrap);
         row.append(actions);
