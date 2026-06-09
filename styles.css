@@ -286,11 +286,15 @@ select:focus {
 
 .restore-status {
   min-height: 20px;
-  margin: -2px 0 0;
-  color: var(--muted);
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   font-size: 0.82rem;
-  font-weight: 750;
+  font-weight: 800;
   line-height: 1.35;
+  padding: 8px 10px;
 }
 
 .change-player-button {

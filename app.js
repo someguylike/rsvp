@@ -81,6 +81,7 @@
   let selectedPlayerName = "";
   let lastSubmittedPayload = null;
   let publicIpPromise = null;
+  let restoredPlayerFromStorage = false;
 
   function readJson(key, fallback) {
     try {
@@ -957,12 +958,14 @@
     const lastRsvp = readJson(LAST_RSVP_KEY, null);
     const lastPlayerName = readString(LAST_PLAYER_KEY) || lastRsvp?.playerName || "";
     if (lastPlayerName && isValidPlayerName(lastPlayerName)) {
+      restoredPlayerFromStorage = true;
       rememberedPlayerName = lastPlayerName;
       selectPlayerName(lastPlayerName, { remember: false, keepFocus: true });
-      setRestoreStatus(`Restored ${lastPlayerName} from this browser.`);
+      setRestoreStatus(`Loaded saved player from this browser: ${lastPlayerName}`);
     } else if (lastPlayerName) {
+      restoredPlayerFromStorage = true;
       playerInput.value = lastPlayerName;
-      setRestoreStatus(`Restoring ${lastPlayerName} from this browser...`);
+      setRestoreStatus(`Loading saved player from this browser: ${lastPlayerName}`);
     } else {
       setRestoreStatus("Loading player list...");
     }
@@ -979,9 +982,12 @@
       const exactMatch = exactPlayerMatch(playerInput.value);
       if (exactMatch) {
         selectPlayerName(exactMatch, { remember: false, keepFocus: true });
+        setRestoreStatus(`Loaded saved player from this browser: ${exactMatch}`);
       }
     }
-    setRestoreStatus("");
+    if (!restoredPlayerFromStorage) {
+      setRestoreStatus("");
+    }
     updatePlayerMemory();
     if (!selectedPlayerName && !isMobileViewport()) {
       focusPlayerInput();
@@ -1033,6 +1039,7 @@
   });
 
   playerInput.addEventListener("input", () => {
+    setRestoreStatus("");
     const exactMatch = exactPlayerMatch(playerInput.value);
     if (exactMatch) {
       playerInput.value = exactMatch;
