@@ -80,6 +80,7 @@
   let selectedPlayerName = "";
   let lastSubmittedPayload = null;
   let publicIpPromise = null;
+  let activePlayerOptionIndex = -1;
 
   function readJson(key, fallback) {
     try {
@@ -301,6 +302,9 @@
   }
 
   function hidePlayerList() {
+    activePlayerOptionIndex = -1;
+    playerInput.removeAttribute("aria-activedescendant");
+    playerInput.setAttribute("aria-expanded", "false");
     playerList.hidden = true;
     playerList.style.display = "none";
   }
@@ -425,11 +429,17 @@
 
   function renderPlayerMatches(query) {
     const matches = getPlayerMatches(query);
+    activePlayerOptionIndex = -1;
+    playerInput.removeAttribute("aria-activedescendant");
     playerList.replaceChildren(
-      ...matches.map((name) => {
+      ...matches.map((name, index) => {
         const option = document.createElement("button");
         option.type = "button";
         option.className = "player-option";
+        option.id = `player-option-${index}`;
+        option.dataset.name = name;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false");
         option.textContent = name;
         option.addEventListener("pointerdown", (event) => {
           event.preventDefault();
@@ -441,11 +451,74 @@
           event.stopPropagation();
           selectPlayerName(name, { scrollToDetails: true });
         });
+        option.addEventListener("mouseenter", () => {
+          setActivePlayerOption(index);
+        });
         return option;
       }),
     );
+    playerList.setAttribute("role", "listbox");
     playerList.hidden = matches.length === 0;
     playerList.style.display = matches.length === 0 ? "none" : "grid";
+    playerInput.setAttribute("aria-expanded", String(matches.length > 0));
+  }
+
+  function getPlayerOptionButtons() {
+    return Array.from(playerList.querySelectorAll(".player-option"));
+  }
+
+  function setActivePlayerOption(index) {
+    const options = getPlayerOptionButtons();
+    if (options.length === 0) {
+      activePlayerOptionIndex = -1;
+      playerInput.removeAttribute("aria-activedescendant");
+      return;
+    }
+
+    activePlayerOptionIndex = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach((option, optionIndex) => {
+      const isActive = optionIndex === activePlayerOptionIndex;
+      option.classList.toggle("active", isActive);
+      option.setAttribute("aria-selected", String(isActive));
+    });
+    playerInput.setAttribute(
+      "aria-activedescendant",
+      options[activePlayerOptionIndex].id,
+    );
+    options[activePlayerOptionIndex].scrollIntoView({ block: "nearest" });
+  }
+
+  function moveActivePlayerOption(offset) {
+    if (playerList.hidden) {
+      renderPlayerMatches(playerInput.value);
+    }
+
+    const options = getPlayerOptionButtons();
+    if (options.length === 0) {
+      return;
+    }
+
+    const nextIndex =
+      activePlayerOptionIndex < 0
+        ? offset > 0
+          ? 0
+          : options.length - 1
+        : (activePlayerOptionIndex + offset + options.length) % options.length;
+    setActivePlayerOption(nextIndex);
+  }
+
+  function selectActivePlayerOption() {
+    const options = getPlayerOptionButtons();
+    const option =
+      options[activePlayerOptionIndex] ||
+      (!playerList.hidden && options.length === 1 ? options[0] : null);
+
+    if (!option?.dataset.name) {
+      return false;
+    }
+
+    selectPlayerName(option.dataset.name, { scrollToDetails: true });
+    return true;
   }
 
   function isValidPlayerName(name) {
@@ -1042,6 +1115,31 @@
     setRemoveRsvpAction(null);
     updatePlayerMemory();
     renderPlayerMatches(playerInput.value);
+  });
+
+  playerInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveActivePlayerOption(1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveActivePlayerOption(-1);
+      return;
+    }
+
+    if (event.key === "Enter" && !playerList.hidden) {
+      if (selectActivePlayerOption()) {
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      hidePlayerList();
+    }
   });
 
   participantInput.addEventListener("change", () => {

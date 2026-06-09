@@ -244,7 +244,8 @@ select:focus {
 }
 
 .player-option:hover,
-.player-option:focus {
+.player-option:focus,
+.player-option.active {
   background: var(--accent-soft);
   color: var(--accent-strong);
   box-shadow: none;

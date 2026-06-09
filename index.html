@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Who’s In This Week?</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260609-15" />
+    <link rel="stylesheet" href="./styles.css?v=20260609-16" />
   </head>
   <body>
     <main class="shell">
@@ -34,6 +34,10 @@
               name="playerName"
               autocomplete="off"
               inputmode="search"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-controls="player-list"
+              aria-expanded="false"
               required
               placeholder="Search your name"
             />
@@ -121,6 +125,6 @@
     </dialog>
 
     <script src="./admin-auth.js?v=20260609-3"></script>
-    <script src="./app.js?v=20260609-15"></script>
+    <script src="./app.js?v=20260609-16"></script>
   </body>
 </html>
