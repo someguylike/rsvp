@@ -48,6 +48,7 @@
   ];
   const LAST_RSVP_KEY = "play-rsvp.lastRsvp";
   const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
+  const ROSTER_CONTACTS_KEY = "play-rsvp.rosterContacts";
   const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
@@ -341,7 +342,7 @@
     } else if (changedFromRemembered) {
       playerMemory.hidden = false;
       playerMemory.replaceChildren(
-        document.createTextNode("Warning: submitting as "),
+        document.createTextNode("Warning: selected "),
         createSubmitName(currentName),
         document.createTextNode(`, not your last used name ${rememberedPlayerName}.`),
       );
@@ -351,15 +352,12 @@
       }
     } else if (selectedValidName) {
       playerMemory.hidden = false;
-      playerMemory.replaceChildren(
-        document.createTextNode("Submitting as "),
-        createSubmitName(currentName),
-      );
+      playerMemory.replaceChildren();
       const identityHint = createPlayerIdentityHint(currentName);
       if (identityHint) {
-        playerMemory.append(document.createTextNode(" "), identityHint);
+        playerMemory.append(identityHint);
       } else {
-        playerMemory.append(document.createTextNode("."));
+        playerMemory.hidden = true;
       }
     } else if (currentName) {
       playerMemory.hidden = false;
@@ -424,7 +422,7 @@
 
     const hint = document.createElement("span");
     hint.className = "player-identity-hint";
-    hint.textContent = `(${hints.join(", ")})`;
+    hint.textContent = hints.join(", ");
     return hint;
   }
 
@@ -440,6 +438,36 @@
       formatVenmoHint(member.venmo),
       formatFacebookHint(member.messenger),
     ].filter(Boolean);
+  }
+
+  function setRosterContacts(roster) {
+    rosterContactsByName.clear();
+    rosterContactsByNormalizedName.clear();
+    roster.forEach((member) => {
+      const name = String(member.name || "").trim();
+      if (name) {
+        rosterContactsByName.set(name, member);
+        rosterContactsByNormalizedName.set(normalizeSearchText(name), member);
+      }
+    });
+  }
+
+  function restoreRosterContacts() {
+    const cachedRoster = readJson(ROSTER_CONTACTS_KEY, []);
+    if (Array.isArray(cachedRoster) && cachedRoster.length > 0) {
+      setRosterContacts(cachedRoster);
+    }
+  }
+
+  function cacheRosterContacts(roster) {
+    const contacts = roster
+      .map((member) => ({
+        name: String(member.name || "").trim(),
+        venmo: String(member.venmo || "").trim(),
+        messenger: String(member.messenger || "").trim(),
+      }))
+      .filter((member) => member.name);
+    writeJson(ROSTER_CONTACTS_KEY, contacts);
   }
 
   function formatVenmoHint(value) {
@@ -1078,15 +1106,8 @@
       const names = roster
         .map((member) => String(member.name || "").trim())
         .filter(Boolean);
-      rosterContactsByName.clear();
-      rosterContactsByNormalizedName.clear();
-      roster.forEach((member) => {
-        const name = String(member.name || "").trim();
-        if (name) {
-          rosterContactsByName.set(name, member);
-          rosterContactsByNormalizedName.set(normalizeSearchText(name), member);
-        }
-      });
+      setRosterContacts(roster);
+      cacheRosterContacts(roster);
       if (names.length > 0) {
         PLAYERS = names;
       }
@@ -1114,6 +1135,7 @@
   }
 
   async function initialize() {
+    restoreRosterContacts();
     restoreLastPlayer();
     renderDateOptions();
 
