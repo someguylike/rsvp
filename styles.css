@@ -1025,6 +1025,7 @@ button:disabled {
 }
 
 .audit-table td:first-child .calendar-date {
+  color: var(--text);
   font-size: 1.05rem;
 }
 

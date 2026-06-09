@@ -120,15 +120,17 @@
       return;
     }
 
-    status.textContent = `${message} Log in as admin to open the spreadsheet.`;
+    status.textContent = message;
     status.className = "status success";
   }
 
   function renderAccessNotice() {
-    if (!staleWarning) {
-      return;
+    if (staleWarning) {
+      staleWarning.hidden = Boolean(adminToken);
     }
-    staleWarning.hidden = Boolean(adminToken);
+    if (exportButton) {
+      exportButton.hidden = !adminToken;
+    }
   }
 
   function setShareLink(month) {
@@ -616,7 +618,7 @@
         setStatus("Choose a month for the report.", "error");
         return;
       }
-      loadMonth(monthInput.value, mode || (adminToken ? "export" : "view"));
+      loadMonth(monthInput.value, mode || "view");
     }, 180);
   }
 
@@ -643,7 +645,7 @@
   });
 
   monthInput.addEventListener("change", () => {
-    scheduleReportLoad();
+    scheduleReportLoad("view");
   });
 
   playerFilter.addEventListener("change", () => {
@@ -676,7 +678,7 @@
       !latestReportStatus.href &&
       isMonthValue(monthInput.value)
     ) {
-      scheduleReportLoad("export");
+      scheduleReportLoad("view");
       return;
     }
     if (latestReportStatus) {
