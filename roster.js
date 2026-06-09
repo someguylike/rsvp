@@ -16,7 +16,6 @@
   const venmoInput = document.querySelector("#venmo");
   const messengerInput = document.querySelector("#messenger");
   const cellphoneInput = document.querySelector("#cellphone");
-  const photoUrlInput = document.querySelector("#photo-url");
   const memberSearch = document.querySelector("#member-search");
   const saveButton = document.querySelector("#save-button");
   const status = document.querySelector("#status");
@@ -25,8 +24,6 @@
   let roster = [];
   let adminToken = "";
   let editingOriginalName = "";
-  const facebookPhotoCache = new Map();
-  const venmoPhotoCache = new Map();
 
   function readAdminAuth() {
     try {
@@ -60,11 +57,9 @@
     loginPanel.hidden = Boolean(adminToken);
     adminSession.hidden = !adminToken;
     adminEyebrow.hidden = !adminToken;
-    [nameInput, venmoInput, messengerInput, cellphoneInput, photoUrlInput].forEach(
-      (input) => {
-        input.disabled = !adminToken;
-      },
-    );
+    [nameInput, venmoInput, messengerInput, cellphoneInput].forEach((input) => {
+      input.disabled = !adminToken;
+    });
     updateSaveButtonLabel();
     renderRoster();
   }
@@ -167,7 +162,6 @@
     venmoInput.value = member.venmo || "";
     messengerInput.value = member.messenger || "";
     cellphoneInput.value = member.cellphone || "";
-    photoUrlInput.value = member.photoUrl || "";
     updateSaveButtonLabel();
     nameInput.focus();
   }
@@ -240,140 +234,6 @@
     return contact ? contact.url : String(value || "").trim();
   }
 
-  function getInitials(name) {
-    return String(name || "")
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() || "")
-      .join("");
-  }
-
-  function appendPhotoCell(row, member) {
-    const cell = document.createElement("td");
-    const fallback = document.createElement("span");
-    const contact = normalizeMessengerContact(member.messenger);
-    const photoUrl = normalizePhotoUrl(member.photoUrl) || contact?.pictureUrl || "";
-
-    cell.className = "roster-photo-cell";
-    cell.dataset.label = "Photo";
-    fallback.className = "roster-avatar-fallback";
-    fallback.textContent = getInitials(member.name) || "?";
-    fallback.title = "No direct profile image is available";
-
-    if (photoUrl) {
-      const image = document.createElement("img");
-      image.alt = `${member.name || "Member"} Facebook profile`;
-      image.className = "roster-avatar";
-      image.decoding = "async";
-      image.loading = "lazy";
-      image.referrerPolicy = "no-referrer";
-      image.src = photoUrl;
-      image.addEventListener("error", () => {
-        image.remove();
-        fallback.hidden = false;
-        resolveFallbackProfilePhoto(member, cell, fallback);
-      });
-      fallback.hidden = true;
-      cell.append(image, fallback);
-    } else {
-      cell.append(fallback);
-      resolveFallbackProfilePhoto(member, cell, fallback);
-    }
-
-    row.append(cell);
-    return cell;
-  }
-
-  async function resolveFallbackProfilePhoto(member, cell, fallback) {
-    if (await resolveFacebookProfilePhoto(member, cell, fallback)) {
-      return;
-    }
-    await resolveVenmoProfilePhoto(member, cell, fallback);
-  }
-
-  async function resolveFacebookProfilePhoto(member, cell, fallback) {
-    const contact = normalizeMessengerContact(member.messenger);
-    if (!contact?.url || facebookPhotoCache.get(contact.url) === "") {
-      return false;
-    }
-
-    if (!facebookPhotoCache.has(contact.url)) {
-      try {
-        const result = await requestAppsScript({
-          action: "getFacebookProfilePhoto",
-          facebookUrl: contact.url,
-        });
-        facebookPhotoCache.set(contact.url, result.photoUrl || "");
-      } catch {
-        facebookPhotoCache.set(contact.url, "");
-      }
-    }
-
-    const photoUrl = facebookPhotoCache.get(contact.url);
-    if (!photoUrl || !cell.isConnected || cell.querySelector("img")) {
-      return false;
-    }
-
-    renderResolvedPhoto(
-      cell,
-      fallback,
-      photoUrl,
-      `${member.name || "Member"} profile`,
-    );
-    return true;
-  }
-
-  async function resolveVenmoProfilePhoto(member, cell, fallback) {
-    const handle = normalizeVenmoHandle(member.venmo);
-    if (!handle || venmoPhotoCache.get(handle) === "") {
-      return false;
-    }
-
-    if (!venmoPhotoCache.has(handle)) {
-      try {
-        const result = await requestAppsScript({
-          action: "getVenmoProfilePhoto",
-          venmo: handle,
-        });
-        venmoPhotoCache.set(handle, result.photoUrl || "");
-      } catch {
-        venmoPhotoCache.set(handle, "");
-      }
-    }
-
-    const photoUrl = venmoPhotoCache.get(handle);
-    if (!photoUrl || !cell.isConnected || cell.querySelector("img")) {
-      return false;
-    }
-
-    renderResolvedPhoto(
-      cell,
-      fallback,
-      photoUrl,
-      `${member.name || "Member"} Venmo profile`,
-    );
-    return true;
-  }
-
-  function renderResolvedPhoto(cell, fallback, photoUrl, altText) {
-    const image = document.createElement("img");
-    image.alt = altText;
-    image.className = "roster-avatar";
-    image.decoding = "async";
-    image.loading = "lazy";
-    image.referrerPolicy = "no-referrer";
-    image.src = photoUrl;
-    image.addEventListener("load", () => {
-      fallback.hidden = true;
-    });
-    image.addEventListener("error", () => {
-      image.remove();
-      fallback.hidden = false;
-    });
-    cell.prepend(image);
-  }
-
   function appendLinkCell(row, text, href, warningMessage) {
     const cell = document.createElement("td");
     if (text && href) {
@@ -426,7 +286,6 @@
       return {
         value: url,
         url,
-        pictureUrl: getFacebookPictureUrl(handle),
       };
     }
 
@@ -436,7 +295,7 @@
     if (profileIdMatch) {
       const profileId = profileIdMatch[1];
       const url = `https://www.facebook.com/profile.php?id=${profileId}`;
-      return { value: url, url, pictureUrl: getFacebookPictureUrl(profileId) };
+      return { value: url, url };
     }
 
     const facebookMatch = text.match(
@@ -448,28 +307,8 @@
       ? {
           value: `https://www.facebook.com/${handle}`,
           url: `https://www.facebook.com/${handle}`,
-          pictureUrl: getFacebookPictureUrl(handle),
         }
       : null;
-  }
-
-  function normalizePhotoUrl(value) {
-    const text = String(value || "").trim();
-    if (!text) {
-      return "";
-    }
-    try {
-      const url = new URL(text);
-      return /^https?:$/.test(url.protocol) ? url.toString() : "";
-    } catch {
-      return "";
-    }
-  }
-
-  function getFacebookPictureUrl(identifier) {
-    return `https://graph.facebook.com/${encodeURIComponent(
-      identifier,
-    )}/picture?type=square&width=96&height=96`;
   }
 
   function normalizeSearchText(value) {
@@ -504,7 +343,12 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Photo", "Name", "Venmo", "Facebook", "Actions"].forEach((header) => {
+    const headers = ["Name", "Venmo", "Facebook"];
+    if (adminToken) {
+      headers.push("Cellphone");
+    }
+    headers.push("Actions");
+    headers.forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -517,7 +361,6 @@
       const removeButton = document.createElement("button");
 
       const venmoUrl = getVenmoUrl(member.venmo);
-      appendPhotoCell(row, member);
       appendCell(row, "td", member.name || "").dataset.label = "Name";
       appendLinkCell(
         row,
@@ -536,6 +379,9 @@
           ? "Invalid Facebook profile URL. Use a profile URL or plain profile handle."
           : "",
       ).dataset.label = "Facebook";
+      if (adminToken) {
+        appendCell(row, "td", member.cellphone || "").dataset.label = "Cellphone";
+      }
 
       actions.className = "roster-actions-cell";
       actions.dataset.label = "Actions";
@@ -663,7 +509,6 @@
       venmo: venmoInput.value.trim(),
       messenger: messengerInput.value.trim(),
       cellphone: cellphoneInput.value.trim(),
-      photoUrl: photoUrlInput.value.trim(),
     };
 
     if (!payload.playerName) {
@@ -693,14 +538,6 @@
       return;
     }
     payload.messenger = messengerContact.url;
-    if (payload.photoUrl) {
-      const photoUrl = normalizePhotoUrl(payload.photoUrl);
-      if (!photoUrl) {
-        setStatus("Enter a valid photo URL or leave it blank.", "error");
-        return;
-      }
-      payload.photoUrl = photoUrl;
-    }
     if (isRenamingMember()) {
       payload.oldPlayerName = editingOriginalName;
     }

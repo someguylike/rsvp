@@ -15,7 +15,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Cellphone", "Photo URL"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Cellphone"];
 const AUDIT_HEADERS = [
   "Logged At",
   "Action",
@@ -112,22 +112,6 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         roster: getRoster_(),
-      });
-    }
-
-    if (params.action === "getFacebookProfilePhoto") {
-      return jsonp_(callback, {
-        ok: true,
-        action: "getFacebookProfilePhoto",
-        photoUrl: getFacebookProfilePhoto_(params.facebookUrl),
-      });
-    }
-
-    if (params.action === "getVenmoProfilePhoto") {
-      return jsonp_(callback, {
-        ok: true,
-        action: "getVenmoProfilePhoto",
-        photoUrl: getVenmoProfilePhoto_(params.venmo),
       });
     }
 
@@ -757,7 +741,6 @@ function getRoster_() {
       venmo: String(row[1] || "").trim(),
       messenger: String(row[2] || "").trim(),
       cellphone: String(row[3] || "").trim(),
-      photoUrl: String(row[4] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
@@ -800,11 +783,10 @@ function saveRosterMember_(params) {
       required_(params.messenger, "Missing Facebook profile"),
     );
     const cellphone = sanitizeText_(params.cellphone || "");
-    const photoUrl = normalizePhotoUrl_(params.photoUrl || "");
     const sheet = getRosterSheet_();
     const oldRow = oldName ? findRosterRow_(sheet, oldName) : null;
     const row = findRosterRow_(sheet, name);
-    const values = [name, venmo, messenger, cellphone, photoUrl];
+    const values = [name, venmo, messenger, cellphone];
 
     if (oldName && normalize_(oldName) !== normalize_(name)) {
       if (!oldRow) {
@@ -1389,137 +1371,6 @@ function normalizeMessenger_(value) {
   }
 
   return `https://www.facebook.com/${handle}`;
-}
-
-function normalizePhotoUrl_(value) {
-  const text = String(value || "").trim();
-  if (!text) {
-    return "";
-  }
-
-  if (!/^https?:\/\/[^ ]+$/i.test(text)) {
-    throw new Error("Enter a valid photo URL or leave it blank");
-  }
-
-  return sanitizeText_(text);
-}
-
-function getFacebookProfilePhoto_(facebookUrl) {
-  const normalizedUrl = normalizeMessenger_(facebookUrl);
-  const cache = CacheService.getScriptCache();
-  const cacheKey = `fb_photo_v2:${Utilities.base64EncodeWebSafe(normalizedUrl).slice(0, 176)}`;
-  const cached = cache.get(cacheKey);
-
-  if (cached !== null) {
-    return cached;
-  }
-
-  try {
-    const photoUrl = getFacebookProfilePhotoFromUrls_([
-      normalizedUrl,
-      normalizedUrl.replace(
-        "https://www.facebook.com/",
-        "https://m.facebook.com/",
-      ),
-    ]);
-    cache.put(cacheKey, photoUrl, 21600);
-    return photoUrl;
-  } catch (error) {
-    console.warn(`Could not fetch Facebook profile image: ${error.message}`);
-    cache.put(cacheKey, "", 900);
-    return "";
-  }
-}
-
-function getFacebookProfilePhotoFromUrls_(urls) {
-  for (let index = 0; index < urls.length; index += 1) {
-    const html = fetchProfilePage_(urls[index]);
-    const photoUrl = extractProfileImageFromHtml_(html);
-    if (photoUrl) {
-      return photoUrl;
-    }
-  }
-  return "";
-}
-
-function getVenmoProfilePhoto_(venmo) {
-  const handle = normalizeVenmo_(venmo).replace(/^@/, "");
-  const cache = CacheService.getScriptCache();
-  const cacheKey = `venmo_photo_v1:${handle}`;
-  const cached = cache.get(cacheKey);
-
-  if (cached !== null) {
-    return cached;
-  }
-
-  try {
-    const photoUrl = getFacebookProfilePhotoFromUrls_([
-      `https://account.venmo.com/u/${handle}`,
-      `https://venmo.com/u/${handle}`,
-      `https://venmo.com/${handle}`,
-    ]);
-    cache.put(cacheKey, photoUrl, 21600);
-    return photoUrl;
-  } catch (error) {
-    console.warn(`Could not fetch Venmo profile image: ${error.message}`);
-    cache.put(cacheKey, "", 900);
-    return "";
-  }
-}
-
-function fetchProfilePage_(url) {
-  const response = UrlFetchApp.fetch(url, {
-    followRedirects: true,
-    muteHttpExceptions: true,
-    headers: {
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/125.0 Safari/537.36",
-    },
-  });
-  return response.getContentText() || "";
-}
-
-function extractProfileImageFromHtml_(html) {
-  const text = String(html || "");
-  const ogImage = text.match(
-    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-  ) || text.match(
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
-  ) || text.match(
-    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
-  ) || text.match(
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
-  );
-  if (ogImage) {
-    return decodeHtmlEntities_(ogImage[1]);
-  }
-
-  const profilePic = text.match(/"profilePicURI":"([^"]+)"/);
-  if (profilePic) {
-    return decodeFacebookJsonString_(profilePic[1]);
-  }
-
-  const scontentImage = text.match(
-    /https:\\?\/\\?\/[^"'< ]+scontent[^"'< ]+/,
-  );
-  return scontentImage ? decodeFacebookJsonString_(scontentImage[0]) : "";
-}
-
-function decodeFacebookJsonString_(value) {
-  return decodeHtmlEntities_(String(value || "").replace(/\\\//g, "/"));
-}
-
-function decodeHtmlEntities_(value) {
-  return String(value || "")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
 }
 
 function sanitizeText_(value) {
