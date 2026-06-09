@@ -258,6 +258,7 @@
     cell.dataset.label = "Photo";
     fallback.className = "roster-avatar-fallback";
     fallback.textContent = getInitials(member.name) || "?";
+    fallback.title = "No direct profile image is available";
 
     if (photoUrl) {
       const image = document.createElement("img");
