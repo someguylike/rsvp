@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Roster</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260609-16" />
+    <link rel="stylesheet" href="./styles.css?v=20260609-17" />
   </head>
   <body>
     <main class="shell">
@@ -43,7 +43,7 @@
             </label>
 
             <label class="field">
-              <span>Venmo</span>
+              <span>Venmo <small class="field-tag required-tag">Required</small></span>
               <input
                 id="venmo"
                 name="venmo"
@@ -55,7 +55,7 @@
             </label>
 
             <label class="field">
-              <span>Facebook Profile</span>
+              <span>Facebook Profile <small class="field-tag">Optional</small></span>
               <input
                 id="messenger"
                 name="messenger"
@@ -65,16 +65,17 @@
               />
             </label>
 
-            <label class="field">
-              <span>Note</span>
-              <input
+            <label class="field roster-note-field">
+              <span>Note <small class="field-tag">Optional</small></span>
+              <textarea
                 id="member-note"
                 name="note"
                 autocomplete="off"
                 disabled
-                placeholder="Friend of..., Cellphone..., Single/Available..."
-                title="Optional admin note, such as friend of, cellphone context, or availability"
-              />
+                placeholder="Friend of/Cellphone/Dating Status/etc/"
+                title="Friend of/Cellphone/Dating Status/etc/"
+                rows="3"
+              ></textarea>
             </label>
 
           </div>

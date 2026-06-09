@@ -188,8 +188,20 @@ legend {
   line-height: 1.35;
 }
 
+.field-tag {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.required-tag {
+  color: var(--error);
+}
+
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 48px;
   border: 1px solid var(--line);
@@ -205,11 +217,17 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--focus);
   background: white;
   box-shadow: 0 0 0 4px rgb(0 94 184 / 16%);
   outline: 0;
+}
+
+textarea {
+  min-height: 86px;
+  resize: vertical;
 }
 
 .player-list {
@@ -541,9 +559,12 @@ button:disabled {
     minmax(180px, 0.9fr)
     minmax(160px, 0.8fr)
     minmax(220px, 1fr)
-    minmax(150px, 0.7fr)
-    minmax(180px, 0.9fr);
+    minmax(260px, 1.25fr);
   gap: 14px;
+}
+
+.roster-note-field {
+  grid-column: span 1;
 }
 
 .status {
