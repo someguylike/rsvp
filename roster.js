@@ -226,6 +226,47 @@
     return contact ? contact.value : String(value || "").trim();
   }
 
+  function getInitials(name) {
+    return String(name || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() || "")
+      .join("");
+  }
+
+  function appendPhotoCell(row, member) {
+    const cell = document.createElement("td");
+    const fallback = document.createElement("span");
+    const contact = normalizeMessengerContact(member.messenger);
+
+    cell.className = "roster-photo-cell";
+    cell.dataset.label = "Photo";
+    fallback.className = "roster-avatar-fallback";
+    fallback.textContent = getInitials(member.name) || "?";
+
+    if (contact?.pictureUrl) {
+      const image = document.createElement("img");
+      image.alt = `${member.name || "Member"} Facebook profile`;
+      image.className = "roster-avatar";
+      image.decoding = "async";
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+      image.src = contact.pictureUrl;
+      image.addEventListener("error", () => {
+        image.remove();
+        fallback.hidden = false;
+      });
+      fallback.hidden = true;
+      cell.append(image, fallback);
+    } else {
+      cell.append(fallback);
+    }
+
+    row.append(cell);
+    return cell;
+  }
+
   function appendLinkCell(row, text, href, warningMessage) {
     const cell = document.createElement("td");
     if (text && href) {
@@ -273,9 +314,11 @@
       /^(?:https?:\/\/)?m\.me\/([A-Za-z0-9._-]{3,80})\/?(?:[?#].*)?$/i,
     );
     if (messengerMatch) {
+      const handle = messengerMatch[1];
       return {
-        value: `@${messengerMatch[1]}`,
-        url: `https://www.facebook.com/${messengerMatch[1]}`,
+        value: `@${handle}`,
+        url: `https://www.facebook.com/${handle}`,
+        pictureUrl: getFacebookPictureUrl(handle),
       };
     }
 
@@ -283,8 +326,9 @@
       /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:facebook|fb)\.com\/profile\.php\?id=([0-9]+)(?:[&#].*)?$/i,
     );
     if (profileIdMatch) {
-      const url = `https://www.facebook.com/profile.php?id=${profileIdMatch[1]}`;
-      return { value: url, url };
+      const profileId = profileIdMatch[1];
+      const url = `https://www.facebook.com/profile.php?id=${profileId}`;
+      return { value: url, url, pictureUrl: getFacebookPictureUrl(profileId) };
     }
 
     const facebookMatch = text.match(
@@ -296,8 +340,15 @@
       ? {
           value: `@${handle}`,
           url: `https://www.facebook.com/${handle}`,
+          pictureUrl: getFacebookPictureUrl(handle),
         }
       : null;
+  }
+
+  function getFacebookPictureUrl(identifier) {
+    return `https://graph.facebook.com/${encodeURIComponent(
+      identifier,
+    )}/picture?type=square&width=96&height=96`;
   }
 
   function normalizeSearchText(value) {
@@ -332,7 +383,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    ["Name", "Venmo", "Messenger", "Actions"].forEach((header) => {
+    ["Photo", "Name", "Venmo", "Messenger", "Actions"].forEach((header) => {
       appendCell(headerRow, "th", header);
     });
     thead.append(headerRow);
@@ -345,6 +396,7 @@
       const removeButton = document.createElement("button");
 
       const venmoUrl = getVenmoUrl(member.venmo);
+      appendPhotoCell(row, member);
       appendCell(row, "td", member.name || "").dataset.label = "Name";
       appendLinkCell(
         row,
