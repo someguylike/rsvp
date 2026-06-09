@@ -8,6 +8,9 @@
   const monthInput = document.querySelector("#export-month");
   const exportButton = document.querySelector("#export-button");
   const status = document.querySelector("#status");
+  const reportProgress = document.querySelector("#report-progress");
+  const reportProgressBar = document.querySelector("#report-progress-bar");
+  const reportProgressText = document.querySelector("#report-progress-text");
   const shareStatus = document.querySelector("#share-status");
   const heatmapSection = document.querySelector("#heatmap-section");
   const heatmapNote = document.querySelector("#heatmap-note");
@@ -24,6 +27,8 @@
   let selectedDate = "";
   let adminToken = "";
   let latestReportStatus = null;
+  let progressTimer = 0;
+  let progressPercent = 0;
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -38,6 +43,60 @@
   function setStatus(message, type) {
     status.textContent = message;
     status.className = `status ${type || ""}`.trim();
+  }
+
+  function setProgress(percent, message) {
+    if (!reportProgress || !reportProgressBar || !reportProgressText) {
+      return;
+    }
+    progressPercent = Math.max(progressPercent, Math.min(percent, 100));
+    reportProgress.hidden = false;
+    reportProgressBar.style.width = `${progressPercent}%`;
+    reportProgressText.textContent = message;
+  }
+
+  function clearProgress() {
+    window.clearInterval(progressTimer);
+    progressTimer = 0;
+    progressPercent = 0;
+    if (reportProgress && reportProgressBar) {
+      reportProgress.hidden = true;
+      reportProgressBar.style.width = "0%";
+    }
+  }
+
+  function startProgress(mode) {
+    const isExport = mode === "export";
+    const steps = isExport
+      ? [
+          [12, "Reading RSVP records..."],
+          [32, "Calculating monthly totals..."],
+          [55, "Writing spreadsheet tab..."],
+          [76, "Preparing report preview..."],
+          [90, "Finishing report..."],
+        ]
+      : [
+          [18, "Opening saved monthly report..."],
+          [44, "Loading report rows..."],
+          [68, "Preparing preview tables..."],
+          [88, "Finishing report..."],
+        ];
+    let index = 0;
+
+    clearProgress();
+    setProgress(6, isExport ? "Starting report generation..." : "Starting report load...");
+    progressTimer = window.setInterval(() => {
+      const step = steps[Math.min(index, steps.length - 1)];
+      setProgress(step[0], step[1]);
+      index += 1;
+    }, 900);
+  }
+
+  function finishProgress(message) {
+    window.clearInterval(progressTimer);
+    progressTimer = 0;
+    setProgress(100, message);
+    window.setTimeout(clearProgress, 900);
   }
 
   function setStatusWithLink(message, href, linkText) {
@@ -394,9 +453,10 @@
     exportButton.disabled = true;
     clearPreview();
     selectedDate = "";
+    startProgress(mode);
     setStatus(
       mode === "export" ? "Generating report..." : "Loading report...",
-      "",
+      "loading",
     );
 
     try {
@@ -409,6 +469,9 @@
         `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
         result.url,
       );
+      finishProgress(
+        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates.`,
+      );
       renderPreview(result.previewRows);
       setShareLink(month);
 
@@ -417,6 +480,7 @@
       window.history.replaceState({}, "", url);
     } catch (error) {
       clearPreview();
+      clearProgress();
       setStatus(error.message, "error");
     } finally {
       exportButton.disabled = false;

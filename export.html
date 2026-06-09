@@ -34,6 +34,18 @@
 
           <button id="export-button" type="submit">Generate Report</button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
+          <div
+            id="report-progress"
+            class="report-progress"
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+            <div class="report-progress-track" aria-hidden="true">
+              <div id="report-progress-bar" class="report-progress-bar"></div>
+            </div>
+            <p id="report-progress-text">Preparing report...</p>
+          </div>
           <p id="share-status" class="status" hidden></p>
         </form>
 
@@ -76,6 +88,6 @@
     </main>
 
     <script src="./admin-auth.js?v=20260609-3"></script>
-    <script src="./export.js?v=20260609-2"></script>
+    <script src="./export.js?v=20260609-3"></script>
   </body>
 </html>

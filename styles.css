@@ -554,6 +554,33 @@ button:disabled {
   font-weight: 800;
 }
 
+.report-progress {
+  display: grid;
+  gap: 7px;
+}
+
+.report-progress-track {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+}
+
+.report-progress-bar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 260ms ease;
+}
+
+.report-progress p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
 .auth-panel {
   display: grid;
   gap: 10px;
