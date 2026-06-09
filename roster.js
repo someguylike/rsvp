@@ -401,8 +401,6 @@
     const headers = ["Name", "Venmo", "Facebook", "Note"];
     if (adminToken) {
       headers.push("Actions");
-    } else {
-      headers.push("Action");
     }
     headers.forEach((header) => {
       appendCell(headerRow, "th", header);
@@ -482,31 +480,6 @@
         actionsWrap.append(removeButton);
         actions.append(actionsWrap);
         row.append(actions);
-      } else {
-        const missingInfo = getMissingMemberInfo(member);
-        const missingInfoCell = document.createElement("td");
-        const missingWrap = document.createElement("div");
-        const addButton = document.createElement("button");
-
-        missingInfoCell.className = "roster-actions-cell";
-        missingInfoCell.dataset.label = "Action";
-        missingWrap.className = "missing-info-action";
-        addButton.className = "secondary-button inline-button";
-        addButton.type = "button";
-        addButton.textContent = "Update Info";
-        addButton.title =
-          missingInfo.length > 0
-            ? `Missing ${missingInfo.join(", ")}`
-            : "Review existing info";
-        addButton.disabled = isSelected;
-        addButton.addEventListener("click", (event) => {
-          event.stopPropagation();
-          fillMissingInfoForm(member);
-        });
-        missingWrap.append(addButton);
-        missingInfoCell.append(missingWrap);
-
-        row.append(missingInfoCell);
       }
       tbody.append(row);
     });

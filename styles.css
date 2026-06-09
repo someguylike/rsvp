@@ -706,6 +706,10 @@ button:disabled {
   max-height: 46vh;
 }
 
+.roster-members-wrap {
+  max-height: none;
+}
+
 .export-table {
   width: max-content;
   min-width: 100%;
