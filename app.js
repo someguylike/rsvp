@@ -432,6 +432,7 @@
       submittedAt: new Date().toISOString(),
       browserId: getBrowserId(),
       browserSignature: getBrowserSignature(),
+      clientDeviceClass: getClientDeviceClass(),
       clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
       clientLanguage: navigator.language || "",
       clientScreen: getClientScreen(),
@@ -455,9 +456,22 @@
       navigator.platform || "",
       navigator.vendor || "",
       navigator.language || "",
+      getClientDeviceClass(),
       Intl.DateTimeFormat().resolvedOptions().timeZone || "",
       getClientScreen(),
     ].join(" | ");
+  }
+
+  function getClientDeviceClass() {
+    const userAgent = navigator.userAgent || "";
+    const hasCoarsePointer =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    const narrowViewport = Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 820;
+    if (/Mobi|Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent) || (hasCoarsePointer && narrowViewport)) {
+      return "mobile";
+    }
+    return "desktop";
   }
 
   function getClientScreen() {
@@ -699,6 +713,7 @@
         playDate: payload.playDate,
         browserId: getBrowserId(),
         browserSignature: getBrowserSignature(),
+        clientDeviceClass: getClientDeviceClass(),
         clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
         clientLanguage: navigator.language || "",
         clientScreen: getClientScreen(),

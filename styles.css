@@ -210,7 +210,7 @@ select:focus {
 .player-list {
   position: absolute;
   z-index: 5;
-  top: calc(100% + 4px);
+  top: 78px;
   right: 0;
   left: 0;
   display: grid;
