@@ -850,13 +850,18 @@ button:disabled {
 }
 
 .member-note-cell {
+  display: grid;
+  gap: 3px;
   color: var(--muted);
 }
 
+.member-note-phone {
+  color: #344054;
+  font-size: 0.78rem;
+}
+
 .roster-member-table th:nth-child(5),
-.roster-member-table td:nth-child(5),
-.roster-member-table th:nth-child(6),
-.roster-member-table td:nth-child(6) {
+.roster-member-table td:nth-child(5) {
   min-width: 150px;
   text-align: center;
 }
@@ -1459,9 +1464,7 @@ button:disabled {
   .roster-member-table th:nth-child(4),
   .roster-member-table td:nth-child(4),
   .roster-member-table th:nth-child(5),
-  .roster-member-table td:nth-child(5),
-  .roster-member-table th:nth-child(6),
-  .roster-member-table td:nth-child(6) {
+  .roster-member-table td:nth-child(5) {
     position: static;
     display: grid;
     grid-template-columns: 82px minmax(0, 1fr);

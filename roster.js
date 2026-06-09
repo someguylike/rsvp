@@ -279,6 +279,35 @@
     return cell;
   }
 
+  function appendNoteCell(row, member) {
+    const cell = document.createElement("td");
+    const note = String(member.note || "").trim();
+    const cellphone = String(member.cellphone || "").trim();
+
+    cell.className = "member-note-cell";
+    cell.dataset.label = "Note";
+
+    if (note) {
+      const noteText = document.createElement("span");
+      noteText.textContent = note;
+      cell.append(noteText);
+    }
+
+    if (adminToken && cellphone) {
+      const phoneText = document.createElement("span");
+      phoneText.className = "member-note-phone";
+      phoneText.textContent = `Cell: ${cellphone}`;
+      cell.append(phoneText);
+    }
+
+    if (!cell.hasChildNodes()) {
+      cell.textContent = "";
+    }
+
+    row.append(cell);
+    return cell;
+  }
+
   function normalizeVenmoHandle(value) {
     const text = String(value || "").trim();
     if (!text) {
@@ -374,7 +403,6 @@
     const headerRow = document.createElement("tr");
     const headers = ["Name", "Venmo", "Facebook", "Note"];
     if (adminToken) {
-      headers.push("Cellphone");
       headers.push("Actions");
     } else {
       headers.push("Action");
@@ -413,11 +441,8 @@
           ? "Invalid Facebook profile URL. Use a profile URL or plain profile handle."
           : "",
       ).dataset.label = "Facebook";
-      appendCell(row, "td", member.note || "", "member-note-cell").dataset.label =
-        "Note";
+      appendNoteCell(row, member);
       if (adminToken) {
-        appendCell(row, "td", member.cellphone || "").dataset.label = "Cellphone";
-
         const actions = document.createElement("td");
         const editButton = document.createElement("button");
         const removeButton = document.createElement("button");
