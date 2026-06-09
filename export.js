@@ -29,6 +29,8 @@
   let latestReportStatus = null;
   let progressTimer = 0;
   let progressPercent = 0;
+  let autoLoadTimer = 0;
+  let latestLoadRequest = 0;
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -465,6 +467,8 @@
   }
 
   async function loadMonth(month, mode) {
+    const requestId = latestLoadRequest + 1;
+    latestLoadRequest = requestId;
     exportButton.disabled = true;
     clearPreview();
     selectedDate = "";
@@ -480,6 +484,9 @@
         month,
         adminToken,
       });
+      if (requestId !== latestLoadRequest) {
+        return;
+      }
       setReportStatus(
         `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
         result.url,
@@ -494,12 +501,26 @@
       url.searchParams.set("month", month);
       window.history.replaceState({}, "", url);
     } catch (error) {
+      if (requestId !== latestLoadRequest) {
+        return;
+      }
       clearPreview();
       clearProgress();
       setStatus(error.message, "error");
     } finally {
       exportButton.disabled = false;
     }
+  }
+
+  function scheduleReportLoad(mode) {
+    window.clearTimeout(autoLoadTimer);
+    autoLoadTimer = window.setTimeout(() => {
+      if (!monthInput.value) {
+        setStatus("Choose a month for the report.", "error");
+        return;
+      }
+      loadMonth(monthInput.value, mode || "export");
+    }, 180);
   }
 
   function openMonthPicker() {
@@ -524,6 +545,10 @@
     openMonthPicker();
   });
 
+  monthInput.addEventListener("change", () => {
+    scheduleReportLoad("export");
+  });
+
   playerFilter.addEventListener("change", () => {
     renderAnalytics(currentRosterRows);
   });
@@ -536,7 +561,7 @@
       return;
     }
 
-    loadMonth(monthInput.value, "export");
+    scheduleReportLoad("export");
   });
 
   const monthFromUrl = new URLSearchParams(window.location.search).get("month");
@@ -553,7 +578,7 @@
       !latestReportStatus.href &&
       isMonthValue(monthInput.value)
     ) {
-      loadMonth(monthInput.value, "view");
+      scheduleReportLoad("export");
       return;
     }
     if (latestReportStatus) {
@@ -562,8 +587,6 @@
   });
 
   adminAuth.ready.then(() => {
-    if (hasValidMonthFromUrl) {
-      loadMonth(monthInput.value, "view");
-    }
+    scheduleReportLoad("export");
   });
 })();
