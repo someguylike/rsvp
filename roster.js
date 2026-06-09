@@ -315,8 +315,8 @@
     const headers = ["Name", "Venmo", "Facebook"];
     if (adminToken) {
       headers.push("Cellphone");
+      headers.push("Actions");
     }
-    headers.push("Actions");
     headers.forEach((header) => {
       appendCell(headerRow, "th", header);
     });
@@ -325,10 +325,6 @@
     const tbody = document.createElement("tbody");
     visibleRoster.forEach((member) => {
       const row = document.createElement("tr");
-      const actions = document.createElement("td");
-      const editButton = document.createElement("button");
-      const removeButton = document.createElement("button");
-
       const venmoUrl = getVenmoUrl(member.venmo);
       appendCell(row, "td", member.name || "").dataset.label = "Name";
       appendLinkCell(
@@ -350,32 +346,34 @@
       ).dataset.label = "Facebook";
       if (adminToken) {
         appendCell(row, "td", member.cellphone || "").dataset.label = "Cellphone";
-      }
 
-      actions.className = "roster-actions-cell";
-      actions.dataset.label = "Actions";
-      const actionsWrap = document.createElement("div");
-      actionsWrap.className = "roster-actions";
-      editButton.className = "secondary-button inline-button";
-      editButton.type = "button";
-      editButton.textContent = "Edit";
-      editButton.addEventListener("click", () => {
-        fillForm(member);
-      });
+        const actions = document.createElement("td");
+        const editButton = document.createElement("button");
+        const removeButton = document.createElement("button");
 
-      removeButton.className = "secondary-button inline-button danger-button";
-      removeButton.type = "button";
-      removeButton.textContent = "Remove";
-      removeButton.addEventListener("click", () => {
-        removeMember(member.name);
-      });
+        actions.className = "roster-actions-cell";
+        actions.dataset.label = "Actions";
+        const actionsWrap = document.createElement("div");
+        actionsWrap.className = "roster-actions";
+        editButton.className = "secondary-button inline-button";
+        editButton.type = "button";
+        editButton.textContent = "Edit";
+        editButton.addEventListener("click", () => {
+          fillForm(member);
+        });
 
-      actionsWrap.append(editButton);
-      if (adminToken) {
+        removeButton.className = "secondary-button inline-button danger-button";
+        removeButton.type = "button";
+        removeButton.textContent = "Remove";
+        removeButton.addEventListener("click", () => {
+          removeMember(member.name);
+        });
+
+        actionsWrap.append(editButton);
         actionsWrap.append(removeButton);
+        actions.append(actionsWrap);
+        row.append(actions);
       }
-      actions.append(actionsWrap);
-      row.append(actions);
       tbody.append(row);
     });
 
@@ -447,6 +445,11 @@
   }
 
   async function removeMember(playerName) {
+    if (!adminToken) {
+      setStatus("Log in as admin before removing members.", "error");
+      return;
+    }
+
     if (!window.confirm(`Remove ${playerName} from the roster?`)) {
       return;
     }
@@ -473,6 +476,11 @@
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!adminToken) {
+      setStatus("Log in as admin before changing members.", "error");
+      return;
+    }
+
     const payload = {
       playerName: nameInput.value.trim(),
       venmo: venmoInput.value.trim(),
