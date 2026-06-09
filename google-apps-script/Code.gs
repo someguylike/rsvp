@@ -125,6 +125,16 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "completeRosterMemberInfo") {
+      const result = completeRosterMemberInfo_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: result.action,
+        updatedFields: result.updatedFields,
+        roster: result.roster,
+      });
+    }
+
     if (params.action === "removeRosterMember") {
       requireAdmin_(params);
       const result = removeRosterMember_(params);
@@ -825,6 +835,79 @@ function saveRosterMember_(params) {
     sheet.appendRow(values);
     return {
       action: "created",
+      roster: getRoster_(),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function completeRosterMemberInfo_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const name = sanitizeText_(
+      required_(params.playerName || params.name, "Missing player name").trim(),
+    );
+    const sheet = getRosterSheet_();
+    const row = findRosterRow_(sheet, name);
+
+    if (!row) {
+      throw new Error("Only admins can create new members.");
+    }
+
+    const range = sheet.getRange(row, 1, 1, ROSTER_HEADERS.length);
+    const values = range.getValues()[0];
+    const current = {
+      venmo: String(values[1] || "").trim(),
+      messenger: String(values[2] || "").trim(),
+      cellphone: String(values[3] || "").trim(),
+    };
+    const requested = {
+      venmo: params.venmo ? normalizeVenmo_(params.venmo) : "",
+      messenger: params.messenger ? normalizeMessenger_(params.messenger) : "",
+      cellphone: sanitizeText_(params.cellphone || ""),
+    };
+    const updatedFields = [];
+
+    if (requested.venmo) {
+      if (!current.venmo) {
+        values[1] = requested.venmo;
+        updatedFields.push("Venmo");
+      } else if (normalize_(current.venmo) !== normalize_(requested.venmo)) {
+        throw new Error("Admin login is required to change an existing Venmo.");
+      }
+    }
+
+    if (requested.messenger) {
+      if (!current.messenger) {
+        values[2] = requested.messenger;
+        updatedFields.push("Facebook profile");
+      } else if (normalize_(current.messenger) !== normalize_(requested.messenger)) {
+        throw new Error(
+          "Admin login is required to change an existing Facebook profile.",
+        );
+      }
+    }
+
+    if (requested.cellphone) {
+      if (!current.cellphone) {
+        values[3] = requested.cellphone;
+        updatedFields.push("Cellphone");
+      } else if (normalize_(current.cellphone) !== normalize_(requested.cellphone)) {
+        throw new Error("Admin login is required to change an existing cellphone.");
+      }
+    }
+
+    if (updatedFields.length === 0) {
+      throw new Error("There is no missing member info to add.");
+    }
+
+    range.setValues([values]);
+    return {
+      action: "completed",
+      updatedFields,
       roster: getRoster_(),
     };
   } finally {

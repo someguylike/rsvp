@@ -26,9 +26,6 @@
 
   function renderAdminState() {
     adminEyebrow.hidden = !adminToken;
-    [nameInput, venmoInput, messengerInput, cellphoneInput].forEach((input) => {
-      input.disabled = !adminToken;
-    });
     updateSaveButtonLabel();
     renderRoster();
   }
@@ -143,11 +140,12 @@
   }
 
   function updateSaveButtonLabel() {
-    saveButton.disabled = !adminToken;
     if (!adminToken) {
-      saveButton.textContent = "Log In to Edit Members";
+      saveButton.disabled = false;
+      saveButton.textContent = "Add Missing Info";
       return;
     }
+    saveButton.disabled = false;
     if (isRenamingMember()) {
       saveButton.textContent = "Rename Member";
       return;
@@ -397,19 +395,15 @@
   }
 
   async function saveMember(payload) {
-    if (!adminToken) {
-      setStatus("Log in as admin before changing members.", "error");
-      return;
-    }
     saveButton.disabled = true;
-    setStatus("Saving member...", "");
+    setStatus(adminToken ? "Saving member..." : "Adding missing info...", "");
 
     try {
       if (payload.oldPlayerName && !adminToken) {
-        throw new Error("Log in as admin before renaming a member.");
+        throw new Error("Admin login is required to create or rename members.");
       }
       const result = await requestAppsScript({
-        action: "saveRosterMember",
+        action: adminToken ? "saveRosterMember" : "completeRosterMemberInfo",
         adminToken,
         ...payload,
       });
@@ -432,6 +426,7 @@
         `${exportRows} exported report row${exportRows === 1 ? "" : "s"}`,
       ].join(" ");
       const messages = {
+        completed: `Added missing ${result.updatedFields.join(", ")}.`,
         created: "Added member.",
         updated: "Updated member.",
         renamed: renamedMessage,
@@ -440,7 +435,7 @@
     } catch (error) {
       setStatus(error.message, "error");
     } finally {
-      saveButton.disabled = false;
+      updateSaveButtonLabel();
     }
   }
 
@@ -476,10 +471,6 @@
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!adminToken) {
-      setStatus("Log in as admin before changing members.", "error");
-      return;
-    }
 
     const payload = {
       playerName: nameInput.value.trim(),
@@ -490,6 +481,12 @@
 
     if (!payload.playerName) {
       setStatus("Enter a member name.", "error");
+      return;
+    }
+
+    const existingMember = findRosterMemberByName(payload.playerName);
+    if (!adminToken && (!existingMember || isRenamingMember())) {
+      setStatus("Admin login is required to create or rename members.", "error");
       return;
     }
 
