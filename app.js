@@ -47,11 +47,15 @@
     "Vu Nguyen",
   ];
   const LAST_RSVP_KEY = "play-rsvp.lastRsvp";
+  const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
+  const BROWSER_ID_KEY = "play-rsvp.browserId";
+  const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
 
   const form = document.querySelector("#rsvp-form");
   const playerInput = document.querySelector("#player-name");
   const playerList = document.querySelector("#player-list");
+  const playerMemory = document.querySelector("#player-memory");
   const dateInput = document.querySelector("#play-date");
   const dateOptions = document.querySelector("#date-options");
   const customDateField = document.querySelector("#custom-date-field");
@@ -68,6 +72,8 @@
   const confirmOverride = document.querySelector("#confirm-override");
   let pendingOverridePayload = null;
   let latestTallyRequest = 0;
+  let rememberedPlayerName = "";
+  let selectedPlayerName = "";
 
   function readJson(key, fallback) {
     try {
@@ -79,6 +85,14 @@
 
   function writeJson(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function readString(key) {
+    return localStorage.getItem(key) || "";
+  }
+
+  function writeString(key, value) {
+    localStorage.setItem(key, value);
   }
 
   function formatDate(date) {
@@ -125,8 +139,8 @@
     const daysUntilSunday = (7 - today.getDay()) % 7;
     endOfThisWeek.setDate(today.getDate() + daysUntilSunday);
 
-    const day = date.toLocaleDateString(undefined, { weekday: "long" });
-    const full = date.toLocaleDateString(undefined, {
+    const day = date.toLocaleDateString(DISPLAY_LOCALE, { weekday: "long" });
+    const full = date.toLocaleDateString(DISPLAY_LOCALE, {
       month: "short",
       day: "numeric",
     });
@@ -247,12 +261,21 @@
   function getPlayerMatches(query) {
     const normalizedQuery = normalizeSearchText(query);
     if (!normalizedQuery) {
-      return PLAYERS;
+      return prioritizeRememberedPlayer(PLAYERS);
     }
 
-    return PLAYERS.filter((name) =>
-      normalizeSearchText(name).includes(normalizedQuery),
+    return prioritizeRememberedPlayer(
+      PLAYERS.filter((name) =>
+        normalizeSearchText(name).includes(normalizedQuery),
+      ),
     ).slice(0, 8);
+  }
+
+  function prioritizeRememberedPlayer(names) {
+    if (!rememberedPlayerName) return names;
+    const remembered = names.find((name) => name === rememberedPlayerName);
+    if (!remembered) return names;
+    return [remembered, ...names.filter((name) => name !== remembered)];
   }
 
   function normalizeSearchText(value) {
@@ -260,7 +283,7 @@
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .trim()
-      .toLocaleLowerCase();
+      .toLowerCase();
   }
 
   function hidePlayerList() {
@@ -268,10 +291,61 @@
     playerList.style.display = "none";
   }
 
-  function selectPlayerName(name) {
+  function updatePlayerMemory() {
+    if (!playerMemory) return;
+    const currentName = playerInput.value.trim();
+    const selectedValidName =
+      selectedPlayerName && currentName === selectedPlayerName && isValidPlayerName(currentName);
+    const changedFromRemembered =
+      selectedValidName && rememberedPlayerName && currentName !== rememberedPlayerName;
+
+    playerMemory.classList.toggle("warning", Boolean(changedFromRemembered));
+
+    if (!currentName && rememberedPlayerName) {
+      playerMemory.hidden = false;
+      playerMemory.innerHTML = `Last used: <strong>${escapeHtml(rememberedPlayerName)}</strong>`;
+    } else if (changedFromRemembered) {
+      playerMemory.hidden = false;
+      playerMemory.innerHTML = `Warning: submitting as <strong>${escapeHtml(currentName)}</strong>, not your last used name ${escapeHtml(rememberedPlayerName)}.`;
+    } else if (selectedValidName) {
+      playerMemory.hidden = false;
+      playerMemory.innerHTML = `Submitting as <strong>${escapeHtml(currentName)}</strong>.`;
+    } else if (currentName) {
+      playerMemory.hidden = false;
+      playerMemory.textContent = "Choose the matching name from the list before submitting.";
+    } else {
+      playerMemory.hidden = true;
+      playerMemory.textContent = "";
+    }
+
+    submitButton.textContent = selectedValidName
+      ? `Submit RSVP for ${currentName}`
+      : "Submit RSVP";
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function rememberPlayerName(name) {
+    if (!isValidPlayerName(name)) return;
+    rememberedPlayerName = name;
+    writeString(LAST_PLAYER_KEY, name);
+  }
+
+  function selectPlayerName(name, options) {
     playerInput.value = name;
+    selectedPlayerName = name;
+    updatePlayerMemory();
     hidePlayerList();
-    playerInput.blur();
+    if (!options?.keepFocus) {
+      playerInput.blur();
+    }
   }
 
   function renderPlayerMatches(query) {
@@ -329,7 +403,38 @@
         10,
       ),
       submittedAt: new Date().toISOString(),
+      browserId: getBrowserId(),
+      browserSignature: getBrowserSignature(),
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      clientLanguage: navigator.language || "",
+      clientScreen: getClientScreen(),
     };
+  }
+
+  function getBrowserId() {
+    let browserId = readString(BROWSER_ID_KEY);
+    if (!browserId) {
+      browserId =
+        window.crypto?.randomUUID?.() ||
+        `browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      writeString(BROWSER_ID_KEY, browserId);
+    }
+    return browserId;
+  }
+
+  function getBrowserSignature() {
+    return [
+      navigator.userAgent || "",
+      navigator.platform || "",
+      navigator.vendor || "",
+      navigator.language || "",
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      getClientScreen(),
+    ].join(" | ");
+  }
+
+  function getClientScreen() {
+    return `${window.screen?.width || 0}x${window.screen?.height || 0}@${window.devicePixelRatio || 1}`;
   }
 
   function formatParticipantCount(count) {
@@ -511,6 +616,9 @@
       }
 
       writeJson(LAST_RSVP_KEY, payload);
+      rememberPlayerName(payload.playerName);
+      selectedPlayerName = payload.playerName;
+      updatePlayerMemory();
       renderTally(result.tally);
       if (result.action === "deleted") {
         setStatus("Removed your RSVP.", "success");
@@ -641,13 +749,14 @@
 
   async function initialize() {
     await loadRoster();
+    const lastRsvp = readJson(LAST_RSVP_KEY, null);
+    const lastPlayerName = readString(LAST_PLAYER_KEY) || lastRsvp?.playerName || "";
+    if (lastPlayerName && isValidPlayerName(lastPlayerName)) {
+      rememberedPlayerName = lastPlayerName;
+      selectPlayerName(lastPlayerName, { remember: false, keepFocus: true });
+    }
     renderPlayerOptions();
     renderDateOptions();
-
-    const lastRsvp = readJson(LAST_RSVP_KEY, null);
-    if (lastRsvp?.playerName && isValidPlayerName(lastRsvp.playerName)) {
-      playerInput.value = lastRsvp.playerName;
-    }
 
     participantInput.value = "1";
     playerInput.focus();
@@ -671,6 +780,12 @@
       return;
     }
 
+    if (payload.playerName !== selectedPlayerName) {
+      setStatus("Please choose your name from the list before submitting.", "error");
+      renderPlayerMatches(payload.playerName);
+      return;
+    }
+
     if (isPastDate(payload.playDate)) {
       setStatus("Choose today or a future date.", "error");
       return;
@@ -687,6 +802,10 @@
   });
 
   playerInput.addEventListener("input", () => {
+    if (playerInput.value.trim() !== selectedPlayerName) {
+      selectedPlayerName = "";
+    }
+    updatePlayerMemory();
     renderPlayerMatches(playerInput.value);
   });
 

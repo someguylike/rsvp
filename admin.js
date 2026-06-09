@@ -2,6 +2,7 @@
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
   const ADMIN_AUTH_KEY = "play-rsvp.adminAuth";
+  const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
   let PLAYERS = [
     "Alex Yeung",
@@ -121,8 +122,8 @@
 
   function formatDisplayDate(value) {
     const date = new Date(`${value}T00:00:00`);
-    const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
-    const day = date.toLocaleDateString(undefined, {
+    const weekday = date.toLocaleDateString(DISPLAY_LOCALE, { weekday: "short" });
+    const day = date.toLocaleDateString(DISPLAY_LOCALE, {
       month: "numeric",
       day: "numeric",
     });

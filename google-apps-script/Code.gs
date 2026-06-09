@@ -1,5 +1,6 @@
 const SHEET_NAME = "RSVPs";
 const ROSTER_SHEET_NAME = "Roster";
+const AUDIT_SHEET_NAME = "RSVP Audit Log";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
@@ -15,6 +16,22 @@ const HEADERS = [
   "Updated At",
 ];
 const ROSTER_HEADERS = ["Name", "Venmo", "Messenger", "Cellphone"];
+const AUDIT_HEADERS = [
+  "Logged At",
+  "Action",
+  "Play Date",
+  "Player Name",
+  "Participant Count",
+  "Row",
+  "Browser ID",
+  "Browser Signature",
+  "Client Time Zone",
+  "Client Language",
+  "Client Screen",
+  "Client IP",
+  "Submitted At",
+  "Existing RSVP",
+];
 const PLAYERS = [
   "Alex Yeung",
   "Anh Khoa Tran (Truc Phuong)",
@@ -259,6 +276,7 @@ function deleteRsvp_(params) {
     const rows = findExistingRows_(sheet, playDate, playerName);
 
     if (rows.length === 0) {
+      appendAuditLog_(params, "delete_not_found", null, null);
       return {
         action: "not_found",
         row: null,
@@ -269,6 +287,7 @@ function deleteRsvp_(params) {
     rows.sort((first, second) => second - first).forEach((row) => {
       sheet.deleteRow(row);
     });
+    appendAuditLog_(params, "deleted", rows[0], null);
     return {
       action: "deleted",
       row: rows[0],
@@ -305,6 +324,7 @@ function upsertRsvpWithLock_(params) {
       matchingRows.sort((first, second) => second - first).forEach((rowNumber) => {
         sheet.deleteRow(rowNumber);
       });
+      appendAuditLog_(params, "deleted", row, existingRsvp);
       return {
         action: "deleted",
         row,
@@ -312,6 +332,7 @@ function upsertRsvpWithLock_(params) {
       };
     }
 
+    appendAuditLog_(params, "delete_not_found", null, null);
     return {
       action: "not_found",
       row: null,
@@ -331,6 +352,7 @@ function upsertRsvpWithLock_(params) {
   if (row) {
     deleteDuplicateRows_(sheet, matchingRows, row);
     if (normalize_(existingRsvp.vote) !== "no" && params.confirmOverride !== "true") {
+      appendAuditLog_(params, "needs_confirmation", row, existingRsvp);
       return {
         action: "needs_confirmation",
         row,
@@ -342,10 +364,12 @@ function upsertRsvpWithLock_(params) {
     const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
     values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    appendAuditLog_(params, "updated", row, existingRsvp);
     return { action: "updated", row, tally: getTally_(playDate) };
   }
 
   sheet.appendRow(values);
+  appendAuditLog_(params, "created", sheet.getLastRow(), null);
   return {
     action: "created",
     row: sheet.getLastRow(),
@@ -371,6 +395,50 @@ function getSheet_() {
   }
 
   return sheet;
+}
+
+function getAuditSheet_() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = spreadsheet.getSheetByName(AUDIT_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(AUDIT_SHEET_NAME);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, AUDIT_HEADERS.length);
+  const currentHeaders = headerRange.getValues()[0];
+  const needsHeaders = AUDIT_HEADERS.some((header, index) => currentHeaders[index] !== header);
+
+  if (needsHeaders) {
+    headerRange.setValues([AUDIT_HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+
+  return sheet;
+}
+
+function appendAuditLog_(params, action, row, existingRsvp) {
+  try {
+    const sheet = getAuditSheet_();
+    sheet.appendRow([
+      new Date().toISOString(),
+      action,
+      sanitizeText_(params.playDate || ""),
+      sanitizeText_(params.playerName || ""),
+      sanitizeText_(params.participantCount || ""),
+      row || "",
+      sanitizeText_(params.browserId || ""),
+      sanitizeText_(params.browserSignature || ""),
+      sanitizeText_(params.clientTimeZone || ""),
+      sanitizeText_(params.clientLanguage || ""),
+      sanitizeText_(params.clientScreen || ""),
+      sanitizeText_(params.clientIp || "Unavailable in Apps Script"),
+      sanitizeText_(params.submittedAt || ""),
+      existingRsvp ? JSON.stringify(existingRsvp) : "",
+    ]);
+  } catch (error) {
+    console.warn(`Could not append RSVP audit log: ${error.message}`);
+  }
 }
 
 function getRosterSheet_() {
