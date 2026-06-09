@@ -1,7 +1,6 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
-  const ADMIN_AUTH_KEY = "play-rsvp.adminAuth";
   const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
@@ -52,12 +51,10 @@
   ];
 
   const form = document.querySelector("#admin-form");
-  const loginPanel = document.querySelector("#admin-login-panel");
-  const loginForm = document.querySelector("#admin-login-form");
-  const passwordInput = document.querySelector("#admin-password");
-  const loginStatus = document.querySelector("#admin-login-status");
+  const adminAuth = window.RsvpAdminAuth;
+  const lockedPanel = document.querySelector("#admin-locked-panel");
+  const lockedStatus = document.querySelector("#admin-locked-status");
   const adminContent = document.querySelector("#admin-content");
-  const logoutButton = document.querySelector("#admin-logout-button");
   const monthInput = document.querySelector("#roster-month");
   const playerSearch = document.querySelector("#player-search");
   const changeCount = document.querySelector("#change-count");
@@ -79,24 +76,6 @@
   let auditFilterTimer = 0;
   let adminToken = "";
   let publicIpPromise = null;
-
-  function readAdminAuth() {
-    try {
-      const auth = JSON.parse(localStorage.getItem(ADMIN_AUTH_KEY));
-      return auth && auth.token ? auth : null;
-    } catch {
-      return null;
-    }
-  }
-
-  function writeAdminAuth(auth) {
-    localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(auth));
-  }
-
-  function clearAdminAuth() {
-    adminToken = "";
-    localStorage.removeItem(ADMIN_AUTH_KEY);
-  }
 
   function readString(key) {
     return localStorage.getItem(key) || "";
@@ -201,23 +180,22 @@
     };
   }
 
-  function setLoginStatus(message, type) {
-    loginStatus.textContent = message;
-    loginStatus.className = `status ${type || ""}`.trim();
-  }
-
   function setAdminLocked(message) {
     adminContent.hidden = true;
-    loginPanel.hidden = false;
+    lockedPanel.hidden = false;
     if (message) {
-      setLoginStatus(message, "error");
+      lockedStatus.textContent = message;
+      lockedStatus.className = "status error";
+    } else {
+      lockedStatus.textContent =
+        "Use the Log In button in the top corner to manage RSVP records.";
+      lockedStatus.className = "status";
     }
   }
 
   function setAdminUnlocked() {
-    loginPanel.hidden = true;
+    lockedPanel.hidden = true;
     adminContent.hidden = false;
-    setLoginStatus("", "");
   }
 
   function formatMonth(date) {
@@ -858,66 +836,47 @@
     }
   }
 
-  async function initialize() {
-    const auth = readAdminAuth();
-    if (!auth?.token) {
+  async function loadAdminData() {
+    await loadRoster();
+    monthInput.value = monthInput.value || formatMonth(new Date());
+    loadMonth(monthInput.value);
+  }
+
+  function handleAdminStateChange(state) {
+    const nextToken = state.token || "";
+    const hadToken = Boolean(adminToken);
+    adminToken = nextToken;
+
+    if (!adminToken) {
+      if (hadToken) {
+        changedValues.clear();
+      }
+      rosterTable.textContent = "";
+      monthTotal.textContent = "Login required";
+      changeHistoryTable.textContent = "";
+      auditTotal.textContent = "Login required";
+      setStatus("", "");
+      updateChangeCount();
       setAdminLocked("");
       return;
     }
 
-    try {
-      await requestAppsScript({
-        action: "validateAdmin",
-        adminToken: auth.token,
-      });
-      adminToken = auth.token;
-      setAdminUnlocked();
-    } catch (error) {
-      clearAdminAuth();
-      setAdminLocked(error.message);
-      return;
+    setAdminUnlocked();
+    if (!hadToken) {
+      loadAdminData();
     }
-
-    await loadRoster();
-    monthInput.value = formatMonth(new Date());
-    loadMonth(monthInput.value);
+    updateChangeCount();
   }
 
-  loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    setLoginStatus("Logging in...", "loading");
-
-    try {
-      const result = await requestAppsScript({
-        action: "adminLogin",
-        password: passwordInput.value,
-      });
-      adminToken = result.token;
-      writeAdminAuth({
-        token: result.token,
-        expiresAt: result.expiresAt,
-      });
-      passwordInput.value = "";
-      setAdminUnlocked();
-      await loadRoster();
-      monthInput.value = formatMonth(new Date());
-      loadMonth(monthInput.value);
-    } catch (error) {
-      clearAdminAuth();
-      setLoginStatus(error.message, "error");
-    }
-  });
-
-  logoutButton.addEventListener("click", () => {
-    clearAdminAuth();
-    changedValues.clear();
-    rosterTable.textContent = "";
-    monthTotal.textContent = "Login required";
-    changeHistoryTable.textContent = "";
-    auditTotal.textContent = "Login required";
-    setStatus("", "");
-    updateChangeCount();
+  function initialize() {
     setAdminLocked("");
+    adminAuth.onChange(handleAdminStateChange);
+  }
+
+  window.addEventListener("storage", (event) => {
+    if (event.key === "play-rsvp.adminAuth") {
+      window.location.reload();
+    }
   });
 
   monthInput.addEventListener("change", () => {

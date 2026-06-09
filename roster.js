@@ -1,15 +1,9 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
-  const ADMIN_AUTH_KEY = "play-rsvp.adminAuth";
 
   const form = document.querySelector("#roster-form");
-  const loginPanel = document.querySelector("#admin-login-panel");
-  const loginForm = document.querySelector("#admin-login-form");
-  const passwordInput = document.querySelector("#admin-password");
-  const loginStatus = document.querySelector("#admin-login-status");
-  const adminSession = document.querySelector("#admin-session");
-  const logoutButton = document.querySelector("#admin-logout-button");
+  const adminAuth = window.RsvpAdminAuth;
   const adminEyebrow = document.querySelector("#admin-eyebrow");
   const nameInput = document.querySelector("#member-name");
   const memberNameList = document.querySelector("#member-name-list");
@@ -25,37 +19,12 @@
   let adminToken = "";
   let editingOriginalName = "";
 
-  function readAdminAuth() {
-    try {
-      const auth = JSON.parse(localStorage.getItem(ADMIN_AUTH_KEY));
-      return auth && auth.token ? auth : null;
-    } catch {
-      return null;
-    }
-  }
-
-  function writeAdminAuth(auth) {
-    localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(auth));
-  }
-
-  function clearAdminAuth() {
-    adminToken = "";
-    localStorage.removeItem(ADMIN_AUTH_KEY);
-  }
-
   function setStatus(message, type) {
     status.textContent = message;
     status.className = `status ${type || ""}`.trim();
   }
 
-  function setLoginStatus(message, type) {
-    loginStatus.textContent = message;
-    loginStatus.className = `status ${type || ""}`.trim();
-  }
-
   function renderAdminState() {
-    loginPanel.hidden = Boolean(adminToken);
-    adminSession.hidden = !adminToken;
     adminEyebrow.hidden = !adminToken;
     [nameInput, venmoInput, messengerInput, cellphoneInput].forEach((input) => {
       input.disabled = !adminToken;
@@ -560,56 +529,16 @@
     renderRoster();
   });
 
-  loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    setLoginStatus("Logging in...", "loading");
-
-    try {
-      const result = await requestAppsScript({
-        action: "adminLogin",
-        password: passwordInput.value,
-      });
-      adminToken = result.token;
-      writeAdminAuth({
-        token: result.token,
-        expiresAt: result.expiresAt,
-      });
-      passwordInput.value = "";
-      setLoginStatus("", "");
-      renderAdminState();
-    } catch (error) {
-      clearAdminAuth();
-      setLoginStatus(error.message, "error");
-      renderAdminState();
-    }
-  });
-
-  logoutButton.addEventListener("click", () => {
-    clearAdminAuth();
-    setLoginStatus("Log in to create, update, rename, or remove members.", "");
-    renderAdminState();
-  });
-
-  async function initializeAdminState() {
-    const auth = readAdminAuth();
-    if (!auth?.token) {
-      renderAdminState();
-      return;
-    }
-
-    try {
-      await requestAppsScript({
-        action: "validateAdmin",
-        adminToken: auth.token,
-      });
-      adminToken = auth.token;
-    } catch {
-      clearAdminAuth();
-    }
-
+  function handleAdminStateChange(state) {
+    adminToken = state.token || "";
     renderAdminState();
   }
 
-  initializeAdminState();
+  adminAuth.onChange(handleAdminStateChange);
+  window.addEventListener("storage", (event) => {
+    if (event.key === "play-rsvp.adminAuth") {
+      window.location.reload();
+    }
+  });
   loadRoster();
 })();

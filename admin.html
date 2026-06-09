@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Admin</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260609-6" />
+    <link rel="stylesheet" href="./styles.css?v=20260609-10" />
   </head>
   <body>
     <main class="shell">
@@ -25,30 +25,13 @@
           </div>
         </nav>
 
-        <section id="admin-login-panel" class="auth-panel">
-          <form id="admin-login-form" class="auth-form">
-            <label class="field">
-              <span>Admin password</span>
-              <input
-                id="admin-password"
-                autocomplete="current-password"
-                type="password"
-                required
-              />
-            </label>
-            <button id="admin-login-button" type="submit">Log In</button>
-          </form>
-          <p id="admin-login-status" class="status" role="status" aria-live="polite"></p>
+        <section id="admin-locked-panel" class="auth-panel">
+          <p id="admin-locked-status" class="status" role="status" aria-live="polite">
+            Use the Log In button in the top corner to manage RSVP records.
+          </p>
         </section>
 
         <div id="admin-content" hidden>
-          <div class="auth-session">
-            <p class="status success">Admin access enabled</p>
-            <button id="admin-logout-button" class="secondary-button" type="button">
-              Log Out
-            </button>
-          </div>
-
           <form id="admin-form" class="form">
             <div class="admin-controls">
               <label class="field">
@@ -128,6 +111,7 @@
       </section>
     </main>
 
-    <script src="./admin.js?v=20260609-5"></script>
+    <script src="./admin-auth.js?v=20260609-1"></script>
+    <script src="./admin.js?v=20260609-6"></script>
   </body>
 </html>

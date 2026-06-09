@@ -3,6 +3,7 @@
     "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
 
   const form = document.querySelector("#export-form");
+  const adminAuth = window.RsvpAdminAuth;
   const monthField = document.querySelector("#month-field");
   const monthInput = document.querySelector("#export-month");
   const exportButton = document.querySelector("#export-button");
@@ -21,6 +22,8 @@
   const auditTable = document.querySelector("#audit-table");
   let currentRosterRows = [];
   let selectedDate = "";
+  let adminToken = "";
+  let latestReportStatus = null;
 
   function formatMonth(date) {
     const year = date.getFullYear();
@@ -48,6 +51,17 @@
     status.append(link);
   }
 
+  function setReportStatus(message, href) {
+    latestReportStatus = { message, href };
+    if (adminToken && href) {
+      setStatusWithLink(message, href);
+      return;
+    }
+
+    status.textContent = `${message} Log in as admin to open the spreadsheet.`;
+    status.className = "status success";
+  }
+
   function setShareLink(month) {
     const url = new URL(window.location.href);
     url.search = "";
@@ -63,6 +77,7 @@
   }
 
   function clearPreview() {
+    latestReportStatus = null;
     groupHeatmap.textContent = "";
     individualTable.textContent = "";
     auditTable.textContent = "";
@@ -388,8 +403,9 @@
       const result = await requestAppsScript({
         action: mode === "export" ? "exportMonth" : "viewMonth",
         month,
+        adminToken,
       });
-      setStatusWithLink(
+      setReportStatus(
         `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
         result.url,
       );
@@ -448,7 +464,27 @@
   const hasValidMonthFromUrl = isMonthValue(monthFromUrl);
   monthInput.value = hasValidMonthFromUrl ? monthFromUrl : formatMonth(new Date());
 
-  if (hasValidMonthFromUrl) {
-    loadMonth(monthInput.value, "view");
-  }
+  adminAuth.onChange((state) => {
+    const wasLoggedOut = !adminToken;
+    adminToken = state.token || "";
+    if (
+      wasLoggedOut &&
+      adminToken &&
+      latestReportStatus &&
+      !latestReportStatus.href &&
+      isMonthValue(monthInput.value)
+    ) {
+      loadMonth(monthInput.value, "view");
+      return;
+    }
+    if (latestReportStatus) {
+      setReportStatus(latestReportStatus.message, latestReportStatus.href);
+    }
+  });
+
+  adminAuth.ready.then(() => {
+    if (hasValidMonthFromUrl) {
+      loadMonth(monthInput.value, "view");
+    }
+  });
 })();
