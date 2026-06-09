@@ -136,16 +136,28 @@ function doGet(event) {
         action: result.action,
         row: result.row,
         existing: result.existing || null,
+        audit: result.audit || null,
         tally: result.tally,
       });
     }
 
     if (params.action === "listAudit") {
       requireAdmin_(params);
+      const audit = getAuditLog_(params);
       return jsonp_(callback, {
         ok: true,
         action: "listAudit",
-        entries: getAuditLog_(params),
+        entries: audit.entries,
+        diagnostics: audit.diagnostics,
+      });
+    }
+
+    if (params.action === "auditDiagnostics") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "auditDiagnostics",
+        diagnostics: getAuditDiagnostics_(params),
       });
     }
 
@@ -162,6 +174,7 @@ function doGet(event) {
         ok: true,
         action: result.action,
         row: result.row,
+        audit: result.audit || null,
         tally: result.tally,
       });
     }
@@ -214,6 +227,7 @@ function doGet(event) {
       action: result.action,
       row: result.row,
       existing: result.existing || null,
+      audit: result.audit || null,
       tally: result.tally,
     });
   } catch (error) {
@@ -286,10 +300,11 @@ function deleteRsvp_(params) {
     const rows = findExistingRows_(sheet, playDate, playerName);
 
     if (rows.length === 0) {
-      appendAuditLog_(params, "delete_not_found", null, null);
+      const audit = appendAuditLog_(params, "delete_not_found", null, null);
       return {
         action: "not_found",
         row: null,
+        audit,
         tally: getTally_(playDate),
       };
     }
@@ -298,10 +313,11 @@ function deleteRsvp_(params) {
     rows.sort((first, second) => second - first).forEach((row) => {
       sheet.deleteRow(row);
     });
-    appendAuditLog_(params, "deleted", rows[0], existingRsvp);
+    const audit = appendAuditLog_(params, "deleted", rows[0], existingRsvp);
     return {
       action: "deleted",
       row: rows[0],
+      audit,
       tally: getTally_(playDate),
     };
   } finally {
@@ -329,24 +345,27 @@ function upsertRsvpWithLock_(params) {
   const matchingRows = findExistingRows_(sheet, playDate, playerName);
   const row = matchingRows[0] || null;
   const existingRsvp = row ? getRsvpAtRow_(sheet, row) : null;
+  let audit;
 
   if (normalize_(vote) === "no") {
     if (row) {
       matchingRows.sort((first, second) => second - first).forEach((rowNumber) => {
         sheet.deleteRow(rowNumber);
       });
-      appendAuditLog_(params, "deleted", row, existingRsvp);
+      audit = appendAuditLog_(params, "deleted", row, existingRsvp);
       return {
         action: "deleted",
         row,
+        audit,
         tally: getTally_(playDate),
       };
     }
 
-    appendAuditLog_(params, "delete_not_found", null, null);
+    audit = appendAuditLog_(params, "delete_not_found", null, null);
     return {
       action: "not_found",
       row: null,
+      audit,
       tally: getTally_(playDate),
     };
   }
@@ -363,11 +382,12 @@ function upsertRsvpWithLock_(params) {
   if (row) {
     deleteDuplicateRows_(sheet, matchingRows, row);
     if (normalize_(existingRsvp.vote) !== "no" && params.confirmOverride !== "true") {
-      appendAuditLog_(params, "needs_confirmation", row, existingRsvp);
+      audit = appendAuditLog_(params, "needs_confirmation", row, existingRsvp);
       return {
         action: "needs_confirmation",
         row,
         existing: existingRsvp,
+        audit,
         tally: getTally_(playDate),
       };
     }
@@ -375,15 +395,17 @@ function upsertRsvpWithLock_(params) {
     const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
     values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
-    appendAuditLog_(params, "updated", row, existingRsvp);
-    return { action: "updated", row, tally: getTally_(playDate) };
+    audit = appendAuditLog_(params, "updated", row, existingRsvp);
+    return { action: "updated", row, audit, tally: getTally_(playDate) };
   }
 
   sheet.appendRow(values);
-  appendAuditLog_(params, "created", sheet.getLastRow(), null);
+  const appendedRow = sheet.getLastRow();
+  audit = appendAuditLog_(params, "created", appendedRow, null);
   return {
     action: "created",
-    row: sheet.getLastRow(),
+    row: appendedRow,
+    audit,
     tally: getTally_(playDate),
   };
 }
@@ -432,10 +454,11 @@ function getAuditSheet_() {
 function appendAuditLog_(params, action, row, existingRsvp) {
   try {
     const sheet = getAuditSheet_();
-    sheet.appendRow([
+    const auditPlayDate = normalizeDate_(params.playDate || "");
+    const values = [
       new Date().toISOString(),
       action,
-      sanitizeText_(params.playDate || ""),
+      sanitizeText_(auditPlayDate),
       sanitizeText_(params.playerName || ""),
       sanitizeText_(params.participantCount || ""),
       row || "",
@@ -448,15 +471,31 @@ function appendAuditLog_(params, action, row, existingRsvp) {
       sanitizeText_(params.clientIp || "Unavailable in Apps Script"),
       sanitizeText_(params.submittedAt || ""),
       existingRsvp ? JSON.stringify(existingRsvp) : "",
-    ]);
+    ];
+    sheet.appendRow(values);
+    return {
+      ok: true,
+      sheet: AUDIT_SHEET_NAME,
+      row: sheet.getLastRow(),
+      action,
+      playDate: auditPlayDate,
+    };
   } catch (error) {
-    console.warn(`Could not append RSVP audit log: ${error.message}`);
+    const message = `Could not append RSVP audit log: ${error.message}`;
+    console.warn(message);
+    return {
+      ok: false,
+      sheet: AUDIT_SHEET_NAME,
+      action,
+      playDate: normalizeDate_(params.playDate || ""),
+      error: message,
+    };
   }
 }
 
 function getAuditLog_(params) {
   const month = sanitizeText_(params.month || "");
-  const playDate = sanitizeText_(params.playDate || "");
+  const playDate = normalizeDate_(params.playDate || "");
   const playerName = sanitizeText_(params.playerName || "");
   const limit = Math.min(
     500,
@@ -464,12 +503,16 @@ function getAuditLog_(params) {
   );
   const sheet = getAuditSheet_();
   const lastRow = sheet.getLastRow();
+  const diagnostics = getAuditDiagnosticsFromSheet_(sheet, params);
 
   if (lastRow < 2) {
-    return [];
+    return {
+      entries: [],
+      diagnostics,
+    };
   }
 
-  return sheet
+  const entries = sheet
     .getRange(2, 1, lastRow - 1, AUDIT_HEADERS.length)
     .getValues()
     .map((row, index) => auditRowToEntry_(row, index + 2))
@@ -487,6 +530,69 @@ function getAuditLog_(params) {
     })
     .sort((first, second) => second.loggedAt.localeCompare(first.loggedAt))
     .slice(0, limit);
+
+  return {
+    entries,
+    diagnostics,
+  };
+}
+
+function getAuditDiagnostics_(params) {
+  return getAuditDiagnosticsFromSheet_(getAuditSheet_(), params);
+}
+
+function getAuditDiagnosticsFromSheet_(sheet, params) {
+  const month = sanitizeText_(params.month || "");
+  const playDate = normalizeDate_(params.playDate || "");
+  const playerName = sanitizeText_(params.playerName || "");
+  const lastRow = sheet.getLastRow();
+  const lastColumn = Math.max(sheet.getLastColumn(), AUDIT_HEADERS.length);
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const recentCount = Math.max(0, Math.min(5, lastRow - 1));
+  const recentRows =
+    recentCount > 0
+      ? sheet
+          .getRange(
+            lastRow - recentCount + 1,
+            1,
+            recentCount,
+            AUDIT_HEADERS.length,
+          )
+          .getValues()
+          .map((row, index) =>
+            auditRowToEntry_(row, lastRow - recentCount + 1 + index),
+          )
+          .reverse()
+      : [];
+  const matchingRecentRows = recentRows.filter((entry) => {
+    if (month && !entry.playDate.startsWith(month)) {
+      return false;
+    }
+    if (playDate && entry.playDate !== playDate) {
+      return false;
+    }
+    if (playerName && normalize_(entry.playerName) !== normalize_(playerName)) {
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    spreadsheetId: spreadsheet.getId(),
+    spreadsheetUrl: spreadsheet.getUrl(),
+    auditSheetName: sheet.getName(),
+    auditSheetId: sheet.getSheetId(),
+    lastRow,
+    lastColumn,
+    dataRows: Math.max(0, lastRow - 1),
+    filters: {
+      month,
+      playDate,
+      playerName,
+    },
+    recentRows,
+    matchingRecentRows,
+  };
 }
 
 function auditRowToEntry_(row, sheetRow) {

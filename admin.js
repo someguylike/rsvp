@@ -413,7 +413,28 @@
     return entry.participantCount || "";
   }
 
-  function renderAuditTable(entries) {
+  function getAuditDiagnosticText(diagnostics) {
+    if (!diagnostics) {
+      return "";
+    }
+
+    const rowCount = Number(diagnostics.dataRows || 0);
+    if (rowCount === 0) {
+      return "Audit sheet has no saved rows yet.";
+    }
+
+    const latest = Array.isArray(diagnostics.recentRows)
+      ? diagnostics.recentRows[0]
+      : null;
+    const latestText = latest
+      ? ` Latest: ${latest.playerName || "unknown"} ${formatAuditAction(
+          latest.action,
+        ).toLowerCase()} ${latest.playDate || "unknown date"}.`
+      : "";
+    return `Audit sheet has ${rowCount} saved row${rowCount === 1 ? "" : "s"}.${latestText}`;
+  }
+
+  function renderAuditTable(entries, diagnostics) {
     changeHistoryTable.textContent = "";
     const selectedDate = auditDateFilter.value;
     const selectedPlayer = auditPlayerFilter.value.trim();
@@ -425,7 +446,10 @@
     ].join(", ");
 
     if (!Array.isArray(entries) || entries.length === 0) {
-      auditTotal.textContent = `No changes for ${filterLabel}`;
+      const diagnosticText = getAuditDiagnosticText(diagnostics);
+      auditTotal.textContent = diagnosticText
+        ? `No matching changes for ${filterLabel}. ${diagnosticText}`
+        : `No changes for ${filterLabel}`;
       return;
     }
 
@@ -449,7 +473,10 @@
     });
 
     changeHistoryTable.append(thead, tbody);
-    auditTotal.textContent = `${entries.length} recent change${entries.length === 1 ? "" : "s"} for ${filterLabel}`;
+    const diagnosticText = getAuditDiagnosticText(diagnostics);
+    auditTotal.textContent = `${entries.length} recent change${entries.length === 1 ? "" : "s"} for ${filterLabel}${
+      diagnosticText ? `. ${diagnosticText}` : ""
+    }`;
   }
 
   function renderAuditDateFilter() {
@@ -533,7 +560,7 @@
       if (requestId !== latestAuditRequest || monthInput.value !== month) {
         return;
       }
-      renderAuditTable(result.entries || []);
+      renderAuditTable(result.entries || [], result.diagnostics || null);
     } catch (error) {
       if (requestId !== latestAuditRequest || monthInput.value !== month) {
         return;
