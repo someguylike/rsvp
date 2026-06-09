@@ -961,11 +961,11 @@
       restoredPlayerFromStorage = true;
       rememberedPlayerName = lastPlayerName;
       selectPlayerName(lastPlayerName, { remember: false, keepFocus: true });
-      setRestoreStatus(`Loaded saved player from this browser: ${lastPlayerName}`);
+      setRestoreStatus(`Using previous player saved in this browser: ${lastPlayerName}`);
     } else if (lastPlayerName) {
       restoredPlayerFromStorage = true;
       playerInput.value = lastPlayerName;
-      setRestoreStatus(`Loading saved player from this browser: ${lastPlayerName}`);
+      setRestoreStatus(`Checking previous player saved in this browser: ${lastPlayerName}`);
     } else {
       setRestoreStatus("Loading player list...");
     }
@@ -982,7 +982,7 @@
       const exactMatch = exactPlayerMatch(playerInput.value);
       if (exactMatch) {
         selectPlayerName(exactMatch, { remember: false, keepFocus: true });
-        setRestoreStatus(`Loaded saved player from this browser: ${exactMatch}`);
+        setRestoreStatus(`Using previous player saved in this browser: ${exactMatch}`);
       }
     }
     if (!restoredPlayerFromStorage) {
