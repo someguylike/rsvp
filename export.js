@@ -219,7 +219,7 @@
     return {
       weekday: date.toLocaleDateString("en-US", { weekday: "short" }),
       day: date.toLocaleDateString("en-US", {
-        month: "short",
+        month: "numeric",
         day: "numeric",
       }),
       week: `Week ${weekOfMonth}`,
