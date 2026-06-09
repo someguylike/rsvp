@@ -521,8 +521,14 @@
         }`,
         `${exportRows} exported report row${exportRows === 1 ? "" : "s"}`,
       ].join(" ");
+      const updatedFields = Array.isArray(result.updatedFields)
+        ? result.updatedFields.filter(Boolean)
+        : [];
       const messages = {
-        completed: `Added missing ${result.updatedFields.join(", ")}.`,
+        completed:
+          updatedFields.length > 0
+            ? `Added missing ${updatedFields.join(", ")}.`
+            : "Added missing member info.",
         created: "Added member.",
         updated: "Updated member.",
         renamed: renamedMessage,
