@@ -64,10 +64,13 @@
   const status = document.querySelector("#status");
   const monthTotal = document.querySelector("#month-total");
   const rosterTable = document.querySelector("#roster-table");
+  const auditTotal = document.querySelector("#audit-total");
+  const changeHistoryTable = document.querySelector("#change-history-table");
   let monthDates = [];
   let rosterValues = new Map();
   const changedValues = new Map();
   let latestLoadRequest = 0;
+  let latestAuditRequest = 0;
   let adminToken = "";
 
   function readAdminAuth() {
@@ -339,6 +342,125 @@
       });
   }
 
+  function appendCell(row, tagName, text) {
+    const cell = document.createElement(tagName);
+    cell.textContent = text;
+    row.append(cell);
+    return cell;
+  }
+
+  function formatDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value || "";
+    }
+
+    return date.toLocaleString(DISPLAY_LOCALE, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function formatAuditAction(action) {
+    return (
+      {
+        created: "Submitted",
+        updated: "Updated",
+        deleted: "Removed",
+        delete_not_found: "Remove attempted",
+        needs_confirmation: "Update confirmation shown",
+      }[action] || action || "Changed"
+    );
+  }
+
+  function formatAuditCount(entry) {
+    const nextCount = entry.participantCount ? Number(entry.participantCount) : 0;
+    const previousCount = entry.existingParticipantCount ? Number(entry.existingParticipantCount) : 0;
+
+    if (entry.action === "created") {
+      return `New: ${nextCount}`;
+    }
+    if (entry.action === "updated") {
+      return `${previousCount || 0} -> ${nextCount}`;
+    }
+    if (entry.action === "deleted") {
+      return `Removed ${previousCount || nextCount || ""}`.trim();
+    }
+    if (entry.action === "delete_not_found") {
+      return "No RSVP found";
+    }
+    if (entry.action === "needs_confirmation") {
+      return `${previousCount || 0} -> ${nextCount}`;
+    }
+    return entry.participantCount || "";
+  }
+
+  function renderAuditTable(entries) {
+    changeHistoryTable.textContent = "";
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+      auditTotal.textContent = "No changes this month";
+      return;
+    }
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    ["When", "Player", "Date", "Change", "Spots", "Device"].forEach((header) => {
+      appendCell(headerRow, "th", header);
+    });
+    thead.append(headerRow);
+
+    const tbody = document.createElement("tbody");
+    entries.forEach((entry) => {
+      const row = document.createElement("tr");
+      appendCell(row, "td", formatDateTime(entry.loggedAt)).dataset.label = "When";
+      appendCell(row, "td", entry.playerName || "").dataset.label = "Player";
+      appendCell(row, "td", entry.playDate || "").dataset.label = "Date";
+      appendCell(row, "td", formatAuditAction(entry.action)).dataset.label = "Change";
+      appendCell(row, "td", formatAuditCount(entry)).dataset.label = "Spots";
+      appendCell(row, "td", entry.clientDevice || "").dataset.label = "Device";
+      tbody.append(row);
+    });
+
+    changeHistoryTable.append(thead, tbody);
+    auditTotal.textContent = `${entries.length} recent change${entries.length === 1 ? "" : "s"}`;
+  }
+
+  async function loadAudit(month) {
+    const requestId = latestAuditRequest + 1;
+    latestAuditRequest = requestId;
+
+    if (!adminToken) {
+      auditTotal.textContent = "Login required";
+      changeHistoryTable.textContent = "";
+      return;
+    }
+
+    auditTotal.textContent = "Loading...";
+    changeHistoryTable.textContent = "";
+
+    try {
+      const result = await requestAppsScript({
+        action: "listAudit",
+        adminToken,
+        month,
+        limit: "250",
+      });
+      if (requestId !== latestAuditRequest || monthInput.value !== month) {
+        return;
+      }
+      renderAuditTable(result.entries || []);
+    } catch (error) {
+      if (requestId !== latestAuditRequest || monthInput.value !== month) {
+        return;
+      }
+      auditTotal.textContent = "Could not load history";
+      changeHistoryTable.textContent = error.message;
+    }
+  }
+
   function renderRosterTable() {
     const visiblePlayers = getVisiblePlayers();
     const thead = document.createElement("thead");
@@ -429,8 +551,10 @@
     rosterValues = new Map();
     changedValues.clear();
     rosterTable.textContent = "";
+    changeHistoryTable.textContent = "";
     setStatus("Loading month...", "loading");
     monthTotal.textContent = "Loading...";
+    auditTotal.textContent = "Loading...";
     updateChangeCount();
 
     try {
@@ -460,6 +584,7 @@
       }
 
       renderRosterTable();
+      loadAudit(month);
       setStatus("Month loaded.", "success");
     } catch (error) {
       if (requestId !== latestLoadRequest || monthInput.value !== month) {
@@ -467,6 +592,7 @@
       }
       rosterTable.textContent = "";
       monthTotal.textContent = "Could not load month";
+      auditTotal.textContent = "Could not load history";
       setStatus(error.message, "error");
     }
   }
@@ -563,6 +689,8 @@
     changedValues.clear();
     rosterTable.textContent = "";
     monthTotal.textContent = "Login required";
+    changeHistoryTable.textContent = "";
+    auditTotal.textContent = "Login required";
     setStatus("", "");
     updateChangeCount();
     setAdminLocked("");

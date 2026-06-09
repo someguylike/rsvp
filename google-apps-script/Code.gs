@@ -140,6 +140,15 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "listAudit") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "listAudit",
+        entries: getAuditLog_(params),
+      });
+    }
+
     if (params.action === "list") {
       return jsonp_(callback, {
         ok: true,
@@ -285,10 +294,11 @@ function deleteRsvp_(params) {
       };
     }
 
+    const existingRsvp = getRsvpAtRow_(sheet, rows[0]);
     rows.sort((first, second) => second - first).forEach((row) => {
       sheet.deleteRow(row);
     });
-    appendAuditLog_(params, "deleted", rows[0], null);
+    appendAuditLog_(params, "deleted", rows[0], existingRsvp);
     return {
       action: "deleted",
       row: rows[0],
@@ -441,6 +451,85 @@ function appendAuditLog_(params, action, row, existingRsvp) {
   } catch (error) {
     console.warn(`Could not append RSVP audit log: ${error.message}`);
   }
+}
+
+function getAuditLog_(params) {
+  const month = sanitizeText_(params.month || "");
+  const playDate = sanitizeText_(params.playDate || "");
+  const playerName = sanitizeText_(params.playerName || "");
+  const limit = Math.min(
+    500,
+    Math.max(1, parseInt(String(params.limit || "250"), 10) || 250),
+  );
+  const sheet = getAuditSheet_();
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, AUDIT_HEADERS.length)
+    .getValues()
+    .map((row, index) => auditRowToEntry_(row, index + 2))
+    .filter((entry) => {
+      if (month && !entry.playDate.startsWith(month)) {
+        return false;
+      }
+      if (playDate && entry.playDate !== playDate) {
+        return false;
+      }
+      if (playerName && normalize_(entry.playerName) !== normalize_(playerName)) {
+        return false;
+      }
+      return true;
+    })
+    .sort((first, second) => second.loggedAt.localeCompare(first.loggedAt))
+    .slice(0, limit);
+}
+
+function auditRowToEntry_(row, sheetRow) {
+  const existingRsvp = parseAuditExistingRsvp_(row[14]);
+  return {
+    row: sheetRow,
+    loggedAt: formatAuditValue_(row[0]),
+    action: String(row[1] || ""),
+    playDate: String(row[2] || ""),
+    playerName: String(row[3] || ""),
+    participantCount: String(row[4] || ""),
+    rsvpRow: String(row[5] || ""),
+    browserId: String(row[6] || ""),
+    browserSignature: String(row[7] || ""),
+    clientDevice: String(row[8] || ""),
+    clientTimeZone: String(row[9] || ""),
+    clientLanguage: String(row[10] || ""),
+    clientScreen: String(row[11] || ""),
+    clientIp: String(row[12] || ""),
+    submittedAt: formatAuditValue_(row[13]),
+    existingParticipantCount: existingRsvp
+      ? String(existingRsvp.participantCount || "")
+      : "",
+    existingVote: existingRsvp ? String(existingRsvp.vote || "") : "",
+  };
+}
+
+function parseAuditExistingRsvp_(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(String(value));
+  } catch (error) {
+    return null;
+  }
+}
+
+function formatAuditValue_(value) {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return String(value || "");
 }
 
 function getRosterSheet_() {

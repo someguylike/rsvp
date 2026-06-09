@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Admin</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css?v=20260605-22" />
   </head>
   <body>
@@ -87,11 +88,24 @@
               <table id="roster-table" class="export-table roster-edit-table"></table>
             </div>
           </section>
+
+          <section class="admin-preview">
+            <div class="preview-heading">
+              <h2>Change History</h2>
+              <p id="audit-total">Loading...</p>
+            </div>
+            <p class="field-help">
+              Recent submit, update, and remove activity for the selected month.
+            </p>
+            <div class="table-wrap compact-table-wrap">
+              <table id="change-history-table" class="export-table audit-table"></table>
+            </div>
+          </section>
         </div>
 
       </section>
     </main>
 
-    <script src="./admin.js?v=20260609-1"></script>
+    <script src="./admin.js?v=20260609-2"></script>
   </body>
 </html>
