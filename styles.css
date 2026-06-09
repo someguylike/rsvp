@@ -828,11 +828,16 @@ button:disabled {
   background: var(--accent-soft);
 }
 
-.muted-contact,
-.missing-contact {
+.muted-contact {
   border: 1px dashed var(--line-strong);
   background: #fbfcfd;
   color: var(--muted);
+}
+
+.missing-contact {
+  border: 1px dashed #f1b8b3;
+  background: #fff5f5;
+  color: var(--error);
 }
 
 .complete-chip {
@@ -848,7 +853,7 @@ button:disabled {
 }
 
 .missing-info-label {
-  color: var(--muted);
+  color: var(--error);
   font-size: 0.75rem;
   font-weight: 800;
   white-space: normal;
