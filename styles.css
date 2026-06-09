@@ -311,14 +311,8 @@ textarea {
 }
 
 .player-identity-hint {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.78rem;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
-  white-space: nowrap;
+  color: #8a320d;
+  font: inherit;
 }
 
 .player-memory.warning {
