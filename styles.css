@@ -54,71 +54,6 @@ body {
   box-shadow: 0 28px 80px rgb(0 22 65 / 24%);
 }
 
-.admin-auth-widget {
-  position: relative;
-  z-index: 3;
-}
-
-.admin-auth-button {
-  width: 100%;
-  min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  padding: 8px 12px;
-  font-size: 0.88rem;
-  font-weight: 800;
-}
-
-.admin-auth-button.is-admin {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #ffffff;
-}
-
-.admin-auth-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: min(300px, calc(100vw - 40px));
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  padding: 12px;
-  box-shadow: 0 18px 52px rgb(0 22 65 / 20%);
-}
-
-.admin-auth-form {
-  display: grid;
-  gap: 10px;
-}
-
-.admin-auth-panel[data-state="signed-in"] .admin-auth-form {
-  display: none;
-}
-
-.admin-auth-status {
-  min-height: 20px;
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.admin-auth-status.success {
-  color: var(--success);
-}
-
-.admin-auth-status.error,
-.admin-auth-status.loading {
-  color: var(--error);
-}
-
-#admin-auth-logout {
-  width: 100%;
-  margin-top: 10px;
-}
-
 .admin-panel {
   width: min(100%, 1180px);
 }
@@ -162,7 +97,7 @@ body {
 
 .page-nav-links {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 

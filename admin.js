@@ -53,8 +53,11 @@
   const form = document.querySelector("#admin-form");
   const adminAuth = window.RsvpAdminAuth;
   const lockedPanel = document.querySelector("#admin-locked-panel");
-  const lockedStatus = document.querySelector("#admin-locked-status");
+  const loginForm = document.querySelector("#admin-login-form");
+  const passwordInput = document.querySelector("#admin-password");
+  const loginStatus = document.querySelector("#admin-login-status");
   const adminContent = document.querySelector("#admin-content");
+  const logoutButton = document.querySelector("#admin-logout-button");
   const monthInput = document.querySelector("#roster-month");
   const playerSearch = document.querySelector("#player-search");
   const changeCount = document.querySelector("#change-count");
@@ -180,17 +183,18 @@
     };
   }
 
+  function setLoginStatus(message, type) {
+    loginStatus.textContent = message;
+    loginStatus.className = `status ${type || ""}`.trim();
+  }
+
   function setAdminLocked(message) {
     adminContent.hidden = true;
     lockedPanel.hidden = false;
-    if (message) {
-      lockedStatus.textContent = message;
-      lockedStatus.className = "status error";
-    } else {
-      lockedStatus.textContent =
-        "Use the Log In button in the top corner to manage RSVP records.";
-      lockedStatus.className = "status";
-    }
+    setLoginStatus(
+      message || "Log in here to enable admin features on this browser.",
+      message ? "error" : "",
+    );
   }
 
   function setAdminUnlocked() {
@@ -877,6 +881,22 @@
     if (event.key === "play-rsvp.adminAuth") {
       window.location.reload();
     }
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setLoginStatus("Logging in...", "loading");
+
+    try {
+      await adminAuth.login(passwordInput.value);
+      passwordInput.value = "";
+    } catch (error) {
+      setLoginStatus(error.message, "error");
+    }
+  });
+
+  logoutButton.addEventListener("click", () => {
+    adminAuth.logout();
   });
 
   monthInput.addEventListener("change", () => {

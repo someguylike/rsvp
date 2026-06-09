@@ -37,7 +37,6 @@
   function notify() {
     const state = getState();
     listeners.forEach((listener) => listener(state));
-    renderWidget(state);
   }
 
   function buildAppsScriptUrl(payload, callbackName) {
@@ -76,51 +75,6 @@
     }
 
     throw new Error(parsed?.error || "Request failed");
-  }
-
-  function getWidgetElements() {
-    return {
-      widget: document.querySelector("#admin-auth-widget"),
-      button: document.querySelector("#admin-auth-button"),
-      panel: document.querySelector("#admin-auth-panel"),
-      form: document.querySelector("#admin-auth-form"),
-      password: document.querySelector("#admin-auth-password"),
-      status: document.querySelector("#admin-auth-status"),
-      logout: document.querySelector("#admin-auth-logout"),
-    };
-  }
-
-  function setWidgetStatus(message, type) {
-    const { status } = getWidgetElements();
-    if (!status) {
-      return;
-    }
-    status.textContent = message;
-    status.className = `admin-auth-status ${type || ""}`.trim();
-  }
-
-  function renderWidget(state) {
-    const { button, panel, password, logout } = getWidgetElements();
-    if (!button || !panel || !logout) {
-      return;
-    }
-
-    button.textContent = state.isLoggedIn ? "Admin" : "Admin Login";
-    button.classList.toggle("is-admin", state.isLoggedIn);
-    panel.dataset.state = state.isLoggedIn ? "signed-in" : "signed-out";
-    logout.hidden = !state.isLoggedIn;
-    if (password) {
-      password.disabled = state.isLoggedIn;
-      if (state.isLoggedIn) {
-        password.value = "";
-      }
-    }
-    setWidgetStatus(
-      state.isLoggedIn
-        ? "Admin access is active on this browser."
-        : "Log in once to unlock admin actions on all pages.",
-      state.isLoggedIn ? "success" : "",
-    );
   }
 
   async function login(password) {
@@ -166,73 +120,12 @@
     return getState();
   }
 
-  function installWidget() {
-    if (document.querySelector("#admin-auth-widget")) {
-      return;
-    }
-
-    const widget = document.createElement("div");
-    widget.id = "admin-auth-widget";
-    widget.className = "admin-auth-widget";
-    widget.innerHTML = [
-      '<button id="admin-auth-button" class="admin-auth-button" type="button" aria-expanded="false" aria-controls="admin-auth-panel">Admin Login</button>',
-      '<div id="admin-auth-panel" class="admin-auth-panel" hidden>',
-      '<form id="admin-auth-form" class="admin-auth-form">',
-      '<label class="field">',
-      "<span>Admin password</span>",
-      '<input id="admin-auth-password" autocomplete="current-password" type="password" required />',
-      "</label>",
-      '<button type="submit">Log In</button>',
-      "</form>",
-      '<p id="admin-auth-status" class="admin-auth-status" role="status" aria-live="polite"></p>',
-      '<button id="admin-auth-logout" class="secondary-button" type="button" hidden>Log Out</button>',
-      "</div>",
-    ].join("");
-
-    const navLinks = document.querySelector(".page-nav-links");
-    const panel = document.querySelector(".panel") || document.body;
-    if (navLinks) {
-      navLinks.append(widget);
-    } else {
-      panel.prepend(widget);
-    }
-
-    const { button, form, password, logout: logoutButton } = getWidgetElements();
-    button.addEventListener("click", () => {
-      const { panel: authPanel } = getWidgetElements();
-      const willOpen = authPanel.hidden;
-      authPanel.hidden = !willOpen;
-      button.setAttribute("aria-expanded", String(willOpen));
-      if (willOpen && !adminToken) {
-        window.setTimeout(() => password?.focus(), 0);
-      }
-    });
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      setWidgetStatus("Logging in...", "loading");
-      try {
-        await login(password.value);
-        password.value = "";
-      } catch (error) {
-        clearAdminAuth();
-        notify();
-        setWidgetStatus(error.message, "error");
-      }
-    });
-
-    logoutButton.addEventListener("click", () => {
-      logout();
-    });
-  }
-
   function onChange(listener) {
     listeners.add(listener);
     listener(getState());
     return () => listeners.delete(listener);
   }
 
-  installWidget();
   const ready = validateStoredAuth();
 
   window.RsvpAdminAuth = {
