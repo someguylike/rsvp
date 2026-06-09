@@ -444,8 +444,11 @@
 
   function setRemoveRsvpAction(payload) {
     lastSubmittedPayload = payload;
+    const hasActiveRsvp = Boolean(payload && Number(payload.participantCount) > 0);
+    submitButton.hidden = hasActiveRsvp;
+
     if (!removeRsvpButton) return;
-    if (!payload || Number(payload.participantCount) <= 0) {
+    if (!hasActiveRsvp) {
       removeRsvpButton.hidden = true;
       removeRsvpButton.textContent = "Made a mistake? Remove this RSVP";
       return;
