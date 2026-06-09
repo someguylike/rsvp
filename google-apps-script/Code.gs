@@ -208,17 +208,17 @@ function doGet(event) {
     }
 
     if (params.action === "exportMonth") {
+      requireAdmin_(params);
       const result = exportMonthRoster_(
         required_(params.month, "Missing export month"),
       );
-      const canOpenSpreadsheet = hasAdminAccess_(params);
       return jsonp_(callback, {
         ok: true,
         action: "exportMonth",
         sheetName: result.sheetName,
         exportedDates: result.exportedDates,
         previewRows: result.previewRows,
-        url: canOpenSpreadsheet ? result.url : "",
+        url: result.url,
       });
     }
 

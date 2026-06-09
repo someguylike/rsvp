@@ -34,6 +34,9 @@
 
           <button id="export-button" type="submit" hidden>Generate Report</button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
+          <p id="stale-warning" class="stale-warning" hidden>
+            Read-only view. This report may be stale; ask an admin to generate the latest report if needed.
+          </p>
           <div
             id="report-progress"
             class="report-progress"
@@ -88,6 +91,6 @@
     </main>
 
     <script src="./admin-auth.js?v=20260609-3"></script>
-    <script src="./export.js?v=20260609-7"></script>
+    <script src="./export.js?v=20260609-8"></script>
   </body>
 </html>

@@ -554,6 +554,18 @@ button:disabled {
   font-weight: 800;
 }
 
+.stale-warning {
+  margin: 0;
+  border: 1px solid #f6c56f;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #7a4b00;
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 9px 10px;
+}
+
 .report-progress {
   display: grid;
   gap: 7px;

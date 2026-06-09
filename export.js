@@ -8,6 +8,7 @@
   const monthInput = document.querySelector("#export-month");
   const exportButton = document.querySelector("#export-button");
   const status = document.querySelector("#status");
+  const staleWarning = document.querySelector("#stale-warning");
   const reportProgress = document.querySelector("#report-progress");
   const reportProgressBar = document.querySelector("#report-progress-bar");
   const reportProgressText = document.querySelector("#report-progress-text");
@@ -121,6 +122,13 @@
 
     status.textContent = `${message} Log in as admin to open the spreadsheet.`;
     status.className = "status success";
+  }
+
+  function renderAccessNotice() {
+    if (!staleWarning) {
+      return;
+    }
+    staleWarning.hidden = Boolean(adminToken);
   }
 
   function setShareLink(month) {
@@ -602,7 +610,7 @@
         setStatus("Choose a month for the report.", "error");
         return;
       }
-      loadMonth(monthInput.value, mode || "export");
+      loadMonth(monthInput.value, mode || (adminToken ? "export" : "view"));
     }, 180);
   }
 
@@ -629,7 +637,7 @@
   });
 
   monthInput.addEventListener("change", () => {
-    scheduleReportLoad("export");
+    scheduleReportLoad();
   });
 
   playerFilter.addEventListener("change", () => {
@@ -644,7 +652,7 @@
       return;
     }
 
-    scheduleReportLoad("export");
+    scheduleReportLoad();
   });
 
   const monthFromUrl = new URLSearchParams(window.location.search).get("month");
@@ -654,6 +662,7 @@
   adminAuth.onChange((state) => {
     const wasLoggedOut = !adminToken;
     adminToken = state.token || "";
+    renderAccessNotice();
     if (
       wasLoggedOut &&
       adminToken &&
@@ -670,6 +679,7 @@
   });
 
   adminAuth.ready.then(() => {
-    scheduleReportLoad("export");
+    renderAccessNotice();
+    scheduleReportLoad();
   });
 })();
