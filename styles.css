@@ -793,6 +793,11 @@ button:disabled {
   text-align: left;
 }
 
+.roster-member-table td {
+  color: #344054;
+  font-weight: 450;
+}
+
 .roster-search-field {
   max-width: 420px;
 }
@@ -856,13 +861,17 @@ button:disabled {
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: 0.78rem;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .member-name-text {
   overflow-wrap: anywhere;
   color: var(--text);
-  font-weight: 850;
+  font-weight: 650;
+}
+
+.roster-member-table td:first-child {
+  font-weight: 650;
 }
 
 .contact-chip,
@@ -875,7 +884,7 @@ button:disabled {
   border-radius: 999px;
   overflow-wrap: anywhere;
   padding: 5px 10px;
-  font-weight: 800;
+  font-weight: 650;
   text-decoration: none;
   white-space: normal;
 }
