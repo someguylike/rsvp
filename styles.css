@@ -883,6 +883,18 @@ button:disabled {
   background: #fff8df;
 }
 
+.roster-member-table tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.roster-member-table tbody tr:nth-child(odd) td {
+  background: #ffffff;
+}
+
+.roster-member-table tbody tr.selected-member-row td {
+  background: #fff8df;
+}
+
 .member-row {
   cursor: pointer;
 }
