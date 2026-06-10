@@ -152,13 +152,7 @@
 
   function fillMissingInfoForm(member) {
     fillForm(member, { focusRelevantField: true });
-    const missingInfo = getMissingMemberInfo(member);
-    setStatus(
-      missingInfo.length > 0
-        ? "Existing info is prefilled. Without admin, Venmo/Facebook can only fill blanks; Note can be updated."
-        : "Existing info is prefilled. Note can be updated.",
-      "",
-    );
+    setStatus("", "");
     renderRoster();
     form.scrollIntoView({ behavior: "smooth", block: "start" });
   }

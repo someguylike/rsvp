@@ -740,6 +740,8 @@ function migrateRosterSheet_(sheet) {
     mergeRosterCellphoneIntoNote_(sheet);
   } else if (headers[3] && headers[3] !== "Note" && sheet.getLastRow() >= 2) {
     sheet.getRange(2, 4, sheet.getLastRow() - 1, 1).clearContent();
+  } else if (headers[3] === "Note" && lastColumn > ROSTER_HEADERS.length) {
+    mergeRosterExtraColumnsIntoNote_(sheet);
   }
 
   const currentLastColumn = sheet.getLastColumn();
@@ -775,6 +777,36 @@ function mergeRosterCellphoneIntoNote_(sheet) {
 
   sheet.getRange(1, 4).setValue("Note");
   sheet.deleteColumn(5);
+}
+
+function mergeRosterExtraColumnsIntoNote_(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+  if (lastRow >= 2 && lastColumn > ROSTER_HEADERS.length) {
+    const width = lastColumn - ROSTER_HEADERS.length;
+    const values = sheet
+      .getRange(2, 4, lastRow - 1, width + 1)
+      .getValues();
+    const mergedNotes = values.map((row) => {
+      const existingNote = String(row[0] || "").trim();
+      const extraValues = row
+        .slice(1)
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+      if (extraValues.length === 0) {
+        return [existingNote];
+      }
+      const extraNote = extraValues.join("; ");
+      if (!existingNote) {
+        return [extraNote];
+      }
+      if (extraValues.every((value) => existingNote.indexOf(value) !== -1)) {
+        return [existingNote];
+      }
+      return [`${existingNote}; ${extraNote}`];
+    });
+    sheet.getRange(2, 4, mergedNotes.length, 1).setValues(mergedNotes);
+  }
 }
 
 function getRoster_() {

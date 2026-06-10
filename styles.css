@@ -868,8 +868,6 @@ button:disabled {
 }
 
 .member-note-cell {
-  display: grid;
-  gap: 3px;
   color: var(--muted);
 }
 
@@ -1522,6 +1520,24 @@ button:disabled {
   .heatmap-table td:first-child,
   .roster-member-table td:first-child {
     background: white;
+  }
+
+  .roster-member-table tbody tr:nth-child(even),
+  .roster-member-table tbody tr:nth-child(even) td,
+  .roster-member-table tbody tr:nth-child(even) td:first-child {
+    background: #f8fafc;
+  }
+
+  .roster-member-table tbody tr:nth-child(odd),
+  .roster-member-table tbody tr:nth-child(odd) td,
+  .roster-member-table tbody tr:nth-child(odd) td:first-child {
+    background: #ffffff;
+  }
+
+  .roster-member-table tbody tr.selected-member-row,
+  .roster-member-table tbody tr.selected-member-row td,
+  .roster-member-table tbody tr.selected-member-row td:first-child {
+    background: #fff8df;
   }
 
   .audit-table td:first-child::before {
