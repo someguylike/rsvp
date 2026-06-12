@@ -123,6 +123,20 @@
   }
 
   function getNextPlayDate() {
+    const now = new Date();
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+
+    for (let offset = 0; offset <= 21; offset += 1) {
+      const candidate = new Date(today);
+      candidate.setDate(today.getDate() + offset);
+      const playStart = new Date(candidate);
+      playStart.setHours(6, 0, 0, 0);
+      if (PLAY_DAYS.includes(candidate.getDay()) && playStart > now) {
+        return candidate;
+      }
+    }
+
     return getUpcomingPlayDates(1)[0] || new Date();
   }
 
