@@ -1072,7 +1072,9 @@
     latestTallyRequest = requestId;
 
     try {
-      tallyCount.textContent = "Loading tally...";
+      tallyCount.textContent = "Loading reservations...";
+      tallyList.replaceChildren();
+      tallySection?.setAttribute("aria-busy", "true");
       const result = await requestAppsScript({
         action: "list",
         playDate,
@@ -1080,6 +1082,7 @@
       if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
         return;
       }
+      tallySection?.removeAttribute("aria-busy");
       renderTally(result.tally);
     } catch (error) {
       if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
@@ -1092,6 +1095,7 @@
         return;
       }
 
+      tallySection?.removeAttribute("aria-busy");
       tallyCount.textContent = "Could not load reservations. Try refreshing.";
       tallyList.replaceChildren();
     }
