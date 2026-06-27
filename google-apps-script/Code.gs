@@ -9,6 +9,8 @@ const ADMIN_TOKEN_TTL_SECONDS = 21600;
 const PLAY_DAYS = [2, 4, 5, 0];
 const PLAY_START_HOUR = 6;
 const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
+const UNVOTE_LOCK_MESSAGE =
+  "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.";
 const HEADERS = [
   "Play Date",
   "Player Name",
@@ -325,9 +327,14 @@ function deleteRsvp_(params) {
     const playDate = required_(params.playDate, "Missing play date");
     const playerName = required_(params.playerName, "Missing player name").trim();
     validatePlayerName_(playerName);
-    requireUnvoteAllowed_(params, playDate);
     const sheet = getSheet_();
     const rows = findExistingRows_(sheet, playDate, playerName);
+    const existingRsvp = rows.length > 0 ? getRsvpAtRow_(sheet, rows[0]) : null;
+
+    if (isUnvoteBlocked_(params, playDate)) {
+      appendAuditLog_(params, "blocked_unvote", rows[0] || null, existingRsvp);
+      throw new Error(UNVOTE_LOCK_MESSAGE);
+    }
 
     if (rows.length === 0) {
       const audit = appendAuditLog_(params, "delete_not_found", null, null);
@@ -339,7 +346,6 @@ function deleteRsvp_(params) {
       };
     }
 
-    const existingRsvp = getRsvpAtRow_(sheet, rows[0]);
     rows.sort((first, second) => second - first).forEach((row) => {
       sheet.deleteRow(row);
     });
@@ -378,7 +384,10 @@ function upsertRsvpWithLock_(params) {
   let audit;
 
   if (normalize_(vote) === "no") {
-    requireUnvoteAllowed_(params, playDate);
+    if (isUnvoteBlocked_(params, playDate)) {
+      appendAuditLog_(params, "blocked_unvote", row, existingRsvp);
+      throw new Error(UNVOTE_LOCK_MESSAGE);
+    }
 
     if (row) {
       matchingRows.sort((first, second) => second - first).forEach((rowNumber) => {
@@ -1473,16 +1482,12 @@ function clampStoredParticipantCount_(value) {
   return Number.isFinite(count) ? Math.min(5, Math.max(1, count)) : 1;
 }
 
-function requireUnvoteAllowed_(params, playDate) {
+function isUnvoteBlocked_(params, playDate) {
   if (params.action === "adminUpsertRsvp") {
-    return;
+    return false;
   }
 
-  if (isUnvoteLocked_(playDate)) {
-    throw new Error(
-      "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.",
-    );
-  }
+  return isUnvoteLocked_(playDate);
 }
 
 function isUnvoteLocked_(playDate) {

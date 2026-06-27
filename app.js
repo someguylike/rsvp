@@ -1200,14 +1200,6 @@
       return;
     }
 
-    if (payload.vote === "No" && rsvpRules.isUnvoteLocked(payload.playDate)) {
-      setStatus(
-        "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.",
-        "error",
-      );
-      return;
-    }
-
     submitRsvp(await enrichPayloadWithAuditMetadata(payload));
   });
 
@@ -1288,13 +1280,6 @@
 
   removeRsvpButton?.addEventListener("click", () => {
     if (!lastSubmittedPayload) {
-      return;
-    }
-    if (rsvpRules.isUnvoteLocked(lastSubmittedPayload.playDate)) {
-      setStatus(
-        "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.",
-        "error",
-      );
       return;
     }
     removeExistingRsvp(lastSubmittedPayload);
