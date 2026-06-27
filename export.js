@@ -1,6 +1,6 @@
 (function () {
   const APPS_SCRIPT_URL =
-    "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
+    "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
 
   const form = document.querySelector("#export-form");
   const adminAuth = window.RsvpAdminAuth;
@@ -103,35 +103,10 @@
     window.setTimeout(clearProgress, 900);
   }
 
-  function buildShareUrl(month) {
-    const url = new URL(window.location.href);
-    url.search = "";
-    url.searchParams.set("month", month);
-    return url.toString();
-  }
-
-  function appendStatusLink(href, linkText) {
-    const link = document.createElement("a");
-    link.href = href;
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.textContent = linkText;
-    status.append(link);
-  }
-
   function setReportStatus(message, href, month) {
     latestReportStatus = { message, href, month };
-    status.textContent = `${message} `;
+    status.textContent = message;
     status.className = "status success";
-
-    if (adminToken && href) {
-      appendStatusLink(href, "Open spreadsheet");
-      status.append(" ");
-    }
-
-    if (month) {
-      appendStatusLink(buildShareUrl(month), "Share Link");
-    }
   }
 
   function renderAccessNotice() {
@@ -671,7 +646,14 @@
 
   const monthFromUrl = new URLSearchParams(window.location.search).get("month");
   const hasValidMonthFromUrl = isMonthValue(monthFromUrl);
-  monthInput.value = hasValidMonthFromUrl ? monthFromUrl : formatMonth(new Date());
+  const currentMonth = formatMonth(new Date());
+  const availableMonths = Array.from(monthInput.options).map((option) => option.value);
+  monthInput.value =
+    hasValidMonthFromUrl && availableMonths.includes(monthFromUrl)
+      ? monthFromUrl
+      : availableMonths.includes(currentMonth)
+        ? currentMonth
+        : availableMonths[0] || "";
 
   adminAuth.onChange((state) => {
     const wasLoggedOut = !adminToken;

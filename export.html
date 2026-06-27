@@ -24,6 +24,7 @@
             <a href="./index.html">RSVP</a>
             <a href="./roster.html">Members</a>
             <a class="active" href="./export.html" aria-current="page">Report</a>
+            <a href="./billing.html">Billing</a>
             <a href="./admin.html">Admin</a>
           </div>
         </nav>
@@ -31,7 +32,11 @@
         <form id="export-form" class="form">
           <label id="month-field" class="field">
             <span>Month</span>
-            <input id="export-month" name="month" type="month" required />
+            <select id="export-month" name="month" required>
+              <option value="2026-06">June 2026</option>
+              <option value="2026-05">May 2026</option>
+              <option value="2026-04">April 2026</option>
+            </select>
           </label>
 
           <button id="export-button" type="submit" hidden>Recreate Latest Report</button>
@@ -93,6 +98,6 @@
     </main>
 
     <script src="./admin-auth.js?v=20260609-3"></script>
-    <script src="./export.js?v=20260609-14"></script>
+    <script src="./export.js?v=20260627-2"></script>
   </body>
 </html>

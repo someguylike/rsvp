@@ -1,0 +1,1582 @@
+(function () {
+  const APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
+  const PLAYERS = [
+    "Alex Yeung",
+    "Anh Khoa Tran (Truc Phuong)",
+    "Bao Ta",
+    "Cuong (MC) Nguyen",
+    "Cuong Tipu",
+    "Danny Phan",
+    "Danh Nguyen",
+    "Derek Blaiotta",
+    "Duy Nguyen",
+    "Harvey Le",
+    "Hoan Nguyen",
+    "Hoang Huynh",
+    "Hung Cao (Truong Do)",
+    "Huong Le",
+    "Huy Nguyen (Harvey's fr)",
+    "Huy Viet Nguyen",
+    "Jordan Scherr",
+    "Khang Nguyen",
+    "Khang Vinh",
+    "KhiemHoang Tran",
+    "Luan Nguyen",
+    "Nam Pham",
+    "Nhan Chau",
+    "Nick Nguyen",
+    "Nguyen Nhat",
+    "Phuc Anh",
+    "Phuoc Truong",
+    "Son Nguyen",
+    "Thanh Nguyen",
+    "Thanh Thanh Tran",
+    "Thanh Thu Tieu",
+    "Thien Nguyen",
+    "Lily Do",
+    "Thinh Pham",
+    "Thuy Duong",
+    "Todd Nguyen",
+    "Tr Nguyen (Trung)",
+    "Tri Ho",
+    "Truc Phuong",
+    "Van Trung Nguyen",
+    "Truong Do",
+    "Tu Anh Do",
+    "Tuan Pham",
+    "Tuan Phan/Hien",
+    "Tuan Ta",
+    "Uyen",
+    "Viet Do",
+    "Vu Nguyen",
+  ];
+  const PLAY_DAYS = [2, 4, 5, 0];
+  const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
+  const STATUS_OPTIONS = ["Not requested", "Requested", "Paid", "Credit carryover"];
+  const LOCAL_BILLING_FIXTURE = new URLSearchParams(window.location.search).get(
+    "localBillingFixture",
+  );
+  let isAdmin = false;
+  let adminToken = "";
+  let backendBilling = null;
+  let backendAvailable = false;
+  let latestBillingRequest = 0;
+
+  const monthInput = document.querySelector("#billing-month");
+  const reloadBillingButton = document.querySelector("#reload-billing-button");
+  const statusEl = document.querySelector("#billing-status");
+  const finalizationBadge = document.querySelector("#billing-finalization-badge");
+  const finalizationPanel = document.querySelector("#billing-finalization-panel");
+  const finalizationTitle = document.querySelector("#billing-finalization-title");
+  const finalizationNote = document.querySelector("#billing-finalization-note");
+  const finalizationForm = document.querySelector("#billing-finalization-form");
+  const finalizationSelect = document.querySelector("#billing-finalization-select");
+  const summaryEl = document.querySelector("#overview-section");
+  const dailyNote = document.querySelector("#daily-cost-note");
+  const dailyTable = document.querySelector("#daily-cost-table");
+  const courtForm = document.querySelector("#court-form");
+  const courtDateInput = document.querySelector("#court-date");
+  const courtStartTimeInput = document.querySelector("#court-start-time");
+  const courtDurationInput = document.querySelector("#court-duration");
+  const courtCountInput = document.querySelector("#court-count");
+  const courtAmountInput = document.querySelector("#court-amount");
+  const courtPaidByInput = document.querySelector("#court-paid-by");
+  const courtBlockTable = document.querySelector("#court-block-table");
+  const birdiePurchaseForm = document.querySelector("#birdie-purchase-form");
+  const birdieDateInput = document.querySelector("#birdie-date");
+  const birdieBatchInput = document.querySelector("#birdie-batch");
+  const birdieTubesInput = document.querySelector("#birdie-tubes");
+  const birdieUnitPriceInput = document.querySelector("#birdie-unit-price");
+  const birdieAmountInput = document.querySelector("#birdie-amount");
+  const birdiePaidByInput = document.querySelector("#birdie-paid-by");
+  const birdieUsageForm = document.querySelector("#birdie-usage-form");
+  const birdieUsageDateInput = document.querySelector("#birdie-usage-date");
+  const birdieUsageBatchInput = document.querySelector("#birdie-usage-batch");
+  const birdieUsageTubesInput = document.querySelector("#birdie-usage-tubes");
+  const birdiePurchaseTable = document.querySelector("#birdie-purchase-table");
+  const memberNote = document.querySelector("#member-billing-note");
+  const memberTable = document.querySelector("#member-billing-table");
+  const memberSelect = document.querySelector("#member-detail-select");
+  const memberDetail = document.querySelector("#member-detail");
+
+  let attendanceRows = [];
+  let billing = null;
+
+  function buildAppsScriptUrl(payload, callbackName) {
+    const url = new URL(APPS_SCRIPT_URL);
+    url.searchParams.set("callback", callbackName);
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, String(value));
+      }
+    });
+    return url.toString();
+  }
+
+  function parseJsonp(text, callbackName) {
+    const trimmed = text.trim();
+    const prefix = `${callbackName}(`;
+
+    if (!trimmed.startsWith(prefix) || !trimmed.endsWith(");")) {
+      throw new Error("Unexpected Apps Script response");
+    }
+
+    return JSON.parse(trimmed.slice(prefix.length, -2));
+  }
+
+  async function requestAppsScript(payload) {
+    const callbackName = `billingCallback_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2)}`;
+    const response = await fetch(buildAppsScriptUrl(payload, callbackName), {
+      cache: "no-store",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
+    const parsed = parseJsonp(await response.text(), callbackName);
+
+    if (response.ok && parsed.ok) {
+      return parsed;
+    }
+
+    throw new Error(parsed?.error || "Billing request failed");
+  }
+
+  function buildBackendAttendance(attendanceRsvps) {
+    const byDate = new Map();
+    attendanceRsvps.forEach((entry) => {
+      if (!byDate.has(entry.playDate)) {
+        byDate.set(entry.playDate, new Map());
+      }
+      const byPlayer = byDate.get(entry.playDate);
+      const current = byPlayer.get(entry.playerName) || {
+        name: entry.playerName,
+        spots: 0,
+      };
+      current.spots += Number(entry.participantCount || 0);
+      byPlayer.set(entry.playerName, current);
+    });
+
+    return Array.from(byDate.entries())
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([date, players]) => ({
+        date,
+        players: Array.from(players.values()).sort((first, second) =>
+          first.name.localeCompare(second.name),
+        ),
+      }));
+  }
+
+  function getBirdieBatchKey(purchase) {
+    return [
+      String(purchase?.batch || "").trim(),
+      Number(purchase?.unitPrice || 0).toFixed(2),
+    ].join("|");
+  }
+
+  async function loadLocalBillingFixture() {
+    if (!window.BillingParser) {
+      throw new Error("Billing parser is not loaded for local fixture mode");
+    }
+
+    const response = await fetch(`./data/${LOCAL_BILLING_FIXTURE}.csv`, {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Could not load data/${LOCAL_BILLING_FIXTURE}.csv`);
+    }
+
+    const csv = await response.text();
+    const match = LOCAL_BILLING_FIXTURE.match(/^(\d{2})_(\d{4})$/);
+    const year = match ? Number(match[2]) : Number(monthInput.value.slice(0, 4));
+    const month = match ? Number(match[1]) : Number(monthInput.value.slice(5, 7));
+    const model = window.BillingParser.parseFinalizedBillingCsv(csv, {
+      year,
+      month,
+    });
+    const backfill = window.BillingParser.buildFinalizedBillingBackfill(model);
+
+    monthInput.value = backfill.month;
+    return {
+      month: backfill.month,
+      attendance: buildBackendAttendance(backfill.attendanceRsvps),
+      courtBlocks: backfill.courtBlocks,
+      birdieInventory: null,
+      birdiePurchases: backfill.birdieInventoryPurchases.concat(
+        backfill.birdiePurchases,
+      ),
+      payments: [],
+      adjustments: backfill.creditAdjustments.map((adjustment, index) => ({
+        id: `local-credit-${index + 1}`,
+        playerName: adjustment.playerName,
+        amount: adjustment.amount,
+        note: adjustment.note,
+        status: "active",
+      })),
+      monthStatus: {
+        status: "draft",
+        note: "Local fixture",
+        updatedAt: "",
+        updatedBy: "Local fixture",
+      },
+    };
+  }
+
+  function storageKey(name) {
+    return `billing:${monthInput.value}:${name}`;
+  }
+
+  function readJson(key, fallback) {
+    try {
+      return JSON.parse(localStorage.getItem(key)) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function writeJson(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function setStatus(message, type) {
+    statusEl.textContent = message;
+    statusEl.className = `status ${type || ""}`.trim();
+  }
+
+  function formatMoney(value) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(Number(value || 0));
+  }
+
+  function formatNumber(value, digits) {
+    return Number(value || 0).toLocaleString("en-US", {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: digits,
+    });
+  }
+
+  function getMonthParts() {
+    const match = String(monthInput.value || "").match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      return { year: 2026, monthIndex: 5 };
+    }
+    return {
+      year: Number(match[1]),
+      monthIndex: Number(match[2]) - 1,
+    };
+  }
+
+  function formatDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function getMonthEndDateValue() {
+    const { year, monthIndex } = getMonthParts();
+    return formatDate(new Date(year, monthIndex + 1, 0));
+  }
+
+  function formatMonthLabel(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      return value || "";
+    }
+    return new Date(Number(match[1]), Number(match[2]) - 1, 1).toLocaleDateString(
+      "en-US",
+      { month: "long", year: "numeric" },
+    );
+  }
+
+  function formatDisplayDate(value) {
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return date.toLocaleDateString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+    });
+  }
+
+  function getDateWeight(value) {
+    const date = new Date(`${value}T00:00:00`);
+    return date.getDay() === 0 ? 1.5 : 1;
+  }
+
+  function parseAmount(value) {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+  }
+
+  function parseDurationHours(value) {
+    const text = String(value || "").trim();
+    const match = text.match(/^(\d{1,2})(?::([0-5]\d))?$/);
+    if (!match) {
+      return 1;
+    }
+    const hours = Number(match[1]);
+    const minutes = Number(match[2] || 0);
+    return Math.max(0.25, hours + minutes / 60);
+  }
+
+  function formatDuration(hours) {
+    const totalMinutes = Math.round(Number(hours || 0) * 60);
+    const wholeHours = Math.floor(totalMinutes / 60);
+    const minutes = String(totalMinutes % 60).padStart(2, "0");
+    return `${wholeHours}:${minutes}`;
+  }
+
+  function getEndTime(startTime, durationHours) {
+    const match = String(startTime || "").match(/^(\d{2}):(\d{2})$/);
+    if (!match) {
+      return "";
+    }
+    const date = new Date(2000, 0, 1, Number(match[1]), Number(match[2]), 0, 0);
+    date.setMinutes(date.getMinutes() + Math.round(Number(durationHours || 0) * 60));
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function formatClock(value) {
+    const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+    if (!match) {
+      return value || "";
+    }
+    const hour = Number(match[1]);
+    const minute = match[2];
+    const suffix = hour >= 12 ? "PM" : "AM";
+    const displayHour = hour % 12 || 12;
+    return minute === "00" ? `${displayHour}${suffix}` : `${displayHour}:${minute}${suffix}`;
+  }
+
+  function getClockParts(value) {
+    const label = formatClock(value);
+    const match = label.match(/^(.*?)(AM|PM)$/);
+    return match
+      ? {
+          time: match[1],
+          suffix: match[2],
+        }
+      : {
+          time: label,
+          suffix: "",
+        };
+  }
+
+  function formatTimeRange(startTime, durationHours) {
+    const start = getClockParts(startTime);
+    const end = getClockParts(getEndTime(startTime, durationHours));
+
+    if (start.suffix && start.suffix === end.suffix) {
+      return `${start.time}-${end.time}${end.suffix}`;
+    }
+
+    return `${start.time}${start.suffix}-${end.time}${end.suffix}`;
+  }
+
+  function formatCourtBlock(block) {
+    if (block.startTime) {
+      return formatTimeRange(block.startTime, block.durationHours);
+    }
+    return block.block || "";
+  }
+
+  function makeId(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function createCell(tagName, value, className) {
+    const cell = document.createElement(tagName);
+    cell.textContent = value;
+    if (className) {
+      cell.className = className;
+    }
+    return cell;
+  }
+
+  function clearElement(element) {
+    element.replaceChildren();
+  }
+
+  function fillPlayerSelect(select) {
+    clearElement(select);
+    PLAYERS.forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+  }
+
+  function getPlayDatesForMonth() {
+    const { year, monthIndex } = getMonthParts();
+    const date = new Date(year, monthIndex, 1);
+    const dates = [];
+
+    while (date.getMonth() === monthIndex) {
+      if (PLAY_DAYS.includes(date.getDay())) {
+        dates.push(formatDate(date));
+      }
+      date.setDate(date.getDate() + 1);
+    }
+
+    return dates;
+  }
+
+  function getSamplePlayersForDate(dateValue, index) {
+    const base = [
+      "Thanh Nguyen",
+      "Harvey Le",
+      "Hoan Nguyen",
+      "Son Nguyen",
+      "Bao Ta",
+      "Duy Nguyen",
+      "Tuan Pham",
+      "Truong Do",
+      "Nick Nguyen",
+      "Vu Nguyen",
+      "Luan Nguyen",
+      "Todd Nguyen",
+      "Thien Nguyen",
+      "Phuoc Truong",
+      "Hung Cao (Truong Do)",
+      "Alex Yeung",
+      "Tri Ho",
+      "Khang Nguyen",
+    ];
+    const weight = getDateWeight(dateValue);
+    const count = weight > 1 ? 14 + (index % 5) : 7 + (index % 4);
+    return base.slice(index % 3, index % 3 + count);
+  }
+
+  function createSampleAttendance() {
+    return getPlayDatesForMonth().map((date, index) => ({
+      date,
+      players: getSamplePlayersForDate(date, index).map((name, playerIndex) => ({
+        name,
+        spots: playerIndex % 9 === 0 ? 2 : 1,
+      })),
+    }));
+  }
+
+  function getDefaultCourtBlocks() {
+    return getPlayDatesForMonth().map((date, index) => {
+      const isWeekend = getDateWeight(date) > 1;
+      return {
+        id: makeId("court"),
+        date,
+        startTime: isWeekend ? "06:00" : index % 2 === 0 ? "06:00" : "07:00",
+        durationHours: isWeekend ? 3 : index % 2 === 0 ? 2 : 1,
+        courts: isWeekend ? 2 : 1,
+        amount: isWeekend ? 145.05 : 48.35,
+        paidBy: index % 3 === 0 ? "Hoan Nguyen" : "Thanh Nguyen",
+        status: "active",
+        source: "Manual",
+      };
+    });
+  }
+
+  function getDefaultBirdieState() {
+    return {
+      purchases: [
+        {
+          id: makeId("birdie"),
+          date: monthInput.value ? `${monthInput.value}-03` : "2026-06-03",
+          tubes: 10,
+          amount: 295,
+          paidBy: "Thanh Nguyen",
+          status: "active",
+          recordType: "inventory_purchase",
+          unitPrice: 29.5,
+          batch: "Demo batch",
+        },
+        {
+          id: makeId("birdie"),
+          date: monthInput.value ? `${monthInput.value}-17` : "2026-06-17",
+          tubes: 4,
+          amount: 295,
+          paidBy: "",
+          status: "active",
+          recordType: "usage",
+          unitPrice: 29.5,
+          batch: "Demo batch",
+        },
+      ],
+    };
+  }
+
+  function getCourtBlocks() {
+    if (backendBilling) {
+      return backendBilling.courtBlocks || [];
+    }
+
+    const key = storageKey("courtBlocks");
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return readJson(key, []);
+    }
+
+    const defaults = getDefaultCourtBlocks();
+    writeJson(key, defaults);
+    return defaults;
+  }
+
+  function setCourtBlocks(blocks) {
+    writeJson(storageKey("courtBlocks"), blocks);
+  }
+
+  function getBirdieState() {
+    if (backendBilling) {
+      return {
+        purchases: backendBilling.birdiePurchases || [],
+      };
+    }
+
+    const key = storageKey("birdies");
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return readJson(key, getDefaultBirdieState());
+    }
+
+    const defaults = getDefaultBirdieState();
+    writeJson(key, defaults);
+    return defaults;
+  }
+
+  function setBirdieState(state) {
+    writeJson(storageKey("birdies"), state);
+  }
+
+  function getBirdieRecordType(purchase) {
+    return String(purchase?.recordType || "purchase").replace(/-/g, "_");
+  }
+
+  function isActiveBirdiePurchase(purchase) {
+    return purchase.status !== "canceled";
+  }
+
+  function isBilledBirdiePurchase(purchase) {
+    return (
+      isActiveBirdiePurchase(purchase) &&
+      isCurrentMonthBirdieRow(purchase) &&
+      getBirdieRecordType(purchase) !== "inventory_purchase"
+    );
+  }
+
+  function isInventoryBirdiePurchase(purchase) {
+    return (
+      isActiveBirdiePurchase(purchase) &&
+      getBirdieRecordType(purchase) === "inventory_purchase"
+    );
+  }
+
+  function isCurrentMonthBirdieRow(purchase) {
+    return String(purchase?.date || "").startsWith(`${monthInput.value}-`);
+  }
+
+  function getBirdieUnitPrice(purchase) {
+    const unitPrice = Number(purchase.unitPrice || 0);
+    if (unitPrice > 0) {
+      return unitPrice;
+    }
+
+    const tubes = Number(purchase.tubes || 0);
+    return tubes > 0 ? Number(purchase.amount || 0) / tubes : 0;
+  }
+
+  function getBirdieInventoryBatches(purchases) {
+    const batches = new Map();
+
+    purchases
+      .filter(isActiveBirdiePurchase)
+      .slice()
+      .sort((first, second) =>
+        `${first.date || ""}-${getBirdieRecordType(first)}`.localeCompare(
+          `${second.date || ""}-${getBirdieRecordType(second)}`,
+        ),
+      )
+      .forEach((purchase) => {
+        const recordType = getBirdieRecordType(purchase);
+        const batch = purchase.batch || "Unlabeled batch";
+        const unitPrice = getBirdieUnitPrice(purchase);
+        const key = getBirdieBatchKey({ batch, unitPrice });
+        const current = batches.get(key) || {
+          key,
+          batch,
+          unitPrice,
+          purchased: 0,
+          used: 0,
+          remaining: 0,
+        };
+
+        if (recordType === "inventory_purchase") {
+          current.purchased += Number(purchase.tubes || 0);
+          current.remaining += Number(purchase.tubes || 0);
+        } else if (recordType === "usage") {
+          current.used += Number(purchase.tubes || 0);
+          current.remaining -= Number(purchase.tubes || 0);
+        }
+
+        batches.set(key, current);
+      });
+
+    return Array.from(batches.values())
+      .filter((batch) => batch.purchased > 0 || batch.used > 0)
+      .sort((first, second) => first.batch.localeCompare(second.batch));
+  }
+
+  function updateBirdieUsageMax() {
+    const batch = getBirdieInventoryBatches(getBirdieState().purchases).find(
+      (candidate) => candidate.key === birdieUsageBatchInput.value,
+    );
+    birdieUsageTubesInput.max = batch?.remaining || "";
+  }
+
+  function getPaymentStatus(memberName) {
+    const backendPayment = backendBilling?.payments?.find(
+      (payment) => payment.playerName === memberName,
+    );
+    if (backendPayment?.status) {
+      return backendPayment.status;
+    }
+
+    return localStorage.getItem(storageKey(`payment:${memberName}`)) || "Not requested";
+  }
+
+  function setPaymentStatus(memberName, value) {
+    localStorage.setItem(storageKey(`payment:${memberName}`), value);
+  }
+
+  function getMonthStatus() {
+    if (backendBilling?.monthStatus) {
+      return backendBilling.monthStatus;
+    }
+
+    return readJson(storageKey("monthStatus"), {
+      status: "draft",
+      note: "",
+      updatedAt: "",
+      updatedBy: "",
+    });
+  }
+
+  function setMonthStatus(status) {
+    writeJson(storageKey("monthStatus"), {
+      status,
+      note: "",
+      updatedAt: new Date().toISOString(),
+      updatedBy: getRememberedPlayer(),
+    });
+  }
+
+  function getBillingAdjustments() {
+    if (backendBilling) {
+      return backendBilling.adjustments || [];
+    }
+
+    return readJson(storageKey("adjustments"), []);
+  }
+
+  function getRememberedPlayer() {
+    const remembered = localStorage.getItem(LAST_PLAYER_KEY) || "";
+    return PLAYERS.includes(remembered) ? remembered : "Thanh Nguyen";
+  }
+
+  function calculateBilling() {
+    const courtBlocks = getCourtBlocks();
+    const birdieState = getBirdieState();
+    const activeCourtBlocks = courtBlocks.filter((block) => block.status === "active");
+    const courtByDate = new Map();
+    const credits = new Map();
+    const members = new Map();
+    let totalWeightedSpots = 0;
+    let totalSpots = 0;
+
+    function ensureMember(name) {
+      if (!members.has(name)) {
+        members.set(name, {
+          name,
+          spots: 0,
+          weightedSpots: 0,
+          courtFee: 0,
+          birdieFee: 0,
+          credits: 0,
+          netBalance: 0,
+          attendance: [],
+        });
+      }
+      return members.get(name);
+    }
+
+    activeCourtBlocks.forEach((block) => {
+      courtByDate.set(block.date, (courtByDate.get(block.date) || 0) + Number(block.amount || 0));
+      if (block.paidBy) {
+        const payer = ensureMember(block.paidBy);
+        payer.credits += Number(block.amount || 0);
+      }
+    });
+
+    birdieState.purchases
+      .filter(isBilledBirdiePurchase)
+      .forEach((purchase) => {
+      if (purchase.paidBy) {
+        const payer = ensureMember(purchase.paidBy);
+        payer.credits += Number(purchase.amount || 0);
+      }
+    });
+
+    getBillingAdjustments()
+      .filter((adjustment) => adjustment.status !== "canceled")
+      .forEach((adjustment) => {
+        const member = ensureMember(adjustment.playerName);
+        member.credits += Number(adjustment.amount || 0);
+      });
+
+    attendanceRows.forEach((day) => {
+      const weight = getDateWeight(day.date);
+      const daySpots = day.players.reduce((sum, player) => sum + player.spots, 0);
+      const dayWeightedSpots = daySpots * weight;
+      const dayCourtTotal = courtByDate.get(day.date) || 0;
+      const courtPerSpot = daySpots > 0 ? dayCourtTotal / daySpots : 0;
+      totalSpots += daySpots;
+      totalWeightedSpots += dayWeightedSpots;
+
+      day.players.forEach((entry) => {
+        const member = ensureMember(entry.name);
+        const weightedSpots = entry.spots * weight;
+        member.spots += entry.spots;
+        member.weightedSpots += weightedSpots;
+        member.courtFee += courtPerSpot * entry.spots;
+        member.attendance.push({
+          date: day.date,
+          spots: entry.spots,
+          weight,
+          courtFee: courtPerSpot * entry.spots,
+        });
+      });
+    });
+
+    const birdieTotal = birdieState.purchases
+      .filter(isBilledBirdiePurchase)
+      .reduce(
+      (sum, purchase) => sum + Number(purchase.amount || 0),
+      0,
+    );
+    const birdiePerWeightedSpot =
+      totalWeightedSpots > 0 ? birdieTotal / totalWeightedSpots : 0;
+
+    members.forEach((member) => {
+      member.birdieFee = member.weightedSpots * birdiePerWeightedSpot;
+      member.netBalance = member.courtFee + member.birdieFee - member.credits;
+    });
+
+    return {
+      courtBlocks,
+      birdieState,
+      birdiePerWeightedSpot,
+      totalWeightedSpots,
+      totalSpots,
+      members: Array.from(members.values()).sort((first, second) =>
+        first.name.localeCompare(second.name),
+      ),
+      daily: attendanceRows.map((day) => {
+        const spots = day.players.reduce((sum, player) => sum + player.spots, 0);
+        const weight = getDateWeight(day.date);
+        const courtFee = courtByDate.get(day.date) || 0;
+        const courtPerSpot = spots > 0 ? courtFee / spots : 0;
+        const birdiePerSpot = birdiePerWeightedSpot * weight;
+        return {
+          date: day.date,
+          weight,
+          spots,
+          courtFee,
+          courtPerSpot,
+          birdiePerSpot,
+          totalPerSpot: courtPerSpot + birdiePerSpot,
+          activeBlocks: activeCourtBlocks.filter((block) => block.date === day.date).length,
+        };
+      }),
+    };
+  }
+
+  function renderSummary() {
+    const courtTotal = billing.courtBlocks
+      .filter((block) => block.status === "active")
+      .reduce((sum, block) => sum + Number(block.amount || 0), 0);
+    const birdieTotal = billing.birdieState.purchases
+      .filter(isBilledBirdiePurchase)
+      .reduce(
+      (sum, purchase) => sum + Number(purchase.amount || 0),
+      0,
+    );
+    const openBalance = billing.members
+      .filter((member) => getPaymentStatus(member.name) !== "Paid")
+      .reduce((sum, member) => sum + Math.max(0, member.netBalance), 0);
+    const creditTotal = billing.members.reduce(
+      (sum, member) => sum + Math.max(0, -member.netBalance),
+      0,
+    );
+    const metrics = [
+      ["Expected Expense", formatMoney(courtTotal + birdieTotal), "success"],
+      ["Court Total", formatMoney(courtTotal), ""],
+      ["Birdie Total", formatMoney(birdieTotal), ""],
+      ["Weighted Spots", formatNumber(billing.totalWeightedSpots, 1), ""],
+      ["Open Balance", formatMoney(openBalance), openBalance > 0 ? "warning" : "success"],
+      ["Credits", formatMoney(creditTotal), creditTotal > 0 ? "credit" : ""],
+    ];
+
+    clearElement(summaryEl);
+    metrics.forEach(([label, value, tone]) => {
+      const metric = document.createElement("div");
+      metric.className = `billing-metric ${tone || ""}`.trim();
+      metric.append(createCell("span", label), createCell("strong", value));
+      summaryEl.append(metric);
+    });
+  }
+
+  function renderFinalizationStatus() {
+    const monthStatus = getMonthStatus();
+    const isFinalized = monthStatus.status === "finalized";
+    finalizationBadge.textContent = isFinalized ? "Finalized" : "⚠ Warning";
+    finalizationBadge.className = `billing-finalization-badge ${
+      isFinalized ? "finalized" : "draft"
+    }`;
+    finalizationPanel.className = `billing-finalization-panel ${
+      isFinalized ? "finalized" : "draft"
+    }`;
+    finalizationTitle.textContent = isFinalized
+      ? "Bills are finalized and ready for payments"
+      : "WARNING: bills are not finalized";
+    finalizationNote.textContent = isFinalized
+      ? `Payment requests can use these balances.${
+          monthStatus.updatedBy ? ` Finalized by ${monthStatus.updatedBy}.` : ""
+        }`
+      : "Amounts may still change before payment requests go out.";
+    finalizationSelect.value = isFinalized ? "finalized" : "draft";
+  }
+
+  function renderTable(table, headers, rows, footerCells) {
+    clearElement(table);
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    headers.forEach((header) => headerRow.append(createCell("th", header)));
+    thead.append(headerRow);
+    table.append(thead);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach((cells) => {
+      const row = document.createElement("tr");
+      cells.forEach((cell) => {
+        if (cell instanceof Node) {
+          row.append(cell);
+        } else {
+          row.append(createCell("td", cell.text, cell.className));
+        }
+      });
+      tbody.append(row);
+    });
+    table.append(tbody);
+
+    if (footerCells) {
+      const tfoot = document.createElement("tfoot");
+      const row = document.createElement("tr");
+      footerCells.forEach((cell) => row.append(createCell("td", cell)));
+      tfoot.append(row);
+      table.append(tfoot);
+    }
+  }
+
+  function makeBadge(text, className) {
+    const cell = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = `billing-badge ${className}`;
+    badge.textContent = text;
+    cell.append(badge);
+    return cell;
+  }
+
+  function renderDailyCosts() {
+    const courtTotal = billing.daily.reduce((sum, day) => sum + day.courtFee, 0);
+    const birdieTotal = billing.birdieState.purchases
+      .filter(isBilledBirdiePurchase)
+      .reduce(
+      (sum, purchase) => sum + Number(purchase.amount || 0),
+      0,
+    );
+
+    renderTable(
+      dailyTable,
+      ["Date", "Weight", "Spots", "Court Fee", "Court / Player", "Birdie / Spot", "Total / Spot", "Status"],
+      billing.daily.map((day) => [
+        { text: formatDisplayDate(day.date), className: "name-cell" },
+        { text: `${formatNumber(day.weight, 1)}x` },
+        { text: String(day.spots), className: "numeric-cell" },
+        { text: formatMoney(day.courtFee), className: "numeric-cell" },
+        { text: formatMoney(day.courtPerSpot), className: "numeric-cell" },
+        { text: formatMoney(day.birdiePerSpot), className: "numeric-cell" },
+        { text: formatMoney(day.totalPerSpot), className: "numeric-cell" },
+        makeBadge(day.activeBlocks ? "Clean" : "No court", day.activeBlocks ? "paid" : "review"),
+      ]),
+      ["Total", "", String(billing.totalSpots), formatMoney(courtTotal), "", formatMoney(birdieTotal), formatMoney(courtTotal + birdieTotal), ""],
+    );
+    dailyNote.textContent = backendBilling
+      ? `${billing.daily.length} play dates from Apps Script RSVP data.`
+      : `${billing.daily.length} play dates from demo attendance. Replace this with Apps Script RSVP data next.`;
+  }
+
+  function renderCourtBlocks() {
+    const activeCourtBlocks = billing.courtBlocks.filter(
+      (block) => block.status === "active",
+    );
+    const totalCourtHours = activeCourtBlocks.reduce(
+      (sum, block) =>
+        sum + Number(block.durationHours || 0) * Number(block.courts || 0),
+      0,
+    );
+    const totalCost = activeCourtBlocks.reduce(
+      (sum, block) => sum + Number(block.amount || 0),
+      0,
+    );
+
+    renderTable(
+      courtBlockTable,
+      ["Date", "Block", "Courts", "Paid By", "Amount", "Source", "Status", "Actions"],
+      billing.courtBlocks.map((block) => {
+        const statusCell = makeBadge(
+          block.status === "active" ? "Active" : "Canceled",
+          block.status === "active" ? "paid" : "review",
+        );
+        const actions = document.createElement("td");
+        const toggle = document.createElement("button");
+        toggle.className = `inline-action ${block.status === "active" ? "remove" : ""}`;
+        toggle.type = "button";
+        toggle.textContent = block.status === "active" ? "x" : "+";
+        toggle.setAttribute(
+          "aria-label",
+          block.status === "active" ? "Cancel block" : "Restore block",
+        );
+        toggle.addEventListener("click", () => {
+          saveBillingAction(
+            {
+              action: "toggleCourtBlock",
+              id: block.id,
+              status: block.status === "active" ? "canceled" : "active",
+            },
+            () => {
+              const blocks = getCourtBlocks().map((candidate) =>
+                candidate.id === block.id
+                  ? { ...candidate, status: candidate.status === "active" ? "canceled" : "active" }
+                  : candidate,
+              );
+              setCourtBlocks(blocks);
+            },
+            "Court block updated.",
+          );
+        });
+        actions.append(toggle);
+
+        return [
+          { text: formatDisplayDate(block.date), className: "name-cell" },
+          { text: formatCourtBlock(block) },
+          { text: String(block.courts), className: "numeric-cell" },
+          { text: block.paidBy },
+          { text: formatMoney(block.amount), className: "numeric-cell" },
+          { text: block.source },
+          statusCell,
+          actions,
+        ];
+      }),
+      [
+        "Total",
+        `${formatNumber(totalCourtHours, 1)} court-hours`,
+        "",
+        "",
+        formatMoney(totalCost),
+        "",
+        "",
+        "",
+      ],
+    );
+  }
+
+  function renderBirdies() {
+    const state = billing.birdieState;
+    const inventoryBatches = getBirdieInventoryBatches(state.purchases);
+    const activeInventoryPurchaseTubes = state.purchases
+      .filter(isInventoryBirdiePurchase)
+      .reduce((sum, purchase) => sum + Number(purchase.tubes || 0), 0);
+    const currentMonthUsedTubes = state.purchases
+      .filter(isBilledBirdiePurchase)
+      .reduce((sum, purchase) => sum + Number(purchase.tubes || 0), 0);
+    const currentMonthUsageCost = state.purchases
+      .filter(isBilledBirdiePurchase)
+      .reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
+    const remainingTubes = inventoryBatches.reduce(
+      (sum, batch) => sum + Number(batch.remaining || 0),
+      0,
+    );
+    const selectedUsageBatch = birdieUsageBatchInput.value;
+
+    clearElement(birdieUsageBatchInput);
+    inventoryBatches
+      .filter((batch) => batch.remaining > 0)
+      .forEach((batch) => {
+        const option = document.createElement("option");
+        option.value = batch.key;
+        option.textContent = `${batch.batch} - ${formatNumber(
+          batch.remaining,
+          1,
+        )} left @ ${formatMoney(batch.unitPrice)}`;
+        birdieUsageBatchInput.append(option);
+      });
+    if (
+      selectedUsageBatch &&
+      Array.from(birdieUsageBatchInput.options).some(
+        (option) => option.value === selectedUsageBatch,
+      )
+    ) {
+      birdieUsageBatchInput.value = selectedUsageBatch;
+    }
+    updateBirdieUsageMax();
+
+    renderTable(
+      birdiePurchaseTable,
+      ["Date", "Batch", "Tubes", "Unit", "Paid By", "Amount", "Status", "Actions"],
+      state.purchases.map((purchase) => {
+        const recordType = getBirdieRecordType(purchase);
+        const batch =
+          purchase.batch ||
+          (recordType === "usage" ? "Monthly usage" : "Inventory purchase");
+        const actions = document.createElement("td");
+        const remove = document.createElement("button");
+        remove.className = "inline-action remove";
+        remove.type = "button";
+        remove.textContent = "x";
+        remove.addEventListener("click", () => {
+          saveBillingAction(
+            {
+              action: "removeBirdiePurchase",
+              id: purchase.id,
+            },
+            () => {
+              setBirdieState({
+                ...getBirdieState(),
+                purchases: getBirdieState().purchases.filter(
+                  (candidate) => candidate.id !== purchase.id,
+                ),
+              });
+            },
+            "Birdie purchase removed.",
+          );
+        });
+        actions.append(remove);
+        return [
+          { text: formatDisplayDate(purchase.date), className: "name-cell" },
+          { text: batch },
+          { text: String(purchase.tubes), className: "numeric-cell" },
+          { text: getBirdieUnitPrice(purchase) ? formatMoney(getBirdieUnitPrice(purchase)) : "", className: "numeric-cell" },
+          { text: purchase.paidBy },
+          { text: formatMoney(purchase.amount), className: "numeric-cell" },
+          makeBadge(
+            purchase.status === "canceled"
+              ? "Canceled"
+              : recordType === "inventory_purchase"
+                ? "Inventory"
+                : "Active",
+            purchase.status === "canceled" || recordType === "inventory_purchase"
+              ? "review"
+              : "paid",
+          ),
+          actions,
+        ];
+      }),
+      [
+        "Total",
+        "",
+        `${formatNumber(activeInventoryPurchaseTubes, 1)} purchased / ${formatNumber(
+          remainingTubes,
+          1,
+        )} left`,
+        `Used: ${formatNumber(currentMonthUsedTubes, 1)}`,
+        "",
+        formatMoney(currentMonthUsageCost),
+        "",
+        "",
+      ],
+    );
+  }
+
+  function getMoneyClass(value) {
+    if (value < -0.005) return "money-credit";
+    if (value > 0.005) return "money-owed";
+    return "";
+  }
+
+  function renderMembers() {
+    renderTable(
+      memberTable,
+      ["Player", "Spots", "Birdie Fee", "Court Fee", "Paid Credits", "Net Balance", "Payment Status", "Action"],
+      billing.members.map((member) => {
+        const statusCell = document.createElement("td");
+        const select = document.createElement("select");
+        select.className = "billing-status-select";
+        STATUS_OPTIONS.forEach((option) => {
+          const optionEl = document.createElement("option");
+          optionEl.value = option;
+          optionEl.textContent = option;
+          select.append(optionEl);
+        });
+        select.value = getPaymentStatus(member.name);
+        select.addEventListener("change", () => {
+          saveBillingAction(
+            {
+              action: "saveBillingPaymentStatus",
+              playerName: member.name,
+              status: select.value,
+            },
+            () => setPaymentStatus(member.name, select.value),
+            "Payment status saved.",
+          );
+        });
+        statusCell.append(select);
+
+        const actionCell = document.createElement("td");
+        const detailButton = document.createElement("button");
+        detailButton.className = "secondary-button inline-button";
+        detailButton.type = "button";
+        detailButton.textContent = "Detail";
+        detailButton.addEventListener("click", () => {
+          memberSelect.value = member.name;
+          renderMemberDetail(member.name);
+        });
+        actionCell.append(detailButton);
+
+        return [
+          { text: member.name, className: "name-cell" },
+          { text: String(member.spots), className: "numeric-cell optional-member-column" },
+          { text: formatMoney(member.birdieFee), className: "numeric-cell optional-member-column" },
+          { text: formatMoney(member.courtFee), className: "numeric-cell optional-member-column" },
+          { text: formatMoney(member.credits), className: `numeric-cell optional-member-column ${member.credits > 0 ? "money-credit" : ""}` },
+          { text: formatMoney(member.netBalance), className: `numeric-cell member-balance-column ${getMoneyClass(member.netBalance)}` },
+          statusCell,
+          actionCell,
+        ];
+      }),
+    );
+    memberTable
+      .querySelectorAll("thead th:nth-child(2), thead th:nth-child(3), thead th:nth-child(4), thead th:nth-child(5)")
+      .forEach((cell) => cell.classList.add("optional-member-column"));
+    memberTable
+      .querySelectorAll("thead th:nth-child(6)")
+      .forEach((cell) => cell.classList.add("member-balance-column"));
+    memberTable
+      .querySelectorAll("thead th:nth-child(7), tbody td:nth-child(7)")
+      .forEach((cell) => cell.classList.add("admin-payment-column"));
+    memberNote.textContent =
+      "Payment status saves for admins when Apps Script billing is connected.";
+  }
+
+  function renderMemberSelect() {
+    const current = memberSelect.value || getRememberedPlayer();
+    clearElement(memberSelect);
+    billing.members.forEach((member) => {
+      const option = document.createElement("option");
+      option.value = member.name;
+      option.textContent = member.name;
+      memberSelect.append(option);
+    });
+    memberSelect.value = billing.members.some((member) => member.name === current)
+      ? current
+      : billing.members[0]?.name || "";
+  }
+
+  function appendDetailRow(label, value, className) {
+    const row = document.createElement("div");
+    row.className = "billing-detail-row";
+    row.append(createCell("span", label), createCell("strong", value, className));
+    memberDetail.append(row);
+  }
+
+  function renderMemberDetail(name) {
+    const member = billing.members.find((candidate) => candidate.name === name);
+    clearElement(memberDetail);
+    if (!member) {
+      memberDetail.textContent = "No member selected.";
+      return;
+    }
+
+    localStorage.setItem(LAST_PLAYER_KEY, member.name);
+    appendDetailRow("Attendance", `${member.spots} spots`);
+    appendDetailRow("Weighted spots", formatNumber(member.weightedSpots, 1));
+    appendDetailRow("Birdie fee", formatMoney(member.birdieFee));
+    appendDetailRow("Court fee", formatMoney(member.courtFee));
+    appendDetailRow("Paid credits", formatMoney(member.credits), member.credits ? "money-credit" : "");
+    appendDetailRow("Net balance", formatMoney(member.netBalance), getMoneyClass(member.netBalance));
+    appendDetailRow("Payment", getPaymentStatus(member.name));
+
+    const attendance = document.createElement("section");
+    attendance.className = "billing-detail-section";
+    attendance.append(createCell("h3", "Attendance"));
+    member.attendance.forEach((entry) => {
+      const row = document.createElement("div");
+      row.className = "billing-detail-row";
+      row.append(
+        createCell("span", formatDisplayDate(entry.date)),
+        createCell("strong", `${entry.spots} spot${entry.spots === 1 ? "" : "s"}`),
+      );
+      attendance.append(row);
+    });
+    memberDetail.append(attendance);
+  }
+
+  function render() {
+    billing = calculateBilling();
+    document.querySelectorAll(".admin-only").forEach((element) => {
+      element.hidden = !isAdmin;
+    });
+    renderSummary();
+    renderFinalizationStatus();
+    renderDailyCosts();
+    renderCourtBlocks();
+    renderBirdies();
+    renderMembers();
+    renderMemberSelect();
+    renderMemberDetail(memberSelect.value);
+  }
+
+  function getBillingLoadSummary() {
+    const activeCourtBlocks = (backendBilling?.courtBlocks || []).filter(
+      (block) => block.status === "active",
+    );
+    const courtTotal = activeCourtBlocks.reduce(
+      (sum, block) => sum + Number(block.amount || 0),
+      0,
+    );
+    const billedBirdies = (backendBilling?.birdiePurchases || []).filter(
+      isBilledBirdiePurchase,
+    );
+    const birdieTotal = billedBirdies.reduce(
+      (sum, purchase) => sum + Number(purchase.amount || 0),
+      0,
+    );
+
+    return [
+      `${attendanceRows.length} play dates`,
+      `${billing.totalSpots} spots`,
+      `${activeCourtBlocks.length} court blocks (${formatMoney(courtTotal)})`,
+      `${billedBirdies.length} billed birdie rows (${formatMoney(birdieTotal)})`,
+    ].join(" / ");
+  }
+
+  function getBillingLoadingMessage() {
+    const fixtureNote = LOCAL_BILLING_FIXTURE
+      ? ` using local fixture data/${LOCAL_BILLING_FIXTURE}.csv`
+      : "";
+    return `Loading ${formatMonthLabel(
+      monthInput.value,
+    )} billing${fixtureNote}. This can take a few minutes. Thanks for your patience!`;
+  }
+
+  function applyBackendBilling(nextBilling, message, sourceLabel) {
+    backendBilling = nextBilling;
+    backendAvailable = true;
+    attendanceRows =
+      Array.isArray(backendBilling.attendance) && backendBilling.attendance.length > 0
+        ? backendBilling.attendance
+        : createSampleAttendance();
+    render();
+    const summary = getBillingLoadSummary();
+    setStatus(
+      message ||
+        (backendBilling.attendance?.length
+          ? `Billing loaded from ${sourceLabel || "Apps Script"}: ${summary}.`
+          : "Billing costs loaded from Apps Script. Demo attendance shown until RSVP data exists for this month."),
+      "success",
+    );
+    document.querySelector("#page-title").textContent = `Billing - ${formatMonthLabel(
+      monthInput.value,
+    )}`;
+  }
+
+  async function loadBillingMonth(message) {
+    const requestId = latestBillingRequest + 1;
+    latestBillingRequest = requestId;
+    setStatus(getBillingLoadingMessage(), "loading");
+
+    try {
+      if (LOCAL_BILLING_FIXTURE) {
+        const billingFixture = await loadLocalBillingFixture();
+        if (requestId !== latestBillingRequest) {
+          return;
+        }
+        applyBackendBilling(
+          billingFixture,
+          null,
+          `local fixture data/${LOCAL_BILLING_FIXTURE}.csv`,
+        );
+        return;
+      }
+
+      const result = await requestAppsScript({
+        action: "listBillingMonth",
+        month: monthInput.value,
+        adminToken,
+      });
+      if (requestId !== latestBillingRequest) {
+        return;
+      }
+      applyBackendBilling(result.billing, message);
+    } catch (error) {
+      if (requestId !== latestBillingRequest) {
+        return;
+      }
+      const isUnsupportedAction = /Unsupported action: listBillingMonth/i.test(
+        error.message,
+      );
+      const isFetchFailure = /Failed to fetch|Load failed|NetworkError/i.test(
+        error.message,
+      );
+      backendBilling = null;
+      backendAvailable = false;
+      attendanceRows = createSampleAttendance();
+      render();
+      setStatus(
+        isUnsupportedAction
+          ? "Apps Script is still serving an older deployment. In Apps Script, deploy a New version of the Web App, then reload Billing. Local demo billing is shown for now."
+          : isFetchFailure
+            ? "Could not reach Apps Script. If this happens in a fresh browser, check the Web App deployment access: Execute as Me and Who has access = Anyone. Local demo billing is shown for now."
+          : `${error.message}. Local demo billing is shown for now; reload Billing after the backend is ready.`,
+        "error",
+      );
+    }
+  }
+
+  async function saveBillingAction(payload, fallback, successMessage) {
+    if (!backendAvailable || !adminToken) {
+      fallback();
+      recalculate(successMessage);
+      return;
+    }
+
+    setStatus("Saving billing change...", "loading");
+    try {
+      const result = await requestAppsScript({
+        ...payload,
+        month: monthInput.value,
+        adminToken,
+        actor: getRememberedPlayer(),
+      });
+      applyBackendBilling(result.billing, successMessage);
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  }
+
+  function recalculate(message) {
+    attendanceRows =
+      backendBilling?.attendance?.length > 0
+        ? backendBilling.attendance
+        : createSampleAttendance();
+    render();
+    setStatus(message || "Billing recalculated from demo RSVP attendance and local monthly costs.", "success");
+    document.querySelector("#page-title").textContent = `Billing - ${formatMonthLabel(
+      monthInput.value,
+    )}`;
+  }
+
+  function handleCourtSubmit(event) {
+    event.preventDefault();
+    const block = {
+      id: makeId("court"),
+      date: courtDateInput.value,
+      startTime: courtStartTimeInput.value,
+      durationHours: parseDurationHours(courtDurationInput.value),
+      courts: Math.max(1, Number(courtCountInput.value || 1)),
+      amount: parseAmount(courtAmountInput.value),
+      paidBy: courtPaidByInput.value,
+      source: "Manual",
+      status: "active",
+    };
+    saveBillingAction(
+      {
+        action: "saveCourtBlock",
+        id: block.id,
+        date: block.date,
+        startTime: block.startTime,
+        durationHours: block.durationHours,
+        courts: block.courts,
+        amount: block.amount,
+        paidBy: block.paidBy,
+        source: block.source,
+        status: block.status,
+      },
+      () => setCourtBlocks([...getCourtBlocks(), block]),
+      "Court block added.",
+    );
+  }
+
+  function handleBirdiePurchaseSubmit(event) {
+    event.preventDefault();
+    const tubes = Math.max(0.5, Number(birdieTubesInput.value || 0.5));
+    const unitPrice = parseAmount(birdieUnitPriceInput.value);
+    const amount = parseAmount(birdieAmountInput.value);
+    const purchase = {
+      id: makeId("birdie"),
+      date: birdieDateInput.value,
+      tubes,
+      amount,
+      paidBy: birdiePaidByInput.value,
+      status: "active",
+      recordType: "inventory_purchase",
+      unitPrice,
+      batch: birdieBatchInput.value.trim(),
+    };
+    saveBillingAction(
+      {
+        action: "saveBirdiePurchase",
+        ...purchase,
+      },
+      () => {
+        setBirdieState({
+          ...getBirdieState(),
+          purchases: [...getBirdieState().purchases, purchase],
+        });
+      },
+      "Birdie purchase added.",
+    );
+  }
+
+  function handleBirdieUsageSubmit(event) {
+    event.preventDefault();
+    const batches = getBirdieInventoryBatches(getBirdieState().purchases);
+    const batch = batches.find(
+      (candidate) => candidate.key === birdieUsageBatchInput.value,
+    );
+    if (!batch) {
+      setStatus("Choose an available birdie batch first.", "error");
+      return;
+    }
+
+    const tubes = Math.max(0.5, Number(birdieUsageTubesInput.value || 0.5));
+    if (tubes > batch.remaining + 0.001) {
+      setStatus(
+        `Only ${formatNumber(batch.remaining, 1)} tubes remain in ${batch.batch}.`,
+        "error",
+      );
+      return;
+    }
+
+    const usage = {
+      id: makeId("birdie-usage"),
+      date: birdieUsageDateInput.value,
+      tubes,
+      amount: Math.round(tubes * Number(batch.unitPrice || 0) * 100) / 100,
+      paidBy: "",
+      status: "active",
+      recordType: "usage",
+      unitPrice: batch.unitPrice,
+      batch: batch.batch,
+    };
+    saveBillingAction(
+      {
+        action: "saveBirdiePurchase",
+        ...usage,
+      },
+      () => {
+        setBirdieState({
+          ...getBirdieState(),
+          purchases: [...getBirdieState().purchases, usage],
+        });
+      },
+      "Birdie usage added.",
+    );
+  }
+
+  function handleFinalizationSubmit(event) {
+    event.preventDefault();
+    const status = finalizationSelect.value === "finalized" ? "finalized" : "draft";
+    saveBillingAction(
+      {
+        action: "saveBillingMonthStatus",
+        status,
+      },
+      () => setMonthStatus(status),
+      status === "finalized"
+        ? "Billing marked finalized and ready for payments."
+        : "Billing moved back to draft.",
+    );
+  }
+
+  function updateBirdiePurchaseAmount() {
+    const tubes = Math.max(0, Number(birdieTubesInput.value || 0));
+    const unitPrice = Math.max(0, Number(birdieUnitPriceInput.value || 0));
+    birdieAmountInput.value = String(Math.round(tubes * unitPrice * 100) / 100);
+  }
+
+  function initializeInputs() {
+    fillPlayerSelect(courtPaidByInput);
+    fillPlayerSelect(birdiePaidByInput);
+    courtPaidByInput.value = getRememberedPlayer();
+    birdiePaidByInput.value = getRememberedPlayer();
+    courtDateInput.value = `${monthInput.value}-01`;
+    courtStartTimeInput.value = "06:00";
+    courtDurationInput.value = "2:00";
+    birdieDateInput.value = getMonthEndDateValue();
+    birdieUsageDateInput.value = getMonthEndDateValue();
+    updateBirdiePurchaseAmount();
+  }
+
+  function initializeAdminVisibility() {
+    const adminAuth = window.RsvpAdminAuth;
+    if (!adminAuth) {
+      isAdmin = false;
+      return;
+    }
+
+    adminAuth.onChange((state) => {
+      isAdmin = Boolean(state.isLoggedIn);
+      adminToken = state.token || "";
+      document.body.classList.toggle("billing-admin", isAdmin);
+      document.querySelectorAll(".admin-only").forEach((element) => {
+        element.hidden = !isAdmin;
+      });
+      if (billing) {
+        setStatus(
+          isAdmin
+            ? "Admin billing tools enabled on this browser."
+            : "Member view. Court and birdie editing is hidden.",
+          isAdmin ? "success" : "",
+        );
+      }
+    });
+
+    adminAuth.ready.then(() => {
+      loadBillingMonth();
+    });
+  }
+
+  monthInput.addEventListener("change", () => {
+    initializeInputs();
+    loadBillingMonth("Month changed. Billing data loaded.");
+  });
+  reloadBillingButton.addEventListener("click", () => loadBillingMonth("Billing reloaded."));
+  courtForm.addEventListener("submit", handleCourtSubmit);
+  birdiePurchaseForm.addEventListener("submit", handleBirdiePurchaseSubmit);
+  birdieUsageForm.addEventListener("submit", handleBirdieUsageSubmit);
+  birdieTubesInput.addEventListener("input", updateBirdiePurchaseAmount);
+  birdieUnitPriceInput.addEventListener("input", updateBirdiePurchaseAmount);
+  birdieUsageBatchInput.addEventListener("change", updateBirdieUsageMax);
+  finalizationForm.addEventListener("submit", handleFinalizationSubmit);
+  memberSelect.addEventListener("change", () => renderMemberDetail(memberSelect.value));
+
+  initializeAdminVisibility();
+  initializeInputs();
+  if (!window.RsvpAdminAuth) {
+    loadBillingMonth();
+  }
+})();

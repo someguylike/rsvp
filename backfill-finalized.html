@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-store, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Finalized Billing Backfill</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css?v=20260627-2" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel admin-panel" aria-labelledby="page-title">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">Admin utility</p>
+            <h1 id="page-title">Finalized Billing Backfill</h1>
+          </div>
+        </div>
+
+        <nav class="page-nav" aria-label="Page navigation">
+          <input id="page-nav-toggle" class="page-nav-toggle" type="checkbox" />
+          <label class="page-nav-button" for="page-nav-toggle" aria-label="Open page menu">☰</label>
+          <div class="page-nav-links">
+            <a href="./index.html">RSVP</a>
+            <a href="./roster.html">Members</a>
+            <a href="./export.html">Report</a>
+            <a href="./billing.html">Billing</a>
+            <a href="./admin.html">Admin</a>
+          </div>
+        </nav>
+
+        <p id="backfill-status" class="status" role="status" aria-live="polite">
+          Loading finalized data...
+        </p>
+
+        <section class="admin-preview">
+          <div class="preview-heading">
+            <h2 id="backfill-preview-heading">Backfill Preview</h2>
+            <p id="backfill-summary">Loading...</p>
+          </div>
+          <div class="admin-controls">
+            <label class="field">
+              <span>Month</span>
+              <select id="backfill-month">
+                <option value="2026-05">May 2026</option>
+                <option value="2026-04">April 2026</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Mode</span>
+              <select id="backfill-mode">
+                <option value="rsvp">RSVP attendance only</option>
+                <option value="full">Full finalized billing</option>
+              </select>
+            </label>
+          </div>
+          <p class="field-help">
+            RSVP-only imports attendance votes. Full finalized billing also imports
+            court costs, birdie inventory/usage, and payer credits.
+          </p>
+          <label id="skip-rsvp-row" class="checkbox-row">
+            <input id="skip-rsvp-backfill" type="checkbox" checked />
+            <span>Skip RSVP attendance rows</span>
+          </label>
+          <div class="backfill-action-row">
+            <button id="run-backfill-button" type="button" disabled>
+              Run Backfill
+            </button>
+            <a class="secondary-button backfill-admin-link" href="./admin.html">
+              Admin Login
+            </a>
+          </div>
+          <p id="backfill-action-help" class="field-help">
+            Waiting for admin login and April data.
+          </p>
+        </section>
+
+        <section class="admin-preview">
+          <div class="preview-heading">
+            <h2>Run Log</h2>
+            <p id="backfill-progress">Idle</p>
+          </div>
+          <pre id="backfill-log" class="status"></pre>
+        </section>
+      </section>
+    </main>
+
+    <script src="./admin-auth.js?v=20260609-3"></script>
+    <script src="./billing-parser.js?v=20260627-5"></script>
+    <script src="./backfill-finalized.js?v=20260627-9"></script>
+  </body>
+</html>

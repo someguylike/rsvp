@@ -1,6 +1,6 @@
 (function () {
   const APPS_SCRIPT_URL =
-    "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
+    "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
   const ADMIN_AUTH_KEY = "play-rsvp.adminAuth";
 
   let adminToken = "";

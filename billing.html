@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-store, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Billing</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css?v=20260627-1" />
+  </head>
+  <body>
+    <main class="shell billing-shell">
+      <section class="panel admin-panel billing-page" aria-labelledby="page-title">
+        <div class="heading billing-heading">
+          <div>
+            <p class="eyebrow">Monthly billing</p>
+            <h1 id="page-title">Billing</h1>
+          </div>
+          <div class="billing-toolbar">
+            <label class="field compact-field">
+              <span>Month</span>
+              <select id="billing-month" name="month" required>
+                <option value="2026-06">June 2026</option>
+                <option value="2026-05">May 2026</option>
+                <option value="2026-04">April 2026</option>
+              </select>
+            </label>
+            <button id="reload-billing-button" class="secondary-button admin-only" type="button">
+              Reload Data
+            </button>
+          </div>
+        </div>
+
+        <nav class="page-nav" aria-label="Page navigation">
+          <input id="page-nav-toggle" class="page-nav-toggle" type="checkbox" />
+          <label class="page-nav-button" for="page-nav-toggle" aria-label="Open page menu">☰</label>
+          <div class="page-nav-links">
+            <a href="./index.html">RSVP</a>
+            <a href="./roster.html">Members</a>
+            <a href="./export.html">Report</a>
+            <a class="active" href="./billing.html" aria-current="page">Billing</a>
+            <a href="./admin.html">Admin</a>
+          </div>
+        </nav>
+
+        <p id="billing-status" class="status" role="status" aria-live="polite"></p>
+
+        <section
+          id="billing-finalization-panel"
+          class="billing-finalization-panel draft"
+          aria-label="Billing finalization status"
+        >
+          <div>
+            <span id="billing-finalization-badge" class="billing-finalization-badge draft">
+              ⚠ Warning
+            </span>
+            <strong id="billing-finalization-title">WARNING: bills are not finalized</strong>
+            <p id="billing-finalization-note">
+              Amounts may still change before payment requests go out.
+            </p>
+          </div>
+          <form id="billing-finalization-form" class="billing-finalization-form admin-only">
+            <label class="field compact-field">
+              <span>Billing Status</span>
+              <select id="billing-finalization-select">
+                <option value="draft">Draft</option>
+                <option value="finalized">Finalized</option>
+              </select>
+            </label>
+            <button class="secondary-button" type="submit">Save Status</button>
+          </form>
+        </section>
+
+        <nav class="billing-tabs" aria-label="Billing sections">
+          <a href="#overview-section">Overview</a>
+          <a class="admin-only" href="#court-section">Court Fees</a>
+          <a class="admin-only" href="#birdie-section">Birdies</a>
+          <a href="#member-section">Members</a>
+        </nav>
+
+        <section id="overview-section" class="billing-summary-grid" aria-label="Billing summary"></section>
+
+        <section class="billing-layout">
+          <div class="billing-main-column">
+            <section id="member-section" class="billing-band" aria-labelledby="member-heading">
+              <div class="billing-band-header">
+                <div>
+                  <h2 id="member-heading">Member Billing</h2>
+                  <p id="member-billing-note"></p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="member-billing-table" class="export-table billing-table"></table>
+              </div>
+            </section>
+
+            <section class="billing-band" aria-labelledby="daily-cost-heading">
+              <div class="billing-band-header">
+                <div>
+                  <h2 id="daily-cost-heading">Daily Costs</h2>
+                  <p id="daily-cost-note"></p>
+                </div>
+              </div>
+              <div class="table-wrap billing-clean-wrap">
+                <table id="daily-cost-table" class="export-table billing-table billing-cost-table"></table>
+              </div>
+            </section>
+
+            <section id="court-section" class="billing-band admin-only" aria-labelledby="court-heading">
+              <div class="billing-band-header">
+                <div>
+                  <h2 id="court-heading">Court Reservation Blocks</h2>
+                  <p>Booker enters what they paid. Admin can audit, cancel, or remove wrong blocks.</p>
+                </div>
+              </div>
+
+              <form id="court-form" class="billing-inline-form">
+                <label class="field">
+                  <span>Date</span>
+                  <input id="court-date" type="date" required />
+                </label>
+                <label class="field">
+                  <span>Start Time</span>
+                  <input id="court-start-time" type="time" min="05:00" max="22:00" step="1800" value="06:00" required />
+                </label>
+                <label class="field">
+                  <span>Duration</span>
+                  <input id="court-duration" type="text" inputmode="numeric" value="2:00" placeholder="1:30" required />
+                  <small class="field-help">Use H:MM, for example 1:30.</small>
+                </label>
+                <label class="field">
+                  <span>Courts</span>
+                  <input id="court-count" type="number" min="1" max="8" step="1" value="1" required />
+                </label>
+                <label class="field">
+                  <span>Amount</span>
+                  <input id="court-amount" type="number" min="0" step="0.01" value="48.35" required />
+                </label>
+                <label class="field">
+                  <span>Paid By</span>
+                  <select id="court-paid-by" required></select>
+                </label>
+                <button type="submit">+ Add</button>
+              </form>
+
+              <div class="table-wrap">
+                <table id="court-block-table" class="export-table billing-table"></table>
+              </div>
+            </section>
+
+            <section id="birdie-section" class="billing-band admin-only" aria-labelledby="birdie-heading">
+              <div class="billing-band-header">
+                <div>
+                  <h2 id="birdie-heading">Birdies</h2>
+                  <p>Inventory and purchases feed the weighted per-spot birdie share.</p>
+                </div>
+              </div>
+
+              <form id="birdie-purchase-form" class="billing-inline-form">
+                <label class="field">
+                  <span>Date</span>
+                  <input id="birdie-date" type="date" required />
+                </label>
+                <label class="field">
+                  <span>Batch</span>
+                  <input id="birdie-batch" type="text" placeholder="Lingmei 90" required />
+                </label>
+                <label class="field">
+                  <span>Tubes</span>
+                  <input id="birdie-tubes" type="number" min="0.5" step="0.5" value="10" required />
+                </label>
+                <label class="field">
+                  <span>Unit</span>
+                  <input id="birdie-unit-price" type="number" min="0" step="0.01" value="35" required />
+                </label>
+                <label class="field">
+                  <span>Total</span>
+                  <input id="birdie-amount" type="number" min="0" step="0.01" value="295" required />
+                </label>
+                <label class="field">
+                  <span>Paid By</span>
+                  <select id="birdie-paid-by" required></select>
+                </label>
+                <button type="submit">+ Add Purchase</button>
+              </form>
+
+              <form id="birdie-usage-form" class="billing-inline-form compact-billing-form">
+                <label class="field">
+                  <span>Date</span>
+                  <input id="birdie-usage-date" type="date" required />
+                </label>
+                <label class="field">
+                  <span>Batch</span>
+                  <select id="birdie-usage-batch" required></select>
+                </label>
+                <label class="field">
+                  <span>Tubes Used</span>
+                  <input id="birdie-usage-tubes" type="number" min="0.5" step="0.5" value="1" required />
+                </label>
+                <button class="secondary-button" type="submit">Update Inventory</button>
+              </form>
+
+              <div class="table-wrap compact-table-wrap">
+                <table id="birdie-purchase-table" class="export-table billing-table"></table>
+              </div>
+            </section>
+          </div>
+
+          <aside class="billing-side-panel" aria-label="Member detail">
+            <label class="field">
+              <span>Member Detail</span>
+              <select id="member-detail-select"></select>
+            </label>
+            <div id="member-detail" class="billing-detail-list"></div>
+          </aside>
+        </section>
+      </section>
+    </main>
+
+    <script src="./admin-auth.js?v=20260609-3"></script>
+    <script src="./billing-parser.js?v=20260627-5"></script>
+    <script src="./billing.js?v=20260627-10"></script>
+  </body>
+</html>

@@ -1,0 +1,72 @@
+"Payment info: 
++ vemo: @nampham2022. Note: last 4 digits: 5014
++ Due date: End of every month
++ Note: Use friend payment option instead of business to avoid 1099-K from IRS.
++ In the payment note, please add: Your Facebook Messenger Name - Badminton Month Year. For example, ""Nam Thuhai - Badminton August 2025"". Otherwise, I am unable to search for it in the email",,,,,,,,,,,,,,,,,,,,,
+"Birdie Fee For Each Month: 
++ How many tubes we have used up in the month -> total shuttle cost -> avg cost for per participation/play -> daily cost $X (avg_shuttle_cost * num_daily_participation) 
++ Add $X to the court reservation cost of each day and divide the resulting daily cost by the number of players on that day
++ Link for purchase: https://www.nydhi.com/products/rsl-classic-tourney-feather-badminton-shuttlecock?variant=43776295207126",,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,
+Audit,CORRECT,,,,,,,,,,,,,,,,,,,,
+Expected Expense,0.00,,,,,,,,,,,,,,,,,,,,
+Member Paid,0.00,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,
+Total birdie fee,,,,,,,,,,,,,,,,,,,,,
+Birdie cost per participation,,0.00,"Weekday x1, Sunday x1.5",,,,,,,,,,,,,,,,,,
+Remaining tubes as of 05/01,,"2.5 new Victor NCS (x29.77, 09/17) + 2 NCS Pro (x30.99, 01/20) + 3 Linngmei 90 Pro (x35, 04/01, a Hoan) + 20 Lingmei 90 (x38.6, Joy 04/15) + 25 LM 90 (x30, 04/26 a Hoan) + 25 LM90",,,,,,,,,,,,,,,,,,,
+,4,17,8,11,0,23,6,6,0,14,6,6,8,17,10,6,5,24,,,
+Court Fee,,,,,,,,,,,,,,,,,,,,,0.00
+Court Fee Per Player,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,,0.00,0.00
+Shuttle Cost,,,,,,,,,,,,,,,,,,,,,
+Shuttle Cost per Player,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,,,
+Members,05/01,5/3,5/5,5/7,5/8,5/10,5/12,5/14,5/15,5/17,5/19,5/21,5/22,5/24,5/26,5/28,5/29,5/31,MEMBER PAY,Birdie Fee,Court Fee
+Alex Yeung,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Anh Khoa Tran,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Bao Ta,,,1,1,,,1,1,,,1,,,,1,,,,0.00,0.00,0.00
+Cuong (MC) Nguyen,,1,,,,2,,,,,,,,,,,,1,0.00,0.00,0.00
+Cuong Tipu,,1,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Danny Phan,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Derek Blaiotta,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Duy Nguyen,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Harvey Le,,2,,2,,4,,,,,,,,,,,,,0.00,0.00,0.00
+Hoan Nguyen,,1,1,1,,1,1,,,,1,1,,,,1,,1,0.00,0.00,0.00
+Hoang Huynh,,,,1,,1,,,,1,,,,,,,,,0.00,0.00,0.00
+Hung Cao,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Huong Le,1,1,1,1,,1,1,1,,3,1,1,2,,1,1,1,,0.00,0.00,0.00
+Huy Nguyen (Cris),,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Huy Viet Nguyen,,2,,,,,,,,,,,,,,,,1,0.00,0.00,0.00
+Jordan Scherr,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Khang Nguyen,,,,1,,,1,1,,,,,1,,1,,1,,0.00,0.00,0.00
+Khang Vinh,,,,,,1,,,,,,,,1,,,,1,0.00,0.00,0.00
+Khoa Le,,,,,,1,,,,,,,,,,,,1,0.00,0.00,0.00
+Luan Nguyen,,,,,,,,1,,,,,,,,,,,0.00,0.00,0.00
+Nam Pham,,,,,,,,,,,1,,,,1,,,,0.00,0.00,0.00
+Nick Nguyen,,,,1,,,,,,2,,,,,,,,1,0.00,0.00,0.00
+Phuc Anh,,2,1,,,2,,,,,,,,2,,,,,0.00,0.00,0.00
+Phuoc Truong,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Son Nguyen,1,,1,1,,,,1,,1,1,1,1,1,1,1,1,1,0.00,0.00,0.00
+Thanh Nguyen,1,,1,1,,,1,1,,1,,1,,,1,1,,,0.00,0.00,0.00
+Thanh Thanh Tran,,1,,,,1,,,,,,,,1,,,,2,0.00,0.00,0.00
+Thien Nguyen,,1,,,,,,,,,,,,3,,,,6,0.00,0.00,0.00
+Lily Do,,2,,,,2,,,,2,,,1,,,,,1,0.00,0.00,0.00
+Thinh Pham,,,,,,,,,,,,,,,,,,,0.00,$0.00,$0.00
+Thuy Duong,,1,,,,2,,,,,,,,2,,,,1,0.00,0.00,0.00
+Todd Nguyen,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Tri Ho,,,,,,1,,,,,,,,1,,,,1,0.00,0.00,0.00
+Truc Phuong,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Tr Nguyen (Trung),,1,,,,1,,,,1,,,,1,,,,1,0.00,0.00,0.00
+Van Trung Nguyen,,,,,,1,,,,,,,,1,,,,1,0.00,0.00,0.00
+Truong Do,1,,,1,,,,,,,,,1,,1,,1,,0.00,0.00,0.00
+Tu Anh Do,,,,,,,,,,,,,,,,,,,0.00,0.00,0.00
+Tuan Pham,,,1,,,,1,,,,1,,,,1,,,,0.00,$0.00,$0.00
+Tuan Phan/Hien,,,,,,1,,,,,,,,,,,,,0.00,$0.00,$0.00
+Uyen,,,,,,,,,,,,,,,,,,,0.00,$0.00,$0.00
+Viet Do,,,,,,,,,,,,,,,,,,1,0.00,$0.00,$0.00
+Vu Nguyen,,,,,,,,,,,,,,,,,,,0.00,$0.00,$0.00
+Nguyen Nhat,,,,,,,,,,,,,,1,,,,,0.00,0.00,0.00
+Danh Nguyen,,1,1,,,,,,,,,1,1,1,1,1,1,1,0.00,0.00,0.00
+Thanh Thu Tieu,,,,,,1,,,,1,,,,,,,,,0.00,0.00,0.00
+Tuan Ta,,,,,,,,,,,,1,1,,1,1,,,0.00,0.00,0.00
+Nhan Chau,,,,,,,,,,2,,,,2,,,,2,0.00,0.00,0.00

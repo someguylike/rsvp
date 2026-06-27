@@ -1,6 +1,12 @@
 const SHEET_NAME = "RSVPs";
 const ROSTER_SHEET_NAME = "Roster";
 const AUDIT_SHEET_NAME = "RSVP Audit Log";
+const BILLING_COURT_SHEET_NAME = "Billing Court Blocks";
+const BILLING_BIRDIE_INVENTORY_SHEET_NAME = "Billing Birdie Inventory";
+const BILLING_BIRDIE_PURCHASE_SHEET_NAME = "Billing Birdie Purchases";
+const BILLING_PAYMENT_SHEET_NAME = "Billing Payments";
+const BILLING_ADJUSTMENT_SHEET_NAME = "Billing Adjustments";
+const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
@@ -20,6 +26,83 @@ const HEADERS = [
   "Updated At",
 ];
 const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Note"];
+const BILLING_COURT_HEADERS = [
+  "ID",
+  "Month",
+  "Date",
+  "Start Time",
+  "Duration Hours",
+  "Courts",
+  "Amount",
+  "Paid By",
+  "Status",
+  "Source",
+  "Created At",
+  "Updated At",
+  "Created By",
+  "Updated By",
+];
+const BILLING_BIRDIE_INVENTORY_HEADERS = [
+  "Month",
+  "Start Tubes",
+  "End Tubes",
+  "Updated At",
+  "Updated By",
+];
+const BILLING_BIRDIE_PURCHASE_HEADERS = [
+  "ID",
+  "Month",
+  "Date",
+  "Tubes",
+  "Amount",
+  "Paid By",
+  "Status",
+  "Created At",
+  "Updated At",
+  "Created By",
+  "Updated By",
+  "Record Type",
+  "Start Tubes",
+  "End Tubes",
+  "Inventory Updated At",
+  "Inventory Updated By",
+  "Unit Price",
+  "Batch",
+];
+const BILLING_PAYMENT_HEADERS = [
+  "Month",
+  "Player Name",
+  "Status",
+  "Updated At",
+  "Updated By",
+  "Adjustment ID",
+  "Adjustment Amount",
+  "Adjustment Note",
+  "Adjustment Status",
+  "Adjustment Created At",
+  "Adjustment Updated At",
+  "Adjustment Created By",
+  "Adjustment Updated By",
+];
+const BILLING_ADJUSTMENT_HEADERS = [
+  "ID",
+  "Month",
+  "Player Name",
+  "Amount",
+  "Note",
+  "Status",
+  "Created At",
+  "Updated At",
+  "Created By",
+  "Updated By",
+];
+const BILLING_MONTH_STATUS_HEADERS = [
+  "Month",
+  "Status",
+  "Note",
+  "Updated At",
+  "Updated By",
+];
 const AUDIT_HEADERS = [
   "Logged At",
   "Action",
@@ -51,7 +134,8 @@ const PLAYERS = [
   "Cuong (MC) Nguyen",
   "Cuong Tipu",
   "Danny Phan",
-  "Derek Blaiotta (Hoa Pham's fr)",
+  "Danh Nguyen",
+  "Derek Blaiotta",
   "Duy Nguyen",
   "Harvey Le",
   "Hoan Nguyen",
@@ -66,25 +150,29 @@ const PLAYERS = [
   "KhiemHoang Tran",
   "Luan Nguyen",
   "Nam Pham",
+  "Nhan Chau",
   "Nick Nguyen",
+  "Nguyen Nhat",
   "Phuc Anh",
   "Phuoc Truong",
   "Son Nguyen",
   "Thanh Nguyen",
-  "Thanh Thanh Tran (Tu Do's friend)",
+  "Thanh Thanh Tran",
+  "Thanh Thu Tieu",
   "Thien Nguyen",
-  "Thinh Do (Lily Do)",
+  "Lily Do",
   "Thinh Pham",
   "Thuy Duong",
   "Todd Nguyen",
   "Tr Nguyen (Trung)",
   "Tri Ho",
   "Truc Phuong",
-  "Trung Van Nguyễn",
+  "Van Trung Nguyen",
   "Truong Do",
   "Tu Anh Do",
   "Tuan Pham",
   "Tuan Phan/Hien",
+  "Tuan Ta",
   "Uyen",
   "Viet Do",
   "Vu Nguyen",
@@ -238,6 +326,95 @@ function doGet(event) {
         exportedDates: result.exportedDates,
         previewRows: result.previewRows,
         url: canOpenSpreadsheet ? result.url : "",
+      });
+    }
+
+    if (params.action === "listBillingMonth") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "listBillingMonth",
+        billing: getBillingMonth_(required_(params.month, "Missing billing month")),
+      });
+    }
+
+    if (params.action === "saveCourtBlock") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "saveCourtBlock",
+        billing: saveBillingCourtBlock_(params),
+      });
+    }
+
+    if (params.action === "toggleCourtBlock") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "toggleCourtBlock",
+        billing: toggleBillingCourtBlock_(params),
+      });
+    }
+
+    if (params.action === "saveBirdieInventory") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "saveBirdieInventory",
+        billing: saveBillingBirdieInventory_(params),
+      });
+    }
+
+    if (params.action === "saveBirdiePurchase") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "saveBirdiePurchase",
+        billing: saveBillingBirdiePurchase_(params),
+      });
+    }
+
+    if (params.action === "removeBirdiePurchase") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "removeBirdiePurchase",
+        billing: removeBillingBirdiePurchase_(params),
+      });
+    }
+
+    if (params.action === "saveBillingPaymentStatus") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "saveBillingPaymentStatus",
+        billing: saveBillingPaymentStatus_(params),
+      });
+    }
+
+    if (params.action === "saveBillingMonthStatus") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "saveBillingMonthStatus",
+        billing: saveBillingMonthStatus_(params),
+      });
+    }
+
+    if (params.action === "saveBillingAdjustment") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "saveBillingAdjustment",
+        billing: saveBillingAdjustment_(params),
+      });
+    }
+
+    if (params.action === "removeBillingAdjustment") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "removeBillingAdjustment",
+        billing: removeBillingAdjustment_(params),
       });
     }
 
@@ -1199,6 +1376,988 @@ function resetRsvpDataForProduction() {
   }
 }
 
+function getBillingMonth_(month) {
+  validateMonth_(month);
+
+  return {
+    month,
+    attendance: getBillingAttendance_(month),
+    courtBlocks: getBillingCourtBlocks_(month),
+    birdieInventory: getBillingBirdieInventory_(month),
+    birdiePurchases: getBillingBirdiePurchases_(month),
+    payments: getBillingPayments_(month),
+    adjustments: getBillingAdjustments_(month),
+    monthStatus: getBillingMonthStatus_(month),
+    diagnostics: getBillingDiagnostics_(month),
+  };
+}
+
+function getBillingDiagnostics_(month) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  return {
+    spreadsheetId: spreadsheet.getId(),
+    spreadsheetUrl: spreadsheet.getUrl(),
+    filters: {
+      month,
+    },
+    sheets: {
+      rsvps: getBillingSheetDiagnostics_(
+        spreadsheet,
+        SHEET_NAME,
+        HEADERS,
+        (row) => normalizeDate_(row[0]).indexOf(`${month}-`) === 0,
+        1,
+      ),
+      courtBlocks: getBillingSheetDiagnostics_(
+        spreadsheet,
+        BILLING_COURT_SHEET_NAME,
+        BILLING_COURT_HEADERS,
+        (row) => String(row[1] || "") === month,
+        2,
+      ),
+      birdiePurchases: getBillingSheetDiagnostics_(
+        spreadsheet,
+        BILLING_BIRDIE_PURCHASE_SHEET_NAME,
+        BILLING_BIRDIE_PURCHASE_HEADERS,
+        (row) => {
+          const rowMonth = String(row[1] || "");
+          return (
+            rowMonth &&
+            rowMonth <= month &&
+            normalizeBirdieRecordType_(row[11] || "purchase") !== "inventory"
+          );
+        },
+        2,
+        getBillingBirdieRecordTypeCounts_,
+      ),
+      payments: getBillingSheetDiagnostics_(
+        spreadsheet,
+        BILLING_PAYMENT_SHEET_NAME,
+        BILLING_PAYMENT_HEADERS,
+        (row) => String(row[0] || "") === month,
+        1,
+      ),
+      monthStatus: getBillingSheetDiagnostics_(
+        spreadsheet,
+        BILLING_MONTH_STATUS_SHEET_NAME,
+        BILLING_MONTH_STATUS_HEADERS,
+        (row) => String(row[0] || "") === month,
+        1,
+      ),
+    },
+  };
+}
+
+function getBillingSheetDiagnostics_(
+  spreadsheet,
+  sheetName,
+  headers,
+  matchesBillingRead,
+  monthColumn,
+  buildExtra,
+) {
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    return {
+      exists: false,
+      sheetName,
+    };
+  }
+
+  const width = Math.max(sheet.getLastColumn(), headers.length);
+  const lastRow = sheet.getLastRow();
+  const header =
+    lastRow >= 1
+      ? sheet.getRange(1, 1, 1, width).getDisplayValues()[0]
+      : [];
+  const rawRows =
+    lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, width).getValues() : [];
+  const displayRows =
+    lastRow >= 2
+      ? sheet.getRange(2, 1, lastRow - 1, width).getDisplayValues()
+      : [];
+  const monthIndexes = [];
+  const matchingIndexes = [];
+
+  rawRows.forEach((row, index) => {
+    if (monthColumn && String(row[monthColumn - 1] || "") === month) {
+      monthIndexes.push(index);
+    }
+    if (matchesBillingRead(row)) {
+      matchingIndexes.push(index);
+    }
+  });
+
+  const result = {
+    exists: true,
+    sheetName,
+    sheetId: sheet.getSheetId(),
+    lastRow,
+    lastColumn: sheet.getLastColumn(),
+    dataRows: Math.max(0, lastRow - 1),
+    header: header.slice(0, headers.length),
+    monthRows: monthIndexes.length,
+    matchingRows: matchingIndexes.length,
+    sampleRows: matchingIndexes
+      .slice(0, 5)
+      .map((index) => displayRows[index].slice(0, headers.length)),
+  };
+
+  if (buildExtra) {
+    result.extra = buildExtra(rawRows, monthIndexes, matchingIndexes);
+  }
+
+  return result;
+}
+
+function getBillingBirdieRecordTypeCounts_(rows, monthIndexes, matchingIndexes) {
+  const counts = {
+    monthRecordTypes: {},
+    matchingRecordTypes: {},
+  };
+
+  monthIndexes.forEach((index) => {
+    const type = normalizeBirdieRecordType_(rows[index][11] || "purchase");
+    counts.monthRecordTypes[type] = Number(counts.monthRecordTypes[type] || 0) + 1;
+  });
+  matchingIndexes.forEach((index) => {
+    const type = normalizeBirdieRecordType_(rows[index][11] || "purchase");
+    counts.matchingRecordTypes[type] =
+      Number(counts.matchingRecordTypes[type] || 0) + 1;
+  });
+
+  return counts;
+}
+
+function saveBillingCourtBlock_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const date = normalizeDate_(required_(params.date, "Missing court date"));
+    const startTime = normalizeTime_(required_(params.startTime, "Missing start time"));
+    const durationHours = parsePositiveNumber_(
+      required_(params.durationHours, "Missing duration"),
+      "Duration must be a positive number",
+    );
+    const courts = parsePositiveNumber_(
+      required_(params.courts, "Missing court count"),
+      "Courts must be a positive number",
+    );
+    const amount = parseMoneyNumber_(
+      required_(params.amount, "Missing court amount"),
+      "Amount must be a number",
+    );
+    const paidBy = sanitizeText_(String(params.paidBy || "").trim());
+    if (paidBy) {
+      validatePlayerName_(paidBy);
+    }
+
+    const sheet = getBillingCourtSheet_();
+    const id = sanitizeText_(params.id || Utilities.getUuid());
+    const row = findBillingRowById_(sheet, id);
+    const now = new Date().toISOString();
+    const existing = row
+      ? sheet.getRange(row, 1, 1, BILLING_COURT_HEADERS.length).getValues()[0]
+      : null;
+    const createdAt = existing ? String(existing[10] || now) : now;
+    const createdBy = existing ? String(existing[12] || "") : getBillingActor_(params);
+    const values = [
+      id,
+      month,
+      date,
+      startTime,
+      durationHours,
+      courts,
+      amount,
+      paidBy,
+      normalizeBillingStatus_(params.status || "active"),
+      sanitizeText_(params.source || "Manual"),
+      createdAt,
+      now,
+      createdBy,
+      getBillingActor_(params),
+    ];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function toggleBillingCourtBlock_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const id = required_(params.id, "Missing court block id");
+    const sheet = getBillingCourtSheet_();
+    const row = findBillingRowById_(sheet, id);
+
+    if (!row) {
+      throw new Error("Court block was not found");
+    }
+
+    const status = normalizeBillingStatus_(
+      params.status ||
+        (normalize_(sheet.getRange(row, 9).getValue()) === "active"
+          ? "canceled"
+          : "active"),
+    );
+    sheet.getRange(row, 9).setValue(status);
+    sheet.getRange(row, 12).setValue(new Date().toISOString());
+    sheet.getRange(row, 14).setValue(getBillingActor_(params));
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveBillingBirdieInventory_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const sheet = getBillingBirdiePurchaseSheet_();
+    const id = `inventory-${month}`;
+    const row = findBillingBirdieInventoryRow_(sheet, month);
+    const now = new Date().toISOString();
+    const existing = row
+      ? sheet.getRange(row, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length).getValues()[0]
+      : null;
+    const values = [
+      id,
+      month,
+      "",
+      0,
+      0,
+      "",
+      "active",
+      existing ? String(existing[7] || now) : now,
+      now,
+      existing ? String(existing[9] || "") : getBillingActor_(params),
+      getBillingActor_(params),
+      "inventory",
+      parseNonNegativeNumber_(params.startTubes || 0, "Start tubes must be a number"),
+      parseNonNegativeNumber_(params.endTubes || 0, "End tubes must be a number"),
+      now,
+      getBillingActor_(params),
+    ];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveBillingBirdiePurchase_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const id = sanitizeText_(params.id || Utilities.getUuid());
+    const date = normalizeDate_(required_(params.date, "Missing purchase date"));
+    const tubes = parseNonNegativeNumber_(
+      params.tubes || 0,
+      "Tubes must be a number",
+    );
+    const amount = parseMoneyNumber_(
+      required_(params.amount, "Missing birdie amount"),
+      "Amount must be a number",
+    );
+    const paidBy = sanitizeText_(String(params.paidBy || "").trim());
+    if (paidBy) {
+      validatePlayerName_(paidBy);
+    }
+
+    const sheet = getBillingBirdiePurchaseSheet_();
+    const row = findBillingRowById_(sheet, id);
+    const now = new Date().toISOString();
+    const existing = row
+      ? sheet.getRange(row, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length).getValues()[0]
+      : null;
+    const values = [
+      id,
+      month,
+      date,
+      tubes,
+      amount,
+      paidBy,
+      normalizeBillingStatus_(params.status || "active"),
+      existing ? String(existing[7] || now) : now,
+      now,
+      existing ? String(existing[9] || "") : getBillingActor_(params),
+      getBillingActor_(params),
+      normalizeBirdieRecordType_(params.recordType || "purchase"),
+      existing ? Number(existing[12] || 0) : 0,
+      existing ? Number(existing[13] || 0) : 0,
+      existing ? String(existing[14] || "") : "",
+      existing ? String(existing[15] || "") : "",
+      parseOptionalMoneyNumber_(params.unitPrice, amount, tubes),
+      sanitizeText_(params.batch || params.source || ""),
+    ];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function removeBillingBirdiePurchase_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const id = required_(params.id, "Missing birdie purchase id");
+    const sheet = getBillingBirdiePurchaseSheet_();
+    const row = findBillingRowById_(sheet, id);
+
+    if (row) {
+      sheet.getRange(row, 7).setValue("canceled");
+      sheet.getRange(row, 9).setValue(new Date().toISOString());
+      sheet.getRange(row, 11).setValue(getBillingActor_(params));
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveBillingPaymentStatus_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const playerName = sanitizeText_(
+      required_(params.playerName, "Missing player name").trim(),
+    );
+    validatePlayerName_(playerName);
+    const status = sanitizeText_(required_(params.status, "Missing status"));
+    const sheet = getBillingPaymentSheet_();
+    const row = findBillingPaymentRow_(sheet, month, playerName);
+    const existing = row
+      ? sheet.getRange(row, 1, 1, BILLING_PAYMENT_HEADERS.length).getValues()[0]
+      : [];
+    const values = [
+      month,
+      playerName,
+      status,
+      new Date().toISOString(),
+      getBillingActor_(params),
+      String(existing[5] || ""),
+      existing[6] || "",
+      String(existing[7] || ""),
+      String(existing[8] || ""),
+      String(existing[9] || ""),
+      String(existing[10] || ""),
+      String(existing[11] || ""),
+      String(existing[12] || ""),
+    ];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveBillingMonthStatus_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const status = normalizeBillingMonthStatus_(
+      required_(params.status, "Missing billing status"),
+    );
+    const sheet = getBillingMonthStatusSheet_();
+    const row = findBillingMonthRow_(sheet, month);
+    const values = [
+      month,
+      status,
+      sanitizeText_(params.note || ""),
+      new Date().toISOString(),
+      getBillingActor_(params),
+    ];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveBillingAdjustment_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const id = sanitizeText_(params.id || Utilities.getUuid());
+    const playerName = sanitizeText_(
+      required_(params.playerName, "Missing player name").trim(),
+    );
+    validatePlayerName_(playerName);
+    const amount = parseSignedMoneyNumber_(
+      required_(params.amount, "Missing adjustment amount"),
+      "Adjustment amount must be a number",
+    );
+    const sheet = getBillingPaymentSheet_();
+    const row =
+      findBillingPaymentAdjustmentRow_(sheet, month, id) ||
+      findBillingPaymentRow_(sheet, month, playerName);
+    const now = new Date().toISOString();
+    const existing = row
+      ? sheet.getRange(row, 1, 1, BILLING_PAYMENT_HEADERS.length).getValues()[0]
+      : null;
+    const values = [
+      month,
+      playerName,
+      existing ? String(existing[2] || "Not requested") : "Not requested",
+      existing ? String(existing[3] || now) : now,
+      existing ? String(existing[4] || getBillingActor_(params)) : getBillingActor_(params),
+      id,
+      amount,
+      sanitizeText_(params.note || ""),
+      normalizeBillingStatus_(params.status || "active"),
+      existing ? String(existing[9] || now) : now,
+      now,
+      existing ? String(existing[11] || "") : getBillingActor_(params),
+      getBillingActor_(params),
+    ];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function removeBillingAdjustment_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const id = required_(params.id, "Missing adjustment id");
+    const sheet = getBillingPaymentSheet_();
+    const row = findBillingPaymentAdjustmentRow_(sheet, month, id);
+
+    if (row) {
+      sheet.getRange(row, 9).setValue("canceled");
+      sheet.getRange(row, 11).setValue(new Date().toISOString());
+      sheet.getRange(row, 13).setValue(getBillingActor_(params));
+    }
+
+    return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getBillingAttendance_(month) {
+  validateMonth_(month);
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  const byDate = {};
+
+  if (lastRow >= 2) {
+    const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    rows.forEach((row) => {
+      const date = normalizeDate_(row[0]);
+      const playerName = String(row[1] || "").trim();
+      const vote = normalize_(row[2]);
+      const participantCount = clampStoredParticipantCount_(row[3]);
+
+      if (
+        date.indexOf(`${month}-`) !== 0 ||
+        vote !== "yes" ||
+        !isRosterPlayer_(playerName)
+      ) {
+        return;
+      }
+
+      if (!byDate[date]) {
+        byDate[date] = {};
+      }
+      const key = normalize_(playerName);
+      byDate[date][key] = {
+        name: playerName,
+        spots: Number(byDate[date][key]?.spots || 0) + participantCount,
+      };
+    });
+  }
+
+  return Object.keys(byDate)
+    .sort()
+    .map((date) => ({
+      date,
+      players: Object.keys(byDate[date])
+        .map((key) => byDate[date][key])
+        .sort((first, second) => first.name.localeCompare(second.name)),
+    }));
+}
+
+function getBillingCourtBlocks_(month) {
+  const sheet = getBillingCourtSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, BILLING_COURT_HEADERS.length)
+    .getValues()
+    .filter((row) => String(row[1] || "") === month)
+    .map((row) => ({
+      id: String(row[0] || ""),
+      date: normalizeDate_(row[2]),
+      startTime: String(row[3] || ""),
+      durationHours: parseStoredNumber_(row[4]),
+      courts: parseStoredNumber_(row[5]),
+      amount: parseStoredNumber_(row[6]),
+      paidBy: String(row[7] || ""),
+      status: normalizeBillingStatus_(row[8] || "active"),
+      source: String(row[9] || "Manual"),
+    }));
+}
+
+function getBillingBirdieInventory_(month) {
+  const purchaseSheet = getBillingBirdiePurchaseSheet_();
+  const purchaseRow = findBillingBirdieInventoryRow_(purchaseSheet, month);
+  if (purchaseRow) {
+    const values = purchaseSheet
+      .getRange(purchaseRow, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length)
+      .getValues()[0];
+    return {
+      startTubes: parseStoredNumber_(values[12]),
+      endTubes: parseStoredNumber_(values[13]),
+    };
+  }
+
+  const legacySheet = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName(BILLING_BIRDIE_INVENTORY_SHEET_NAME);
+  if (!legacySheet) {
+    return {
+      startTubes: 0,
+      endTubes: 0,
+    };
+  }
+  const legacyRow = findBillingMonthRow_(legacySheet, month);
+  if (!legacyRow) {
+    return {
+      startTubes: 0,
+      endTubes: 0,
+    };
+  }
+
+  const values = legacySheet
+    .getRange(legacyRow, 1, 1, BILLING_BIRDIE_INVENTORY_HEADERS.length)
+    .getValues()[0];
+  return {
+    startTubes: parseStoredNumber_(values[1]),
+    endTubes: parseStoredNumber_(values[2]),
+  };
+}
+
+function getBillingBirdiePurchases_(month) {
+  const sheet = getBillingBirdiePurchaseSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, BILLING_BIRDIE_PURCHASE_HEADERS.length)
+    .getValues()
+    .filter((row) => {
+      const rowMonth = String(row[1] || "");
+      return rowMonth && rowMonth <= month;
+    })
+    .filter((row) => normalizeBirdieRecordType_(row[11] || "purchase") !== "inventory")
+    .map((row) => ({
+      id: String(row[0] || ""),
+      date: normalizeDate_(row[2]),
+      tubes: parseStoredNumber_(row[3]),
+      amount: parseStoredNumber_(row[4]),
+      paidBy: String(row[5] || ""),
+      status: normalizeBillingStatus_(row[6] || "active"),
+      recordType: normalizeBirdieRecordType_(row[11] || "purchase"),
+      unitPrice: parseStoredNumber_(row[16]),
+      batch: String(row[17] || ""),
+    }));
+}
+
+function getBillingPayments_(month) {
+  const sheet = getBillingPaymentSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, BILLING_PAYMENT_HEADERS.length)
+    .getValues()
+    .filter((row) => String(row[0] || "") === month)
+    .map((row) => ({
+      playerName: String(row[1] || ""),
+      status: String(row[2] || ""),
+    }));
+}
+
+function getBillingAdjustments_(month) {
+  const paymentSheet = getBillingPaymentSheet_();
+  const paymentLastRow = paymentSheet.getLastRow();
+  const adjustments = [];
+
+  if (paymentLastRow >= 2) {
+    paymentSheet
+      .getRange(2, 1, paymentLastRow - 1, BILLING_PAYMENT_HEADERS.length)
+      .getValues()
+      .filter((row) => String(row[0] || "") === month)
+      .filter((row) => String(row[5] || ""))
+      .forEach((row) => {
+        adjustments.push({
+          id: String(row[5] || ""),
+          playerName: String(row[1] || ""),
+          amount: parseStoredNumber_(row[6]),
+          note: String(row[7] || ""),
+          status: normalizeBillingStatus_(row[8] || "active"),
+        });
+      });
+  }
+
+  const legacySheet = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName(BILLING_ADJUSTMENT_SHEET_NAME);
+  if (!legacySheet) {
+    return adjustments;
+  }
+  const legacyLastRow = legacySheet.getLastRow();
+  if (legacyLastRow < 2) {
+    return adjustments;
+  }
+
+  legacySheet
+    .getRange(2, 1, legacyLastRow - 1, BILLING_ADJUSTMENT_HEADERS.length)
+    .getValues()
+    .filter((row) => String(row[1] || "") === month)
+    .forEach((row) => {
+      const id = String(row[0] || "");
+      if (adjustments.some((adjustment) => adjustment.id === id)) {
+        return;
+      }
+      adjustments.push({
+        id,
+        playerName: String(row[2] || ""),
+        amount: parseStoredNumber_(row[3]),
+        note: String(row[4] || ""),
+        status: normalizeBillingStatus_(row[5] || "active"),
+      });
+    });
+
+  return adjustments;
+}
+
+function getBillingMonthStatus_(month) {
+  const sheet = getBillingMonthStatusSheet_();
+  const row = findBillingMonthRow_(sheet, month);
+  if (!row) {
+    return {
+      status: "draft",
+      note: "",
+      updatedAt: "",
+      updatedBy: "",
+    };
+  }
+
+  const values = sheet
+    .getRange(row, 1, 1, BILLING_MONTH_STATUS_HEADERS.length)
+    .getValues()[0];
+  return {
+    status: normalizeBillingMonthStatus_(values[1] || "draft"),
+    note: String(values[2] || ""),
+    updatedAt: formatAuditValue_(values[3]),
+    updatedBy: String(values[4] || ""),
+  };
+}
+
+function getBillingCourtSheet_() {
+  return getBillingSheet_(BILLING_COURT_SHEET_NAME, BILLING_COURT_HEADERS);
+}
+
+function getBillingBirdiePurchaseSheet_() {
+  return getBillingSheet_(
+    BILLING_BIRDIE_PURCHASE_SHEET_NAME,
+    BILLING_BIRDIE_PURCHASE_HEADERS,
+  );
+}
+
+function getBillingPaymentSheet_() {
+  return getBillingSheet_(BILLING_PAYMENT_SHEET_NAME, BILLING_PAYMENT_HEADERS);
+}
+
+function getBillingMonthStatusSheet_() {
+  return getBillingSheet_(
+    BILLING_MONTH_STATUS_SHEET_NAME,
+    BILLING_MONTH_STATUS_HEADERS,
+  );
+}
+
+function getBillingSheet_(name, headers) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = spreadsheet.getSheetByName(name);
+
+  if (!sheet) {
+    try {
+      sheet = spreadsheet.insertSheet(name);
+    } catch (error) {
+      sheet = spreadsheet.getSheetByName(name);
+      if (!sheet) {
+        throw error;
+      }
+    }
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, headers.length);
+  const currentHeaders = headerRange.getValues()[0];
+  const needsHeaders = headers.some(
+    (header, index) => currentHeaders[index] !== header,
+  );
+
+  if (needsHeaders) {
+    headerRange.setValues([headers]);
+    sheet.setFrozenRows(1);
+  }
+
+  return sheet;
+}
+
+function findBillingRowById_(sheet, id) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return null;
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let index = 0; index < rows.length; index += 1) {
+    if (String(rows[index][0] || "") === String(id || "")) {
+      return index + 2;
+    }
+  }
+  return null;
+}
+
+function findBillingMonthRow_(sheet, month) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return null;
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let index = 0; index < rows.length; index += 1) {
+    if (String(rows[index][0] || "") === month) {
+      return index + 2;
+    }
+  }
+  return null;
+}
+
+function findBillingBirdieInventoryRow_(sheet, month) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return null;
+  }
+
+  const rows = sheet
+    .getRange(2, 1, lastRow - 1, BILLING_BIRDIE_PURCHASE_HEADERS.length)
+    .getValues();
+  const inventoryId = `inventory-${month}`;
+  for (let index = 0; index < rows.length; index += 1) {
+    if (
+      String(rows[index][0] || "") === inventoryId ||
+      (String(rows[index][1] || "") === month &&
+        normalize_(rows[index][11] || "") === "inventory")
+    ) {
+      return index + 2;
+    }
+  }
+  return null;
+}
+
+function findBillingPaymentRow_(sheet, month, playerName) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return null;
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  for (let index = 0; index < rows.length; index += 1) {
+    if (
+      String(rows[index][0] || "") === month &&
+      normalize_(rows[index][1]) === normalize_(playerName)
+    ) {
+      return index + 2;
+    }
+  }
+  return null;
+}
+
+function findBillingPaymentAdjustmentRow_(sheet, month, adjustmentId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return null;
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  for (let index = 0; index < rows.length; index += 1) {
+    if (
+      String(rows[index][0] || "") === month &&
+      String(rows[index][5] || "") === String(adjustmentId || "")
+    ) {
+      return index + 2;
+    }
+  }
+  return null;
+}
+
+function getBillingActor_(params) {
+  return sanitizeText_(params.actor || params.playerName || params.paidBy || "admin");
+}
+
+function normalizeTime_(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{2}:\d{2}$/.test(text)) {
+    throw new Error("Time must use HH:MM format");
+  }
+  return text;
+}
+
+function normalizeBillingStatus_(value) {
+  return normalize_(value) === "canceled" ? "canceled" : "active";
+}
+
+function normalizeBirdieRecordType_(value) {
+  const type = normalize_(value).replace(/-/g, "_");
+  if (type === "inventory" || type === "inventory_purchase" || type === "usage") {
+    return type;
+  }
+  return "purchase";
+}
+
+function normalizeBillingMonthStatus_(value) {
+  return normalize_(value) === "finalized" ? "finalized" : "draft";
+}
+
+function parsePositiveNumber_(value, message) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    throw new Error(message);
+  }
+  return number;
+}
+
+function parseNonNegativeNumber_(value, message) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    throw new Error(message);
+  }
+  return number;
+}
+
+function parseMoneyNumber_(value, message) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    throw new Error(message);
+  }
+  return Math.round(number * 100) / 100;
+}
+
+function parseOptionalMoneyNumber_(value, amount, quantity) {
+  const text = String(value || "").trim();
+  if (text) {
+    return parseMoneyNumber_(text, "Unit price must be a number");
+  }
+
+  const count = Number(quantity || 0);
+  if (count > 0) {
+    return Math.round((Number(amount || 0) / count) * 100) / 100;
+  }
+  return 0;
+}
+
+function parseSignedMoneyNumber_(value, message) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error(message);
+  }
+  return Math.round(number * 100) / 100;
+}
+
+function parseStoredNumber_(value) {
+  if (value instanceof Date) {
+    return 0;
+  }
+
+  const number =
+    typeof value === "number"
+      ? value
+      : Number(String(value || "").replace(/[$,]/g, "").trim());
+
+  return Number.isFinite(number) ? number : 0;
+}
+
 function exportMonthRoster_(month) {
   validateMonth_(month);
 
@@ -1213,23 +2372,7 @@ function exportMonthRoster_(month) {
     exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
   }
 
-  const totalsByDate = {};
-  const monthDates = getExportDatesForMonth_(sourceSheet, month).filter((date) => {
-    totalsByDate[date] = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
-    return getTotalParticipants_(totalsByDate[date]) >= EXPORT_MIN_PARTICIPANTS;
-  });
-  const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
-  const matrix = [header].concat(
-    getRosterNames_().map((player) => {
-      const normalizedPlayer = normalize_(player);
-      return [player].concat(
-        monthDates.map((date) => {
-          const total = totalsByDate[date][normalizedPlayer];
-          return total ? Math.trunc(total) : "";
-        }),
-      );
-    }),
-  );
+  const matrix = buildMonthRosterMatrix_(sourceSheet, month);
 
   exportSheet
     .getRange(1, 1, matrix.length, matrix[0].length)
@@ -1248,10 +2391,31 @@ function exportMonthRoster_(month) {
 
   return {
     sheetName: exportSheetName,
-    exportedDates: monthDates.length,
+    exportedDates: Math.max(0, matrix[0].length - 1),
     previewRows: getPreviewRows_(exportSheet),
     url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
   };
+}
+
+function buildMonthRosterMatrix_(sourceSheet, month) {
+  const totalsByDate = {};
+  const monthDates = getExportDatesForMonth_(sourceSheet, month).filter((date) => {
+    totalsByDate[date] = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
+    return getTotalParticipants_(totalsByDate[date]) >= EXPORT_MIN_PARTICIPANTS;
+  });
+  const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
+
+  return [header].concat(
+    getRosterNames_().map((player) => {
+      const normalizedPlayer = normalize_(player);
+      return [player].concat(
+        monthDates.map((date) => {
+          const total = totalsByDate[date][normalizedPlayer];
+          return total ? Math.trunc(total) : "";
+        }),
+      );
+    }),
+  );
 }
 
 function resetExportSheet_(sheet) {
@@ -1268,7 +2432,13 @@ function viewMonthRoster_(month) {
   const exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
 
   if (!exportSheet) {
-    throw new Error(`Export ${exportSheetName} has not been created yet`);
+    const previewRows = trimEmptyEdges_(buildMonthRosterMatrix_(getSheet_(), month));
+    return {
+      sheetName: `${exportSheetName} live preview`,
+      exportedDates: previewRows.length > 0 ? Math.max(0, previewRows[0].length - 1) : 0,
+      previewRows,
+      url: "",
+    };
   }
 
   return {

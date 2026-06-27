@@ -1,6 +1,6 @@
 (function () {
   const APPS_SCRIPT_URL =
-    "https://script.google.com/macros/s/AKfycbxsqdqZM0MVT8c6Phcf9ERSOJxnYgkXZ_opGB-diXUwsOHq-PG95Y42TlpbDXoZey0b/exec";
+    "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
   const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
@@ -11,7 +11,8 @@
     "Cuong (MC) Nguyen",
     "Cuong Tipu",
     "Danny Phan",
-    "Derek Blaiotta (Hoa Pham's fr)",
+    "Danh Nguyen",
+    "Derek Blaiotta",
     "Duy Nguyen",
     "Harvey Le",
     "Hoan Nguyen",
@@ -26,25 +27,29 @@
     "KhiemHoang Tran",
     "Luan Nguyen",
     "Nam Pham",
+    "Nhan Chau",
     "Nick Nguyen",
+    "Nguyen Nhat",
     "Phuc Anh",
     "Phuoc Truong",
     "Son Nguyen",
     "Thanh Nguyen",
-    "Thanh Thanh Tran (Tu Do's friend)",
+    "Thanh Thanh Tran",
+    "Thanh Thu Tieu",
     "Thien Nguyen",
-    "Thinh Do (Lily Do)",
+    "Lily Do",
     "Thinh Pham",
     "Thuy Duong",
     "Todd Nguyen",
     "Tr Nguyen (Trung)",
     "Tri Ho",
     "Truc Phuong",
-    "Trung Van Nguyễn",
+    "Van Trung Nguyen",
     "Truong Do",
     "Tu Anh Do",
     "Tuan Pham",
     "Tuan Phan/Hien",
+    "Tuan Ta",
     "Uyen",
     "Viet Do",
     "Vu Nguyen",

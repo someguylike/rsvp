@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Billing Parser Tests</title>
+    <style>
+      body {
+        color: #1f2937;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.5;
+        margin: 2rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 1rem;
+      }
+
+      #summary {
+        font-weight: 700;
+        margin-bottom: 1rem;
+      }
+
+      .pass {
+        color: #047857;
+      }
+
+      .fail {
+        color: #b91c1c;
+      }
+
+      li {
+        margin: 0.25rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Billing Parser Tests</h1>
+    <p id="summary">Running...</p>
+    <ol id="results"></ol>
+
+    <script src="../billing-parser.js"></script>
+    <script>
+      (async function () {
+        const results = document.querySelector("#results");
+        const summary = document.querySelector("#summary");
+        const tests = [];
+
+        function test(name, fn) {
+          tests.push({ name, fn });
+        }
+
+        function assertEqual(actual, expected) {
+          if (!Object.is(actual, expected)) {
+            throw new Error(`Expected ${expected}, received ${actual}`);
+          }
+        }
+
+        function assertClose(actual, expected) {
+          if (Math.abs(actual - expected) > 0.001) {
+            throw new Error(`Expected ${expected}, received ${actual}`);
+          }
+        }
+
+        const response = await fetch("../data/04_2026.csv", {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error("Could not load April billing fixture");
+        }
+        const csv = await response.text();
+        const model = window.BillingParser.parseFinalizedBillingCsv(csv, {
+          year: 2026,
+          month: 4,
+        });
+        const mayResponse = await fetch("../data/05_2026.csv", {
+          cache: "no-store",
+        });
+        if (!mayResponse.ok) {
+          throw new Error("Could not load May billing fixture");
+        }
+        const mayCsv = await mayResponse.text();
+        const mayModel = window.BillingParser.parseFinalizedBillingCsv(mayCsv, {
+          year: 2026,
+          month: 5,
+        });
+
+        test("finds the member header row", () => {
+          assertEqual(model.rows.memberHeader, 17);
+        });
+
+        test("detects April attendance date columns", () => {
+          assertEqual(model.columns.dateColumns.length, 12);
+          assertEqual(model.columns.dateColumns[0].label, "04/02");
+          assertEqual(model.columns.dateColumns[11].label, "04/03");
+        });
+
+        test("detects May single-digit attendance date columns", () => {
+          const backfill =
+            window.BillingParser.buildFinalizedBillingBackfill(mayModel);
+          assertEqual(mayModel.columns.dateColumns.length, 18);
+          assertEqual(mayModel.columns.dateColumns[0].label, "05/01");
+          assertEqual(mayModel.columns.dateColumns[1].label, "5/3");
+          assertEqual(backfill.attendanceRsvps.length, 141);
+        });
+
+        test("parses audit and totals", () => {
+          assertEqual(model.auditStatus, "CORRECT");
+          assertClose(model.totals.expectedExpense, 1601.59);
+          assertClose(model.totals.memberPaid, 1601.59);
+          assertClose(model.totals.birdieFee, 595);
+          assertClose(model.totals.birdieCostPerParticipation, 3.37);
+          assertClose(model.totals.courtFee, 1006.59);
+        });
+
+        test("detects finalized member rows", () => {
+          assertEqual(model.members.length, 45);
+          assertEqual(
+            model.members.filter(
+              (member) => member.netBalance && member.netBalance !== 0,
+            ).length,
+            33,
+          );
+        });
+
+        test("parses daily court cost rows", () => {
+          const april5 = model.dailyCosts.find((day) => day.label === "04/05");
+          assertEqual(april5.participation, 19);
+          assertClose(april5.courtFee, 193.41);
+          assertClose(april5.courtFeePerPlayer, 10.18);
+        });
+
+        test("parses member attendance and net balance", () => {
+          const bao = model.members.find((member) => member.name === "Bao Ta");
+          assertEqual(bao.totalSpots, 5);
+          assertClose(bao.netBalance, 38.29);
+          assertClose(bao.birdieFee, 16.86);
+          assertClose(bao.courtFee, 21.44);
+        });
+
+        test("parses paid credits from unlabeled trailing column", () => {
+          const hoan = model.members.find(
+            (member) => member.name === "Hoan Nguyen",
+          );
+          const thanh = model.members.find(
+            (member) => member.name === "Thanh Nguyen",
+          );
+          assertClose(hoan.paidCredits, -1684.25);
+          assertClose(thanh.paidCredits, -22.34);
+        });
+
+        test("builds finalized billing backfill rows", () => {
+          const backfill = window.BillingParser.buildFinalizedBillingBackfill(model);
+          const hoanCredit = backfill.creditAdjustments.find(
+            (entry) => entry.playerName === "Hoan Nguyen",
+          );
+          const thanhCourtTotal = backfill.courtBlocks
+            .filter((block) => block.paidBy === "Thanh Nguyen")
+            .reduce((sum, block) => sum + block.amount, 0);
+          const hoanCourtTotal = backfill.courtBlocks
+            .filter((block) => block.paidBy === "Hoan Nguyen")
+            .reduce((sum, block) => sum + block.amount, 0);
+
+          assertEqual(backfill.month, "2026-04");
+          assertEqual(backfill.courtBlocks.length, 14);
+          assertEqual(backfill.birdiePurchases.length, 1);
+          assertEqual(backfill.attendanceRsvps.length > 0, true);
+          assertClose(thanhCourtTotal, 22.34);
+          assertClose(hoanCourtTotal, 984.25);
+          assertClose(backfill.birdiePurchases[0].tubes, 17);
+          assertClose(backfill.birdiePurchases[0].amount, 595);
+          assertClose(backfill.birdiePurchases[0].unitPrice, 35);
+          assertEqual(backfill.birdiePurchases[0].batch, "Lingmei 90 Pro");
+          assertClose(hoanCredit.amount, 700);
+        });
+
+        test("parses April birdie inventory from row 18", () => {
+          const backfill = window.BillingParser.buildFinalizedBillingBackfill(model);
+          assertClose(backfill.birdieInventory.startTubes, 4.5);
+          assertClose(backfill.birdieInventory.usedTubes, 17);
+          assertClose(backfill.birdieInventory.endTubes, 52.5);
+          assertEqual(backfill.birdieInventoryPurchases.length, 5);
+          assertClose(
+            backfill.birdieInventoryPurchases.reduce(
+              (sum, purchase) => sum + purchase.tubes,
+              0,
+            ),
+            69.5,
+          );
+        });
+
+        test("defaults unnamed birdie inventory purchases to Nam Pham", () => {
+          const backfill = window.BillingParser.buildFinalizedBillingBackfill(model);
+          const april15 = backfill.birdieInventoryPurchases.find(
+            (purchase) => purchase.date === "2026-04-15",
+          );
+          const april26 = backfill.birdieInventoryPurchases.find(
+            (purchase) => purchase.date === "2026-04-26",
+          );
+          assertClose(april15.unitPrice, 38.6);
+          assertEqual(april15.paidBy, "Nam Pham");
+          assertEqual(april15.batch, "Lingmei 90");
+          assertEqual(april26.paidBy, "Hoan Nguyen");
+        });
+
+        test("preserves formula and inventory notes", () => {
+          assertEqual(
+            model.notes.birdieFormula.includes("How many tubes we have used"),
+            true,
+          );
+          assertEqual(model.notes.inventory.includes("Lingmei"), true);
+        });
+
+        let passed = 0;
+        tests.forEach(({ name, fn }) => {
+          const item = document.createElement("li");
+          try {
+            fn();
+            passed += 1;
+            item.className = "pass";
+            item.textContent = `PASS ${name}`;
+          } catch (error) {
+            item.className = "fail";
+            item.textContent = `FAIL ${name}: ${error.message}`;
+          }
+          results.append(item);
+        });
+
+        summary.className = passed === tests.length ? "pass" : "fail";
+        summary.textContent = `${passed} of ${tests.length} tests passed.`;
+      })().catch((error) => {
+        const summary = document.querySelector("#summary");
+        summary.className = "fail";
+        summary.textContent = error.message;
+      });
+    </script>
+  </body>
+</html>
