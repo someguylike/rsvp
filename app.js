@@ -52,6 +52,7 @@
   const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
+  const rsvpRules = window.RsvpRules;
 
   const form = document.querySelector("#rsvp-form");
   const playerInput = document.querySelector("#player-name");
@@ -112,16 +113,6 @@
     return `${year}-${month}-${day}`;
   }
 
-  function getTodayValue() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return formatDate(today);
-  }
-
-  function isPastDate(value) {
-    return /^\d{4}-\d{2}-\d{2}$/.test(value) && value < getTodayValue();
-  }
-
   function getNextPlayDate() {
     const now = new Date();
     const today = new Date(now);
@@ -168,6 +159,13 @@
       month: "short",
       day: "numeric",
     });
+    if (date < today) {
+      return {
+        day: `${day} @ 6AM`,
+        full,
+      };
+    }
+
     const prefix = date <= endOfThisWeek ? "This" : "Next";
 
     return {
@@ -227,7 +225,7 @@
   function renderDateOptions() {
     const dates = getUpcomingPlayDates(4);
     if (customDateInput) {
-      customDateInput.min = getTodayValue();
+      customDateInput.min = rsvpRules.getStartOfMonthValue();
     }
     dateOptions.replaceChildren(
       ...dates.map((date) => {
@@ -273,12 +271,6 @@
 
     customDateInput?.addEventListener("change", () => {
       if (customDateInput.value) {
-        if (isPastDate(customDateInput.value)) {
-          customDateInput.value = "";
-          dateInput.value = "";
-          setStatus("Choose today or a future date.", "error");
-          return;
-        }
         selectPlayDate(customDateInput.value, { isCustom: true });
       }
     });
@@ -1197,13 +1189,24 @@
       return;
     }
 
-    if (isPastDate(payload.playDate)) {
-      setStatus("Choose today or a future date.", "error");
+    payload.participantCount = Math.min(5, Math.max(0, payload.participantCount));
+    payload.vote = payload.participantCount > 0 ? "Yes" : "No";
+
+    if (
+      payload.vote === "Yes" &&
+      !rsvpRules.isDateInCurrentMonthOrLater(payload.playDate)
+    ) {
+      setStatus("Choose a date from this month or later.", "error");
       return;
     }
 
-    payload.participantCount = Math.min(5, Math.max(0, payload.participantCount));
-    payload.vote = payload.participantCount > 0 ? "Yes" : "No";
+    if (payload.vote === "No" && rsvpRules.isUnvoteLocked(payload.playDate)) {
+      setStatus(
+        "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.",
+        "error",
+      );
+      return;
+    }
 
     submitRsvp(await enrichPayloadWithAuditMetadata(payload));
   });
@@ -1285,6 +1288,13 @@
 
   removeRsvpButton?.addEventListener("click", () => {
     if (!lastSubmittedPayload) {
+      return;
+    }
+    if (rsvpRules.isUnvoteLocked(lastSubmittedPayload.playDate)) {
+      setStatus(
+        "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.",
+        "error",
+      );
       return;
     }
     removeExistingRsvp(lastSubmittedPayload);

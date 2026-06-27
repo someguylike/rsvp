@@ -7,6 +7,8 @@ const PREVIEW_MAX_COLUMNS = 80;
 const EXPORT_MIN_PARTICIPANTS = 2;
 const ADMIN_TOKEN_TTL_SECONDS = 21600;
 const PLAY_DAYS = [2, 4, 5, 0];
+const PLAY_START_HOUR = 6;
+const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
 const HEADERS = [
   "Play Date",
   "Player Name",
@@ -323,6 +325,7 @@ function deleteRsvp_(params) {
     const playDate = required_(params.playDate, "Missing play date");
     const playerName = required_(params.playerName, "Missing player name").trim();
     validatePlayerName_(playerName);
+    requireUnvoteAllowed_(params, playDate);
     const sheet = getSheet_();
     const rows = findExistingRows_(sheet, playDate, playerName);
 
@@ -375,6 +378,8 @@ function upsertRsvpWithLock_(params) {
   let audit;
 
   if (normalize_(vote) === "no") {
+    requireUnvoteAllowed_(params, playDate);
+
     if (row) {
       matchingRows.sort((first, second) => second - first).forEach((rowNumber) => {
         sheet.deleteRow(rowNumber);
@@ -1466,6 +1471,39 @@ function clampSubmittedParticipantCount_(value) {
 function clampStoredParticipantCount_(value) {
   const count = Math.trunc(Number(value || 1));
   return Number.isFinite(count) ? Math.min(5, Math.max(1, count)) : 1;
+}
+
+function requireUnvoteAllowed_(params, playDate) {
+  if (params.action === "adminUpsertRsvp") {
+    return;
+  }
+
+  if (isUnvoteLocked_(playDate)) {
+    throw new Error(
+      "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.",
+    );
+  }
+}
+
+function isUnvoteLocked_(playDate) {
+  const match = String(playDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return false;
+  }
+
+  const playStart = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    PLAY_START_HOUR,
+    0,
+    0,
+    0,
+  );
+  const lockTime = new Date(
+    playStart.getTime() - UNVOTE_LOCK_HOURS_BEFORE_PLAY * 60 * 60 * 1000,
+  );
+  return new Date() >= lockTime;
 }
 
 function formatDate_(date) {

@@ -81,6 +81,7 @@ Then open:
 - Admin add page: `http://localhost:8000/admin.html`
 - Roster management page: `http://localhost:8000/roster.html`
 - Export page: `http://localhost:8000/export.html`
+- Browser tests: `http://localhost:8000/tests/rsvp-rules.test.html`
 
 Development workflow:
 
