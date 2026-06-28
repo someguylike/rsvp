@@ -6,6 +6,7 @@
   const adminAuth = window.RsvpAdminAuth;
   const monthField = document.querySelector("#month-field");
   const monthInput = document.querySelector("#export-month");
+  const refreshReportButton = document.querySelector("#refresh-report-button");
   const exportButton = document.querySelector("#export-button");
   const status = document.querySelector("#status");
   const staleWarning = document.querySelector("#stale-warning");
@@ -626,6 +627,15 @@
   });
 
   monthInput.addEventListener("change", () => {
+    scheduleReportLoad("view");
+  });
+
+  refreshReportButton.addEventListener("click", () => {
+    if (!monthInput.value) {
+      setStatus("Choose a month for the report.", "error");
+      return;
+    }
+
     scheduleReportLoad("view");
   });
 

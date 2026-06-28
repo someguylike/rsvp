@@ -39,10 +39,13 @@
             </select>
           </label>
 
+          <button id="refresh-report-button" class="secondary-button" type="button">
+            Refresh
+          </button>
           <button id="export-button" type="submit" hidden>Recreate Latest Report</button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
           <p id="stale-warning" class="stale-warning" hidden>
-            Read-only snapshot. Ask admin to refresh if stale.
+            Read-only report. Use Refresh to load the latest available data.
           </p>
           <div
             id="report-progress"
@@ -98,6 +101,6 @@
     </main>
 
     <script src="./admin-auth.js?v=20260609-3"></script>
-    <script src="./export.js?v=20260627-2"></script>
+    <script src="./export.js?v=20260628-1"></script>
   </body>
 </html>
