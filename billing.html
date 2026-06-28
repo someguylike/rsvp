@@ -66,11 +66,11 @@
           >
             <div>
               <span id="billing-finalization-badge" class="billing-finalization-badge draft">
-                ⚠ Warning
+                Draft
               </span>
-              <strong id="billing-finalization-title">WARNING: bills are not finalized</strong>
+              <strong id="billing-finalization-title">Bills are not finalized</strong>
               <p id="billing-finalization-note">
-                Amounts may still change before payment requests go out.
+                Amounts may still change.
               </p>
             </div>
             <form id="billing-finalization-form" class="billing-finalization-form admin-only">
@@ -91,8 +91,6 @@
             <a class="admin-only" href="#court-section">Court Fees</a>
             <a class="admin-only" href="#birdie-section">Birdies</a>
           </nav>
-
-          <section id="overview-section" class="billing-summary-grid" aria-label="Billing summary"></section>
 
           <section class="billing-layout">
             <div class="billing-main-column">
@@ -119,10 +117,17 @@
                     <em id="member-billing-note"></em>
                   </span>
                 </summary>
+                <div class="billing-member-actions admin-only">
+                  <button id="mark-month-paid-button" class="secondary-button" type="button">
+                    Mark Month Paid
+                  </button>
+                </div>
                 <div class="table-wrap">
                   <table id="member-billing-table" class="export-table billing-table"></table>
                 </div>
               </details>
+
+              <section id="overview-section" class="billing-summary-grid" aria-label="Billing summary"></section>
 
               <section id="court-section" class="billing-band admin-only" aria-labelledby="court-heading">
               <div class="billing-band-header">
@@ -232,6 +237,6 @@
 
     <script src="./admin-auth.js?v=20260609-3"></script>
     <script src="./billing-parser.js?v=20260627-5"></script>
-    <script src="./billing.js?v=20260627-11"></script>
+    <script src="./billing.js?v=20260628-1"></script>
   </body>
 </html>

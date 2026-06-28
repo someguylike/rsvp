@@ -101,11 +101,13 @@
   const birdiePurchaseTable = document.querySelector("#birdie-purchase-table");
   const memberNote = document.querySelector("#member-billing-note");
   const memberTable = document.querySelector("#member-billing-table");
+  const markMonthPaidButton = document.querySelector("#mark-month-paid-button");
   const memberSelect = document.querySelector("#member-detail-select");
   const memberDetail = document.querySelector("#member-detail");
 
   let attendanceRows = [];
   let billing = null;
+  let billingMonths = [];
   let progressTimer = 0;
   let progressPercent = 0;
 
@@ -404,6 +406,107 @@
     );
   }
 
+  function getCurrentMonthValue() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function getFallbackBillingMonths(includeCurrent) {
+    return Array.from(monthInput.options)
+      .map((option) => option.value)
+      .filter((month) => {
+        if (!month) {
+          return false;
+        }
+        return includeCurrent ? month <= getCurrentMonthValue() : month < getCurrentMonthValue();
+      })
+      .map((month) => ({
+        month,
+        label: formatMonthLabel(month),
+        allPaid: false,
+        billable: false,
+      }));
+  }
+
+  function mergeBillingMonths(primaryMonths, fallbackMonths) {
+    const byMonth = new Map();
+    fallbackMonths.forEach((month) => byMonth.set(month.month, month));
+    primaryMonths.forEach((month) => {
+      byMonth.set(month.month, {
+        ...byMonth.get(month.month),
+        ...month,
+      });
+    });
+    return Array.from(byMonth.values());
+  }
+
+  function populateBillingMonthOptions(months) {
+    const currentSelection = monthInput.value;
+    const openMonths = months
+      .filter((month) => isAdmin || !month.allPaid)
+      .sort((first, second) => first.month.localeCompare(second.month));
+
+    billingMonths = openMonths;
+    clearElement(monthInput);
+    openMonths.forEach((month) => {
+      const option = document.createElement("option");
+      option.value = month.month;
+      option.textContent =
+        isAdmin || month.billable
+          ? month.label || formatMonthLabel(month.month)
+          : `${month.label || formatMonthLabel(month.month)} (setup)`;
+      monthInput.append(option);
+    });
+
+    if (openMonths.some((month) => month.month === currentSelection)) {
+      monthInput.value = currentSelection;
+    } else if (openMonths.length) {
+      monthInput.value = openMonths[openMonths.length - 1].month;
+    }
+
+    return openMonths.length > 0;
+  }
+
+  async function loadBillingMonthOptions() {
+    if (LOCAL_BILLING_FIXTURE) {
+      return true;
+    }
+
+    setStatus("Loading billing months...", "loading");
+    try {
+      const result = await requestAppsScript({
+        action: "listBillingMonths",
+        adminToken,
+      });
+      const months = isAdmin
+        ? mergeBillingMonths(result.months || [], getFallbackBillingMonths(true))
+        : result.months || [];
+      const hasMonths = populateBillingMonthOptions(months);
+      if (!hasMonths) {
+        setBillingContentVisible(false);
+        setStatus(
+          isAdmin
+            ? "No billing months are available yet."
+            : "No open finalized billing months are ready for payment.",
+          "",
+        );
+      }
+      return hasMonths;
+    } catch (error) {
+      const hasMonths = populateBillingMonthOptions(getFallbackBillingMonths(isAdmin));
+      if (!hasMonths) {
+        setBillingContentVisible(false);
+        setStatus(
+          isAdmin
+            ? "No billing months are available yet."
+            : "No previous billing months are available yet.",
+          "",
+        );
+      }
+      return hasMonths;
+    }
+  }
+
   function formatDisplayDate(value) {
     const date = new Date(`${value}T00:00:00`);
     if (Number.isNaN(date.getTime())) {
@@ -444,8 +547,31 @@
     return `${wholeHours}:${minutes}`;
   }
 
+  function normalizeClockValue(value) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return `${String(value.getHours()).padStart(2, "0")}:${String(
+        value.getMinutes(),
+      ).padStart(2, "0")}`;
+    }
+
+    const text = String(value || "").trim();
+    const clockMatch = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (clockMatch) {
+      return `${String(clockMatch[1]).padStart(2, "0")}:${clockMatch[2]}`;
+    }
+
+    const parsed = new Date(text);
+    if (!Number.isNaN(parsed.getTime()) && /\d{1,2}:\d{2}:\d{2}/.test(text)) {
+      return `${String(parsed.getHours()).padStart(2, "0")}:${String(
+        parsed.getMinutes(),
+      ).padStart(2, "0")}`;
+    }
+
+    return text;
+  }
+
   function getEndTime(startTime, durationHours) {
-    const match = String(startTime || "").match(/^(\d{2}):(\d{2})$/);
+    const match = normalizeClockValue(startTime).match(/^(\d{2}):(\d{2})$/);
     if (!match) {
       return "";
     }
@@ -455,9 +581,10 @@
   }
 
   function formatClock(value) {
-    const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+    const normalized = normalizeClockValue(value);
+    const match = normalized.match(/^(\d{2}):(\d{2})$/);
     if (!match) {
-      return value || "";
+      return normalized || "";
     }
     const hour = Number(match[1]);
     const minute = match[2];
@@ -721,14 +848,20 @@
           key,
           batch,
           unitPrice,
+          purchaseDates: [],
           purchased: 0,
           used: 0,
           remaining: 0,
+          amount: 0,
         };
 
         if (recordType === "inventory_purchase") {
+          if (purchase.date && !current.purchaseDates.includes(purchase.date)) {
+            current.purchaseDates.push(purchase.date);
+          }
           current.purchased += Number(purchase.tubes || 0);
           current.remaining += Number(purchase.tubes || 0);
+          current.amount += Number(purchase.amount || 0);
         } else if (recordType === "usage") {
           current.used += Number(purchase.tubes || 0);
           current.remaining -= Number(purchase.tubes || 0);
@@ -954,21 +1087,19 @@
   function renderFinalizationStatus() {
     const monthStatus = getMonthStatus();
     const isFinalized = monthStatus.status === "finalized";
-    finalizationBadge.textContent = isFinalized ? "Finalized" : "⚠ Warning";
+    finalizationBadge.textContent = isFinalized ? "Finalized" : "Draft";
     finalizationBadge.className = `billing-finalization-badge ${
       isFinalized ? "finalized" : "draft"
     }`;
     finalizationPanel.className = `billing-finalization-panel ${
       isFinalized ? "finalized" : "draft"
     }`;
-    finalizationTitle.textContent = isFinalized
-      ? "Bills are finalized and ready for payments"
-      : "WARNING: bills are not finalized";
+    finalizationTitle.textContent = isFinalized ? "Bills are finalized" : "Bills are not finalized";
     finalizationNote.textContent = isFinalized
-      ? `Payment requests can use these balances.${
-          monthStatus.updatedBy ? ` Finalized by ${monthStatus.updatedBy}.` : ""
-        }`
-      : "Amounts may still change before payment requests go out.";
+      ? monthStatus.updatedBy
+        ? `Finalized by ${monthStatus.updatedBy}.`
+        : "Ready for payments."
+      : "Amounts may still change.";
     finalizationSelect.value = isFinalized ? "finalized" : "draft";
   }
 
@@ -1120,6 +1251,12 @@
   function renderBirdies() {
     const state = billing.birdieState;
     const inventoryBatches = getBirdieInventoryBatches(state.purchases);
+    const currentMonthRows = state.purchases.filter(
+      (purchase) =>
+        isActiveBirdiePurchase(purchase) &&
+        isCurrentMonthBirdieRow(purchase) &&
+        getBirdieRecordType(purchase) !== "inventory_purchase",
+    );
     const activeInventoryPurchaseTubes = state.purchases
       .filter(isInventoryBirdiePurchase)
       .reduce((sum, purchase) => sum + Number(purchase.tubes || 0), 0);
@@ -1159,8 +1296,29 @@
 
     renderTable(
       birdiePurchaseTable,
-      ["Date", "Batch", "Tubes", "Unit", "Paid By", "Amount", "Status", "Actions"],
-      state.purchases.map((purchase) => {
+      ["Batch", "Purchase Date", "Tubes", "Unit", "Paid/Source", "Amount", "Status", "Actions"],
+      inventoryBatches.map((batch) => [
+        { text: batch.batch, className: "name-cell" },
+        {
+          text: batch.purchaseDates
+            .slice()
+            .sort()
+            .map(formatDisplayDate)
+            .join(", "),
+        },
+        {
+          text: `${formatNumber(batch.remaining, 1)} left / ${formatNumber(
+            batch.purchased,
+            1,
+          )} bought`,
+          className: "numeric-cell",
+        },
+        { text: formatMoney(batch.unitPrice), className: "numeric-cell" },
+        { text: "Inventory" },
+        { text: formatMoney(batch.amount), className: "numeric-cell" },
+        makeBadge("Inventory", "review"),
+        createCell("td", ""),
+      ]).concat(currentMonthRows.map((purchase) => {
         const recordType = getBirdieRecordType(purchase);
         const batch =
           purchase.batch ||
@@ -1190,8 +1348,8 @@
         });
         actions.append(remove);
         return [
-          { text: formatDisplayDate(purchase.date), className: "name-cell" },
-          { text: batch },
+          { text: batch, className: "name-cell" },
+          { text: formatDisplayDate(purchase.date) },
           { text: String(purchase.tubes), className: "numeric-cell" },
           { text: getBirdieUnitPrice(purchase) ? formatMoney(getBirdieUnitPrice(purchase)) : "", className: "numeric-cell" },
           { text: purchase.paidBy },
@@ -1208,7 +1366,7 @@
           ),
           actions,
         ];
-      }),
+      })),
       [
         "Total",
         "",
@@ -1413,11 +1571,12 @@
     }
     setBillingContentVisible(true);
     if (!options?.silentStatus) {
+      const defaultMessage =
+        backendBilling.attendance?.length && isAdmin
+          ? `Billing loaded from ${sourceLabel || "Apps Script"}: ${summary}.`
+          : "Billing data loaded.";
       setStatus(
-        message ||
-          (backendBilling.attendance?.length
-            ? `Billing loaded from ${sourceLabel || "Apps Script"}: ${summary}.`
-            : "Billing costs loaded from Apps Script. Demo attendance shown until RSVP data exists for this month."),
+        message || defaultMessage,
         "success",
       );
     }
@@ -1658,6 +1817,43 @@
     );
   }
 
+  async function handleMarkMonthPaid() {
+    if (!billing?.members?.length) {
+      setStatus("No member balances are loaded for this month.", "error");
+      return;
+    }
+
+    if (!backendAvailable || !adminToken) {
+      billing.members.forEach((member) => setPaymentStatus(member.name, "Paid"));
+      render();
+      setStatus("Month marked paid locally.", "success");
+      return;
+    }
+
+    setStatus("Marking month paid...", "loading");
+    try {
+      const result = await requestAppsScript({
+        action: "markBillingMonthPaid",
+        month: monthInput.value,
+        adminToken,
+        actor: getRememberedPlayer(),
+      });
+      applyBackendBilling(result.billing, "Month marked paid.", null, {
+        skipProgress: true,
+      });
+      const hasMonths = await loadBillingMonthOptions();
+      if (hasMonths && monthInput.value !== result.billing.month) {
+        initializeInputs();
+        loadBillingMonth();
+      } else if (!hasMonths) {
+        setBillingContentVisible(false);
+        setStatus("All finalized billing months are paid.", "success");
+      }
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  }
+
   function updateBirdiePurchaseAmount() {
     const tubes = Math.max(0, Number(birdieTubesInput.value || 0));
     const unitPrice = Math.max(0, Number(birdieUnitPriceInput.value || 0));
@@ -1685,6 +1881,7 @@
     }
 
     adminAuth.onChange((state) => {
+      const wasAdmin = isAdmin;
       isAdmin = Boolean(state.isLoggedIn);
       adminToken = state.token || "";
       document.body.classList.toggle("billing-admin", isAdmin);
@@ -1698,12 +1895,30 @@
             : "Member view. Court and birdie editing is hidden.",
           isAdmin ? "success" : "",
         );
+        if (wasAdmin !== isAdmin) {
+          loadBillingMonthOptions().then((hasMonths) => {
+            if (!hasMonths) {
+              return;
+            }
+            initializeInputs();
+            loadBillingMonth("Billing data loaded.");
+          });
+        }
       }
     });
 
     adminAuth.ready.then(() => {
-      loadBillingMonth();
+      initializeBillingPage();
     });
+  }
+
+  async function initializeBillingPage() {
+    const hasMonths = await loadBillingMonthOptions();
+    if (!hasMonths) {
+      return;
+    }
+    initializeInputs();
+    loadBillingMonth();
   }
 
   monthInput.addEventListener("change", () => {
@@ -1718,11 +1933,11 @@
   birdieUnitPriceInput.addEventListener("input", updateBirdiePurchaseAmount);
   birdieUsageBatchInput.addEventListener("change", updateBirdieUsageMax);
   finalizationForm.addEventListener("submit", handleFinalizationSubmit);
+  markMonthPaidButton.addEventListener("click", handleMarkMonthPaid);
   memberSelect.addEventListener("change", () => renderMemberDetail(memberSelect.value));
 
   initializeAdminVisibility();
-  initializeInputs();
   if (!window.RsvpAdminAuth) {
-    loadBillingMonth();
+    initializeBillingPage();
   }
 })();

@@ -1096,7 +1096,15 @@ button:disabled {
 }
 
 .compact-billing-form {
-  grid-template-columns: minmax(120px, 160px) minmax(120px, 160px) auto;
+  grid-template-columns:
+    minmax(118px, 148px)
+    minmax(180px, 1fr)
+    minmax(88px, 108px)
+    auto;
+}
+
+.compact-billing-form #birdie-usage-tubes {
+  min-width: 0;
 }
 
 .billing-table {
