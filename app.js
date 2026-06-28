@@ -57,6 +57,14 @@
   const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
+  const PARTICIPANT_OPTIONS = [
+    { value: "0", label: "Not going", isUnvote: true },
+    { value: "1", label: "Just me" },
+    { value: "2", label: "Me + 1" },
+    { value: "3", label: "Me + 2" },
+    { value: "4", label: "Me + 3" },
+    { value: "5", label: "Me + 4" },
+  ];
   const rsvpRules = window.RsvpRules;
 
   const form = document.querySelector("#rsvp-form");
@@ -206,6 +214,7 @@
       button.setAttribute("aria-checked", String(isActive));
     });
     setRemoveRsvpAction(null);
+    renderParticipantOptions();
     updatePlayerMemory();
     loadTally(value);
   }
@@ -215,6 +224,7 @@
     dateInput.value = customDateInput?.value || "";
     latestTallyRequest += 1;
     setRemoveRsvpAction(null);
+    renderParticipantOptions();
     updatePlayerMemory();
     tallyCount.textContent = "Choose a date";
     tallyList.replaceChildren();
@@ -281,6 +291,32 @@
     });
 
     selectPlayDate(formatDate(getNextPlayDate()));
+  }
+
+  function canSelectNotGoing(playDate) {
+    return !playDate || !rsvpRules.isUnvoteLocked(playDate);
+  }
+
+  function renderParticipantOptions() {
+    const previousValue = participantInput.value || "1";
+    const availableOptions = PARTICIPANT_OPTIONS.filter(
+      (option) => !option.isUnvote || canSelectNotGoing(dateInput.value),
+    );
+
+    participantInput.replaceChildren(
+      ...availableOptions.map((participantOption) => {
+        const option = document.createElement("option");
+        option.value = participantOption.value;
+        option.textContent = participantOption.label;
+        return option;
+      }),
+    );
+
+    participantInput.value = availableOptions.some(
+      (participantOption) => participantOption.value === previousValue,
+    )
+      ? previousValue
+      : "1";
   }
 
   function renderPlayerOptions() {
@@ -1196,6 +1232,13 @@
 
     payload.participantCount = Math.min(5, Math.max(0, payload.participantCount));
     payload.vote = payload.participantCount > 0 ? "Yes" : "No";
+
+    if (payload.vote === "No" && !canSelectNotGoing(payload.playDate)) {
+      setStatus("Not going is closed for this date.", "error");
+      renderParticipantOptions();
+      updatePlayerMemory();
+      return;
+    }
 
     if (
       payload.vote === "Yes" &&
