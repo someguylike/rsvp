@@ -45,75 +45,93 @@
         </nav>
 
         <p id="billing-status" class="status" role="status" aria-live="polite"></p>
-
-        <section
-          id="billing-finalization-panel"
-          class="billing-finalization-panel draft"
-          aria-label="Billing finalization status"
+        <div
+          id="billing-progress"
+          class="report-progress billing-progress"
+          role="status"
+          aria-live="polite"
+          hidden
         >
-          <div>
-            <span id="billing-finalization-badge" class="billing-finalization-badge draft">
-              ⚠ Warning
-            </span>
-            <strong id="billing-finalization-title">WARNING: bills are not finalized</strong>
-            <p id="billing-finalization-note">
-              Amounts may still change before payment requests go out.
-            </p>
+          <div class="report-progress-track" aria-hidden="true">
+            <div id="billing-progress-bar" class="report-progress-bar"></div>
           </div>
-          <form id="billing-finalization-form" class="billing-finalization-form admin-only">
-            <label class="field compact-field">
-              <span>Billing Status</span>
-              <select id="billing-finalization-select">
-                <option value="draft">Draft</option>
-                <option value="finalized">Finalized</option>
-              </select>
-            </label>
-            <button class="secondary-button" type="submit">Save Status</button>
-          </form>
-        </section>
+          <p id="billing-progress-text">Loading billing...</p>
+        </div>
 
-        <nav class="billing-tabs" aria-label="Billing sections">
-          <a href="#overview-section">Overview</a>
-          <a class="admin-only" href="#court-section">Court Fees</a>
-          <a class="admin-only" href="#birdie-section">Birdies</a>
-          <a href="#member-section">Members</a>
-        </nav>
+        <div id="billing-content" class="billing-content" hidden>
+          <section
+            id="billing-finalization-panel"
+            class="billing-finalization-panel draft"
+            aria-label="Billing finalization status"
+          >
+            <div>
+              <span id="billing-finalization-badge" class="billing-finalization-badge draft">
+                ⚠ Warning
+              </span>
+              <strong id="billing-finalization-title">WARNING: bills are not finalized</strong>
+              <p id="billing-finalization-note">
+                Amounts may still change before payment requests go out.
+              </p>
+            </div>
+            <form id="billing-finalization-form" class="billing-finalization-form admin-only">
+              <label class="field compact-field">
+                <span>Billing Status</span>
+                <select id="billing-finalization-select">
+                  <option value="draft">Draft</option>
+                  <option value="finalized">Finalized</option>
+                </select>
+              </label>
+              <button class="secondary-button" type="submit">Save Status</button>
+            </form>
+          </section>
 
-        <section id="overview-section" class="billing-summary-grid" aria-label="Billing summary"></section>
+          <nav class="billing-tabs" aria-label="Billing sections">
+            <a href="#member-detail-section">My Bill</a>
+            <a href="#member-section">Members</a>
+            <a class="admin-only" href="#court-section">Court Fees</a>
+            <a class="admin-only" href="#birdie-section">Birdies</a>
+          </nav>
 
-        <section class="billing-layout">
-          <div class="billing-main-column">
-            <section id="member-section" class="billing-band" aria-labelledby="member-heading">
-              <div class="billing-band-header">
-                <div>
-                  <h2 id="member-heading">Member Billing</h2>
-                  <p id="member-billing-note"></p>
+          <section id="overview-section" class="billing-summary-grid" aria-label="Billing summary"></section>
+
+          <section class="billing-layout">
+            <div class="billing-main-column">
+              <section id="member-detail-section" class="billing-band billing-member-detail-band" aria-labelledby="member-detail-heading">
+                <div class="billing-band-header">
+                  <div>
+                    <h2 id="member-detail-heading">Member Detail</h2>
+                    <p>Review the selected member's balance and attendance.</p>
+                  </div>
                 </div>
-              </div>
-              <div class="table-wrap">
-                <table id="member-billing-table" class="export-table billing-table"></table>
-              </div>
-            </section>
-
-            <section class="billing-band" aria-labelledby="daily-cost-heading">
-              <div class="billing-band-header">
-                <div>
-                  <h2 id="daily-cost-heading">Daily Costs</h2>
-                  <p id="daily-cost-note"></p>
+                <div class="billing-member-detail-controls">
+                  <label class="field">
+                    <span>Member</span>
+                    <select id="member-detail-select"></select>
+                  </label>
                 </div>
-              </div>
-              <div class="table-wrap billing-clean-wrap">
-                <table id="daily-cost-table" class="export-table billing-table billing-cost-table"></table>
-              </div>
-            </section>
+                <div id="member-detail" class="billing-detail-list"></div>
+              </section>
 
-            <section id="court-section" class="billing-band admin-only" aria-labelledby="court-heading">
+              <details id="member-section" class="billing-band billing-details-band">
+                <summary class="billing-band-summary">
+                  <span>
+                    <strong>Member Billing</strong>
+                    <em id="member-billing-note"></em>
+                  </span>
+                </summary>
+                <div class="table-wrap">
+                  <table id="member-billing-table" class="export-table billing-table"></table>
+                </div>
+              </details>
+
+              <section id="court-section" class="billing-band admin-only" aria-labelledby="court-heading">
               <div class="billing-band-header">
                 <div>
                   <h2 id="court-heading">Court Reservation Blocks</h2>
                   <p>Booker enters what they paid. Admin can audit, cancel, or remove wrong blocks.</p>
                 </div>
               </div>
+              <p id="court-feedback" class="section-status" role="status" aria-live="polite"></p>
 
               <form id="court-form" class="billing-inline-form">
                 <label class="field">
@@ -156,6 +174,7 @@
                   <p>Inventory and purchases feed the weighted per-spot birdie share.</p>
                 </div>
               </div>
+              <p id="birdie-feedback" class="section-status" role="status" aria-live="polite"></p>
 
               <form id="birdie-purchase-form" class="billing-inline-form">
                 <label class="field">
@@ -206,20 +225,13 @@
               </div>
             </section>
           </div>
-
-          <aside class="billing-side-panel" aria-label="Member detail">
-            <label class="field">
-              <span>Member Detail</span>
-              <select id="member-detail-select"></select>
-            </label>
-            <div id="member-detail" class="billing-detail-list"></div>
-          </aside>
         </section>
+        </div>
       </section>
     </main>
 
     <script src="./admin-auth.js?v=20260609-3"></script>
     <script src="./billing-parser.js?v=20260627-5"></script>
-    <script src="./billing.js?v=20260627-10"></script>
+    <script src="./billing.js?v=20260627-11"></script>
   </body>
 </html>

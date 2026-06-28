@@ -66,6 +66,10 @@
   const monthInput = document.querySelector("#billing-month");
   const reloadBillingButton = document.querySelector("#reload-billing-button");
   const statusEl = document.querySelector("#billing-status");
+  const progressEl = document.querySelector("#billing-progress");
+  const progressBar = document.querySelector("#billing-progress-bar");
+  const progressText = document.querySelector("#billing-progress-text");
+  const billingContent = document.querySelector("#billing-content");
   const finalizationBadge = document.querySelector("#billing-finalization-badge");
   const finalizationPanel = document.querySelector("#billing-finalization-panel");
   const finalizationTitle = document.querySelector("#billing-finalization-title");
@@ -73,8 +77,6 @@
   const finalizationForm = document.querySelector("#billing-finalization-form");
   const finalizationSelect = document.querySelector("#billing-finalization-select");
   const summaryEl = document.querySelector("#overview-section");
-  const dailyNote = document.querySelector("#daily-cost-note");
-  const dailyTable = document.querySelector("#daily-cost-table");
   const courtForm = document.querySelector("#court-form");
   const courtDateInput = document.querySelector("#court-date");
   const courtStartTimeInput = document.querySelector("#court-start-time");
@@ -82,6 +84,7 @@
   const courtCountInput = document.querySelector("#court-count");
   const courtAmountInput = document.querySelector("#court-amount");
   const courtPaidByInput = document.querySelector("#court-paid-by");
+  const courtFeedback = document.querySelector("#court-feedback");
   const courtBlockTable = document.querySelector("#court-block-table");
   const birdiePurchaseForm = document.querySelector("#birdie-purchase-form");
   const birdieDateInput = document.querySelector("#birdie-date");
@@ -94,6 +97,7 @@
   const birdieUsageDateInput = document.querySelector("#birdie-usage-date");
   const birdieUsageBatchInput = document.querySelector("#birdie-usage-batch");
   const birdieUsageTubesInput = document.querySelector("#birdie-usage-tubes");
+  const birdieFeedback = document.querySelector("#birdie-feedback");
   const birdiePurchaseTable = document.querySelector("#birdie-purchase-table");
   const memberNote = document.querySelector("#member-billing-note");
   const memberTable = document.querySelector("#member-billing-table");
@@ -102,6 +106,8 @@
 
   let attendanceRows = [];
   let billing = null;
+  let progressTimer = 0;
+  let progressPercent = 0;
 
   function buildAppsScriptUrl(payload, callbackName) {
     const url = new URL(APPS_SCRIPT_URL);
@@ -125,7 +131,7 @@
     return JSON.parse(trimmed.slice(prefix.length, -2));
   }
 
-  async function requestAppsScript(payload) {
+  async function requestViaFetch(payload) {
     const callbackName = `billingCallback_${Date.now()}_${Math.random()
       .toString(36)
       .slice(2)}`;
@@ -141,6 +147,47 @@
     }
 
     throw new Error(parsed?.error || "Billing request failed");
+  }
+
+  function requestViaJsonp(payload) {
+    return new Promise((resolve, reject) => {
+      const callbackName = `billingJsonpCallback_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      const script = document.createElement("script");
+      script.referrerPolicy = "no-referrer";
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("Apps Script took too long to respond"));
+      }, 90000);
+
+      function cleanup() {
+        window.clearTimeout(timeout);
+        script.remove();
+        delete window[callbackName];
+      }
+
+      window[callbackName] = (response) => {
+        cleanup();
+        if (response && response.ok) {
+          resolve(response);
+          return;
+        }
+
+        reject(new Error(response?.error || "Billing request failed"));
+      };
+
+      script.onerror = () => {
+        cleanup();
+        reject(new Error("Could not reach Apps Script"));
+      };
+      script.src = buildAppsScriptUrl(payload, callbackName);
+      document.body.append(script);
+    });
+  }
+
+  function requestAppsScript(payload) {
+    return requestViaFetch(payload).catch(() => requestViaJsonp(payload));
   }
 
   function buildBackendAttendance(attendanceRsvps) {
@@ -242,6 +289,71 @@
   function setStatus(message, type) {
     statusEl.textContent = message;
     statusEl.className = `status ${type || ""}`.trim();
+  }
+
+  function setSectionStatus(element, message, type) {
+    if (!element) {
+      setStatus(message, type);
+      return;
+    }
+    element.textContent = message || "";
+    element.className = `section-status ${type || ""}`.trim();
+  }
+
+  function clearSectionStatuses() {
+    setSectionStatus(courtFeedback, "");
+    setSectionStatus(birdieFeedback, "");
+  }
+
+  function setProgress(percent, message) {
+    if (!progressEl || !progressBar || !progressText) {
+      return;
+    }
+    progressPercent = Math.max(progressPercent, Math.min(percent, 100));
+    progressEl.hidden = false;
+    progressBar.style.width = `${progressPercent}%`;
+    progressText.textContent = message;
+  }
+
+  function clearProgress() {
+    window.clearInterval(progressTimer);
+    progressTimer = 0;
+    progressPercent = 0;
+    if (progressEl && progressBar) {
+      progressEl.hidden = true;
+      progressBar.style.width = "0%";
+    }
+  }
+
+  function startProgress() {
+    const steps = [
+      [18, "Opening billing month..."],
+      [42, "Loading RSVP attendance..."],
+      [66, "Reading court and birdie rows..."],
+      [86, "Calculating member balances..."],
+    ];
+    let index = 0;
+
+    clearProgress();
+    setProgress(6, "Starting billing load...");
+    progressTimer = window.setInterval(() => {
+      const step = steps[Math.min(index, steps.length - 1)];
+      setProgress(step[0], step[1]);
+      index += 1;
+    }, 900);
+  }
+
+  function finishProgress(message) {
+    window.clearInterval(progressTimer);
+    progressTimer = 0;
+    setProgress(100, message);
+    window.setTimeout(clearProgress, 700);
+  }
+
+  function setBillingContentVisible(isVisible) {
+    if (billingContent) {
+      billingContent.hidden = !isVisible;
+    }
   }
 
   function formatMoney(value) {
@@ -976,6 +1088,7 @@
               setCourtBlocks(blocks);
             },
             "Court block updated.",
+            courtFeedback,
           );
         });
         actions.append(toggle);
@@ -1072,6 +1185,7 @@
               });
             },
             "Birdie purchase removed.",
+            birdieFeedback,
           );
         });
         actions.append(remove);
@@ -1241,7 +1355,6 @@
     });
     renderSummary();
     renderFinalizationStatus();
-    renderDailyCosts();
     renderCourtBlocks();
     renderBirdies();
     renderMembers();
@@ -1277,12 +1390,16 @@
     const fixtureNote = LOCAL_BILLING_FIXTURE
       ? ` using local fixture data/${LOCAL_BILLING_FIXTURE}.csv`
       : "";
-    return `Loading ${formatMonthLabel(
-      monthInput.value,
-    )} billing${fixtureNote}. This can take a few minutes. Thanks for your patience!`;
+    return `Loading ${formatMonthLabel(monthInput.value)} billing${fixtureNote}.`;
   }
 
-  function applyBackendBilling(nextBilling, message, sourceLabel) {
+  function updatePageTitle() {
+    document.querySelector("#page-title").textContent = `Billing - ${formatMonthLabel(
+      monthInput.value,
+    )}`;
+  }
+
+  function applyBackendBilling(nextBilling, message, sourceLabel, options) {
     backendBilling = nextBilling;
     backendAvailable = true;
     attendanceRows =
@@ -1291,22 +1408,30 @@
         : createSampleAttendance();
     render();
     const summary = getBillingLoadSummary();
-    setStatus(
-      message ||
-        (backendBilling.attendance?.length
-          ? `Billing loaded from ${sourceLabel || "Apps Script"}: ${summary}.`
-          : "Billing costs loaded from Apps Script. Demo attendance shown until RSVP data exists for this month."),
-      "success",
-    );
-    document.querySelector("#page-title").textContent = `Billing - ${formatMonthLabel(
-      monthInput.value,
-    )}`;
+    if (!options?.skipProgress) {
+      finishProgress("Billing loaded.");
+    }
+    setBillingContentVisible(true);
+    if (!options?.silentStatus) {
+      setStatus(
+        message ||
+          (backendBilling.attendance?.length
+            ? `Billing loaded from ${sourceLabel || "Apps Script"}: ${summary}.`
+            : "Billing costs loaded from Apps Script. Demo attendance shown until RSVP data exists for this month."),
+        "success",
+      );
+    }
+    updatePageTitle();
   }
 
   async function loadBillingMonth(message) {
     const requestId = latestBillingRequest + 1;
     latestBillingRequest = requestId;
+    updatePageTitle();
+    clearSectionStatuses();
+    setBillingContentVisible(false);
     setStatus(getBillingLoadingMessage(), "loading");
+    startProgress();
 
     try {
       if (LOCAL_BILLING_FIXTURE) {
@@ -1338,13 +1463,15 @@
       const isUnsupportedAction = /Unsupported action: listBillingMonth/i.test(
         error.message,
       );
-      const isFetchFailure = /Failed to fetch|Load failed|NetworkError/i.test(
+      const isFetchFailure = /Failed to fetch|Load failed|NetworkError|took too long/i.test(
         error.message,
       );
       backendBilling = null;
       backendAvailable = false;
       attendanceRows = createSampleAttendance();
       render();
+      clearProgress();
+      setBillingContentVisible(true);
       setStatus(
         isUnsupportedAction
           ? "Apps Script is still serving an older deployment. In Apps Script, deploy a New version of the Web App, then reload Billing. Local demo billing is shown for now."
@@ -1356,14 +1483,21 @@
     }
   }
 
-  async function saveBillingAction(payload, fallback, successMessage) {
+  async function saveBillingAction(payload, fallback, successMessage, feedbackEl) {
     if (!backendAvailable || !adminToken) {
       fallback();
       recalculate(successMessage);
+      if (feedbackEl) {
+        setSectionStatus(feedbackEl, successMessage, "success");
+      }
       return;
     }
 
-    setStatus("Saving billing change...", "loading");
+    if (feedbackEl) {
+      setSectionStatus(feedbackEl, "Saving change...", "loading");
+    } else {
+      setStatus("Saving billing change...", "loading");
+    }
     try {
       const result = await requestAppsScript({
         ...payload,
@@ -1371,9 +1505,19 @@
         adminToken,
         actor: getRememberedPlayer(),
       });
-      applyBackendBilling(result.billing, successMessage);
+      applyBackendBilling(result.billing, successMessage, null, {
+        skipProgress: true,
+        silentStatus: Boolean(feedbackEl),
+      });
+      if (feedbackEl) {
+        setSectionStatus(feedbackEl, successMessage, "success");
+      }
     } catch (error) {
-      setStatus(error.message, "error");
+      if (feedbackEl) {
+        setSectionStatus(feedbackEl, error.message, "error");
+      } else {
+        setStatus(error.message, "error");
+      }
     }
   }
 
@@ -1384,9 +1528,7 @@
         : createSampleAttendance();
     render();
     setStatus(message || "Billing recalculated from demo RSVP attendance and local monthly costs.", "success");
-    document.querySelector("#page-title").textContent = `Billing - ${formatMonthLabel(
-      monthInput.value,
-    )}`;
+    updatePageTitle();
   }
 
   function handleCourtSubmit(event) {
@@ -1417,6 +1559,7 @@
       },
       () => setCourtBlocks([...getCourtBlocks(), block]),
       "Court block added.",
+      courtFeedback,
     );
   }
 
@@ -1448,6 +1591,7 @@
         });
       },
       "Birdie purchase added.",
+      birdieFeedback,
     );
   }
 
@@ -1458,13 +1602,14 @@
       (candidate) => candidate.key === birdieUsageBatchInput.value,
     );
     if (!batch) {
-      setStatus("Choose an available birdie batch first.", "error");
+      setSectionStatus(birdieFeedback, "Choose an available birdie batch first.", "error");
       return;
     }
 
     const tubes = Math.max(0.5, Number(birdieUsageTubesInput.value || 0.5));
     if (tubes > batch.remaining + 0.001) {
-      setStatus(
+      setSectionStatus(
+        birdieFeedback,
         `Only ${formatNumber(batch.remaining, 1)} tubes remain in ${batch.batch}.`,
         "error",
       );
@@ -1494,6 +1639,7 @@
         });
       },
       "Birdie usage added.",
+      birdieFeedback,
     );
   }
 

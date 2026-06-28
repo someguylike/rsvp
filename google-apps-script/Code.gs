@@ -1406,13 +1406,15 @@ function getBillingDiagnostics_(month) {
         SHEET_NAME,
         HEADERS,
         (row) => normalizeDate_(row[0]).indexOf(`${month}-`) === 0,
+        month,
         1,
       ),
       courtBlocks: getBillingSheetDiagnostics_(
         spreadsheet,
         BILLING_COURT_SHEET_NAME,
         BILLING_COURT_HEADERS,
-        (row) => String(row[1] || "") === month,
+        (row) => normalizeMonth_(row[1]) === month,
+        month,
         2,
       ),
       birdiePurchases: getBillingSheetDiagnostics_(
@@ -1420,13 +1422,14 @@ function getBillingDiagnostics_(month) {
         BILLING_BIRDIE_PURCHASE_SHEET_NAME,
         BILLING_BIRDIE_PURCHASE_HEADERS,
         (row) => {
-          const rowMonth = String(row[1] || "");
+          const rowMonth = normalizeMonth_(row[1]);
           return (
             rowMonth &&
             rowMonth <= month &&
             normalizeBirdieRecordType_(row[11] || "purchase") !== "inventory"
           );
         },
+        month,
         2,
         getBillingBirdieRecordTypeCounts_,
       ),
@@ -1434,14 +1437,16 @@ function getBillingDiagnostics_(month) {
         spreadsheet,
         BILLING_PAYMENT_SHEET_NAME,
         BILLING_PAYMENT_HEADERS,
-        (row) => String(row[0] || "") === month,
+        (row) => normalizeMonth_(row[0]) === month,
+        month,
         1,
       ),
       monthStatus: getBillingSheetDiagnostics_(
         spreadsheet,
         BILLING_MONTH_STATUS_SHEET_NAME,
         BILLING_MONTH_STATUS_HEADERS,
-        (row) => String(row[0] || "") === month,
+        (row) => normalizeMonth_(row[0]) === month,
+        month,
         1,
       ),
     },
@@ -1453,6 +1458,7 @@ function getBillingSheetDiagnostics_(
   sheetName,
   headers,
   matchesBillingRead,
+  targetMonth,
   monthColumn,
   buildExtra,
 ) {
@@ -1480,7 +1486,7 @@ function getBillingSheetDiagnostics_(
   const matchingIndexes = [];
 
   rawRows.forEach((row, index) => {
-    if (monthColumn && String(row[monthColumn - 1] || "") === month) {
+    if (monthColumn && normalizeMonth_(row[monthColumn - 1]) === targetMonth) {
       monthIndexes.push(index);
     }
     if (matchesBillingRead(row)) {
@@ -1958,7 +1964,7 @@ function getBillingCourtBlocks_(month) {
   return sheet
     .getRange(2, 1, lastRow - 1, BILLING_COURT_HEADERS.length)
     .getValues()
-    .filter((row) => String(row[1] || "") === month)
+    .filter((row) => normalizeMonth_(row[1]) === month)
     .map((row) => ({
       id: String(row[0] || ""),
       date: normalizeDate_(row[2]),
@@ -2022,7 +2028,7 @@ function getBillingBirdiePurchases_(month) {
     .getRange(2, 1, lastRow - 1, BILLING_BIRDIE_PURCHASE_HEADERS.length)
     .getValues()
     .filter((row) => {
-      const rowMonth = String(row[1] || "");
+      const rowMonth = normalizeMonth_(row[1]);
       return rowMonth && rowMonth <= month;
     })
     .filter((row) => normalizeBirdieRecordType_(row[11] || "purchase") !== "inventory")
@@ -2049,7 +2055,7 @@ function getBillingPayments_(month) {
   return sheet
     .getRange(2, 1, lastRow - 1, BILLING_PAYMENT_HEADERS.length)
     .getValues()
-    .filter((row) => String(row[0] || "") === month)
+    .filter((row) => normalizeMonth_(row[0]) === month)
     .map((row) => ({
       playerName: String(row[1] || ""),
       status: String(row[2] || ""),
@@ -2065,7 +2071,7 @@ function getBillingAdjustments_(month) {
     paymentSheet
       .getRange(2, 1, paymentLastRow - 1, BILLING_PAYMENT_HEADERS.length)
       .getValues()
-      .filter((row) => String(row[0] || "") === month)
+      .filter((row) => normalizeMonth_(row[0]) === month)
       .filter((row) => String(row[5] || ""))
       .forEach((row) => {
         adjustments.push({
@@ -2092,7 +2098,7 @@ function getBillingAdjustments_(month) {
   legacySheet
     .getRange(2, 1, legacyLastRow - 1, BILLING_ADJUSTMENT_HEADERS.length)
     .getValues()
-    .filter((row) => String(row[1] || "") === month)
+    .filter((row) => normalizeMonth_(row[1]) === month)
     .forEach((row) => {
       const id = String(row[0] || "");
       if (adjustments.some((adjustment) => adjustment.id === id)) {
@@ -2134,25 +2140,37 @@ function getBillingMonthStatus_(month) {
 }
 
 function getBillingCourtSheet_() {
-  return getBillingSheet_(BILLING_COURT_SHEET_NAME, BILLING_COURT_HEADERS);
+  const sheet = getBillingSheet_(BILLING_COURT_SHEET_NAME, BILLING_COURT_HEADERS);
+  formatBillingMonthColumn_(sheet, 2);
+  return sheet;
 }
 
 function getBillingBirdiePurchaseSheet_() {
-  return getBillingSheet_(
+  const sheet = getBillingSheet_(
     BILLING_BIRDIE_PURCHASE_SHEET_NAME,
     BILLING_BIRDIE_PURCHASE_HEADERS,
   );
+  formatBillingMonthColumn_(sheet, 2);
+  return sheet;
 }
 
 function getBillingPaymentSheet_() {
-  return getBillingSheet_(BILLING_PAYMENT_SHEET_NAME, BILLING_PAYMENT_HEADERS);
+  const sheet = getBillingSheet_(BILLING_PAYMENT_SHEET_NAME, BILLING_PAYMENT_HEADERS);
+  formatBillingMonthColumn_(sheet, 1);
+  return sheet;
 }
 
 function getBillingMonthStatusSheet_() {
-  return getBillingSheet_(
+  const sheet = getBillingSheet_(
     BILLING_MONTH_STATUS_SHEET_NAME,
     BILLING_MONTH_STATUS_HEADERS,
   );
+  formatBillingMonthColumn_(sheet, 1);
+  return sheet;
+}
+
+function formatBillingMonthColumn_(sheet, column) {
+  sheet.getRange(1, column, sheet.getMaxRows(), 1).setNumberFormat("@");
 }
 
 function getBillingSheet_(name, headers) {
@@ -2207,7 +2225,7 @@ function findBillingMonthRow_(sheet, month) {
 
   const rows = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
   for (let index = 0; index < rows.length; index += 1) {
-    if (String(rows[index][0] || "") === month) {
+    if (normalizeMonth_(rows[index][0]) === month) {
       return index + 2;
     }
   }
@@ -2227,7 +2245,7 @@ function findBillingBirdieInventoryRow_(sheet, month) {
   for (let index = 0; index < rows.length; index += 1) {
     if (
       String(rows[index][0] || "") === inventoryId ||
-      (String(rows[index][1] || "") === month &&
+      (normalizeMonth_(rows[index][1]) === month &&
         normalize_(rows[index][11] || "") === "inventory")
     ) {
       return index + 2;
@@ -2245,7 +2263,7 @@ function findBillingPaymentRow_(sheet, month, playerName) {
   const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
   for (let index = 0; index < rows.length; index += 1) {
     if (
-      String(rows[index][0] || "") === month &&
+      normalizeMonth_(rows[index][0]) === month &&
       normalize_(rows[index][1]) === normalize_(playerName)
     ) {
       return index + 2;
@@ -2263,7 +2281,7 @@ function findBillingPaymentAdjustmentRow_(sheet, month, adjustmentId) {
   const rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
   for (let index = 0; index < rows.length; index += 1) {
     if (
-      String(rows[index][0] || "") === month &&
+      normalizeMonth_(rows[index][0]) === month &&
       String(rows[index][5] || "") === String(adjustmentId || "")
     ) {
       return index + 2;
@@ -2759,6 +2777,29 @@ function normalizeDate_(value) {
   }
 
   return String(value || "").trim();
+}
+
+function normalizeMonth_(value) {
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value)) {
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      "yyyy-MM",
+    );
+  }
+
+  const text = String(value || "").trim();
+  const isoMonth = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (isoMonth) {
+    return `${isoMonth[1]}-${isoMonth[2]}`;
+  }
+
+  const slashDate = text.match(/^(\d{1,2})\/\d{1,2}\/(\d{4})$/);
+  if (slashDate) {
+    return `${slashDate[2]}-${String(slashDate[1]).padStart(2, "0")}`;
+  }
+
+  return text;
 }
 
 function required_(value, message) {
