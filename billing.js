@@ -1929,10 +1929,11 @@
     return false;
   }
 
-  async function loadBillingMonth(message) {
+  async function loadBillingMonth(message, options) {
     const requestId = latestBillingRequest + 1;
     latestBillingRequest = requestId;
     const month = monthInput.value;
+    const forceRefresh = Boolean(options?.forceRefresh);
     updatePageTitle();
     clearSectionStatuses();
     const cached = LOCAL_BILLING_FIXTURE ? null : readBillingCache(month);
@@ -1942,9 +1943,15 @@
         skipProgress: true,
         silentStatus: true,
       });
+      if (isBillingCacheFresh(cached) && !forceRefresh) {
+        setBillingContentVisible(true);
+        setStatus(message || "Billing loaded from saved data.", "success");
+        updatePageTitle();
+        return;
+      }
       setStatus(
-        isBillingCacheFresh(cached)
-          ? `Showing cached billing from ${formatCacheAge(cached.savedAt)}. Refreshing...`
+        forceRefresh
+          ? `Refreshing billing. Showing saved billing from ${formatCacheAge(cached.savedAt)} while loading...`
           : `Showing saved billing from ${formatCacheAge(cached.savedAt)} while refreshing...`,
         "loading",
       );
@@ -2336,7 +2343,9 @@
     initializeInputs();
     loadBillingMonth("Month changed. Billing data loaded.");
   });
-  reloadBillingButton.addEventListener("click", () => loadBillingMonth("Billing reloaded."));
+  reloadBillingButton.addEventListener("click", () =>
+    loadBillingMonth("Billing reloaded.", { forceRefresh: true }),
+  );
   courtForm.addEventListener("submit", handleCourtSubmit);
   courtDateInput.addEventListener("change", updateCourtRateFromDate);
   courtDurationInput.addEventListener("input", updateCourtAmount);
