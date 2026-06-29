@@ -108,6 +108,7 @@
   const birdieFeedback = document.querySelector("#birdie-feedback");
   const birdiePurchaseTable = document.querySelector("#birdie-purchase-table");
   const memberNote = document.querySelector("#member-billing-note");
+  const memberFeedback = document.querySelector("#member-feedback");
   const memberTable = document.querySelector("#member-billing-table");
   const markMonthPaidButton = document.querySelector("#mark-month-paid-button");
   const memberSelect = document.querySelector("#member-detail-select");
@@ -365,6 +366,7 @@
   function clearSectionStatuses() {
     setSectionStatus(courtFeedback, "");
     setSectionStatus(birdieFeedback, "");
+    setSectionStatus(memberFeedback, "");
   }
 
   function setProgress(percent, message) {
@@ -2021,18 +2023,25 @@
 
   async function handleMarkMonthPaid() {
     if (!billing?.members?.length) {
-      setStatus("No member balances are loaded for this month.", "error");
+      setSectionStatus(memberFeedback, "No member balances are loaded for this month.", "error");
       return;
     }
 
+    const memberCount = billing.members.length;
+    markMonthPaidButton.disabled = true;
     if (!backendAvailable || !adminToken) {
       billing.members.forEach((member) => setPaymentStatus(member.name, "Paid"));
       render();
-      setStatus("Month marked paid locally.", "success");
+      markMonthPaidButton.disabled = false;
+      setSectionStatus(
+        memberFeedback,
+        `Marked ${memberCount} members paid locally.`,
+        "success",
+      );
       return;
     }
 
-    setStatus("Marking month paid...", "loading");
+    setSectionStatus(memberFeedback, "Marking all members paid...", "loading");
     try {
       const result = await requestAppsScript({
         action: "markBillingMonthPaid",
@@ -2044,6 +2053,11 @@
       applyBackendBilling(result.billing, "Month marked paid.", null, {
         skipProgress: true,
       });
+      setSectionStatus(
+        memberFeedback,
+        `Marked ${memberCount} members paid.`,
+        "success",
+      );
       const hasMonths = await loadBillingMonthOptions();
       if (hasMonths && monthInput.value !== result.billing.month) {
         initializeInputs();
@@ -2053,7 +2067,9 @@
         setStatus("All finalized billing months are paid.", "success");
       }
     } catch (error) {
-      setStatus(error.message, "error");
+      setSectionStatus(memberFeedback, error.message, "error");
+    } finally {
+      markMonthPaidButton.disabled = false;
     }
   }
 
