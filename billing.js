@@ -56,8 +56,11 @@
   const DEFAULT_COURT_PAYER = "Hoan Nguyen";
   const STATUS_OPTIONS = ["Not requested", "Requested", "Paid", "Credit carryover"];
   const BILLING_CACHE_PREFIX = "billing:backend:";
+  const BILLING_MONTHS_CACHE_PREFIX = "billing:months:";
   const MEMBER_BILLING_CACHE_TTL_MS = 15 * 60 * 1000;
   const ADMIN_BILLING_CACHE_TTL_MS = 60 * 1000;
+  const MEMBER_BILLING_MONTHS_CACHE_TTL_MS = 5 * 60 * 1000;
+  const ADMIN_BILLING_MONTHS_CACHE_TTL_MS = 60 * 1000;
   const VENMO_RECIPIENT_NAME = "Nam Pham";
   const VENMO_RECIPIENT_USERNAME = "nampham2022";
   const LOCAL_BILLING_FIXTURE = new URLSearchParams(window.location.search).get(
@@ -305,6 +308,16 @@
     return isAdmin ? ADMIN_BILLING_CACHE_TTL_MS : MEMBER_BILLING_CACHE_TTL_MS;
   }
 
+  function getBillingMonthsCacheKey() {
+    return `${BILLING_MONTHS_CACHE_PREFIX}${isAdmin ? "admin" : "member"}`;
+  }
+
+  function getBillingMonthsCacheTtl() {
+    return isAdmin
+      ? ADMIN_BILLING_MONTHS_CACHE_TTL_MS
+      : MEMBER_BILLING_MONTHS_CACHE_TTL_MS;
+  }
+
   function readBillingCache(month) {
     try {
       const cached = JSON.parse(localStorage.getItem(getBillingCacheKey(month)));
@@ -330,6 +343,31 @@
     });
   }
 
+  function readBillingMonthsCache() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(getBillingMonthsCacheKey()));
+      if (!Array.isArray(cached?.months) || !Number.isFinite(Number(cached.savedAt))) {
+        return null;
+      }
+      return {
+        months: cached.months,
+        savedAt: Number(cached.savedAt),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function writeBillingMonthsCache(months) {
+    if (!Array.isArray(months)) {
+      return;
+    }
+    writeJson(getBillingMonthsCacheKey(), {
+      savedAt: Date.now(),
+      months,
+    });
+  }
+
   function clearBillingCache(month) {
     if (month) {
       localStorage.removeItem(getBillingCacheKey(month));
@@ -338,6 +376,12 @@
 
   function isBillingCacheFresh(cached) {
     return Boolean(cached && Date.now() - cached.savedAt < getBillingCacheTtl());
+  }
+
+  function isBillingMonthsCacheFresh(cached) {
+    return Boolean(
+      cached && Date.now() - cached.savedAt < getBillingMonthsCacheTtl(),
+    );
   }
 
   function formatCacheAge(savedAt) {
@@ -533,20 +577,55 @@
     return openMonths.length > 0;
   }
 
+  function normalizeBillingMonthOptions(months) {
+    return isAdmin
+      ? mergeBillingMonths(months || [], getFallbackBillingMonths(true))
+      : months || [];
+  }
+
   async function loadBillingMonthOptions() {
     if (LOCAL_BILLING_FIXTURE) {
       return true;
     }
 
+    const cached = readBillingMonthsCache();
+    let hasCachedMonths = false;
+    if (cached?.months?.length) {
+      hasCachedMonths = populateBillingMonthOptions(cached.months);
+      if (hasCachedMonths) {
+        setStatus(
+          isBillingMonthsCacheFresh(cached)
+            ? `Showing saved billing months from ${formatCacheAge(cached.savedAt)}. Refreshing...`
+            : `Showing older saved billing months from ${formatCacheAge(cached.savedAt)} while refreshing...`,
+          "loading",
+        );
+        requestAppsScript({
+          action: "listBillingMonths",
+          adminToken,
+        })
+          .then((result) => {
+            const months = normalizeBillingMonthOptions(result.months || []);
+            writeBillingMonthsCache(months);
+            if (months.some((month) => month.month === monthInput.value)) {
+              populateBillingMonthOptions(months);
+            }
+          })
+          .catch(() => {
+            // Keep using cached month options; billing load has its own error path.
+          });
+        return true;
+      }
+    }
+
     setStatus("Loading billing months...", "loading");
+
     try {
       const result = await requestAppsScript({
         action: "listBillingMonths",
         adminToken,
       });
-      const months = isAdmin
-        ? mergeBillingMonths(result.months || [], getFallbackBillingMonths(true))
-        : result.months || [];
+      const months = normalizeBillingMonthOptions(result.months || []);
+      writeBillingMonthsCache(months);
       const hasMonths = populateBillingMonthOptions(months);
       if (!hasMonths) {
         setBillingContentVisible(false);
@@ -559,6 +638,9 @@
       }
       return hasMonths;
     } catch (error) {
+      if (hasCachedMonths) {
+        return true;
+      }
       const hasMonths = populateBillingMonthOptions(getFallbackBillingMonths(isAdmin));
       if (!hasMonths) {
         setBillingContentVisible(false);
@@ -1757,6 +1839,96 @@
     updatePageTitle();
   }
 
+  function upsertById(items, item) {
+    const existingIndex = items.findIndex((candidate) => candidate.id === item.id);
+    if (existingIndex === -1) {
+      return [...items, item];
+    }
+
+    return items.map((candidate, index) => (
+      index === existingIndex ? { ...candidate, ...item } : candidate
+    ));
+  }
+
+  function upsertByPlayerName(items, item) {
+    const existingIndex = items.findIndex(
+      (candidate) => candidate.playerName === item.playerName,
+    );
+    if (existingIndex === -1) {
+      return [...items, item];
+    }
+
+    return items.map((candidate, index) => (
+      index === existingIndex ? { ...candidate, ...item } : candidate
+    ));
+  }
+
+  function applyBillingSaveResult(action, result) {
+    if (!backendBilling) {
+      return false;
+    }
+
+    if (action === "saveCourtBlock" || action === "toggleCourtBlock") {
+      if (!result.courtBlock?.id) {
+        return false;
+      }
+      backendBilling = {
+        ...backendBilling,
+        courtBlocks: upsertById(backendBilling.courtBlocks || [], result.courtBlock),
+      };
+      return true;
+    }
+
+    if (action === "saveBirdiePurchase" || action === "removeBirdiePurchase") {
+      if (!result.birdiePurchase?.id) {
+        return false;
+      }
+      backendBilling = {
+        ...backendBilling,
+        birdiePurchases: upsertById(
+          backendBilling.birdiePurchases || [],
+          result.birdiePurchase,
+        ),
+      };
+      return true;
+    }
+
+    if (action === "saveBillingPaymentStatus") {
+      if (!result.payment?.playerName) {
+        return false;
+      }
+      backendBilling = {
+        ...backendBilling,
+        payments: upsertByPlayerName(backendBilling.payments || [], result.payment),
+      };
+      return true;
+    }
+
+    if (action === "saveBillingAdjustment" || action === "removeBillingAdjustment") {
+      if (!result.adjustment?.id) {
+        return false;
+      }
+      backendBilling = {
+        ...backendBilling,
+        adjustments: upsertById(backendBilling.adjustments || [], result.adjustment),
+      };
+      return true;
+    }
+
+    if (action === "saveBillingMonthStatus") {
+      if (!result.monthStatus) {
+        return false;
+      }
+      backendBilling = {
+        ...backendBilling,
+        monthStatus: result.monthStatus,
+      };
+      return true;
+    }
+
+    return false;
+  }
+
   async function loadBillingMonth(message) {
     const requestId = latestBillingRequest + 1;
     latestBillingRequest = requestId;
@@ -1867,11 +2039,28 @@
         adminToken,
         actor: getRememberedPlayer(),
       });
-      writeBillingCache(monthInput.value, result.billing);
-      applyBackendBilling(result.billing, successMessage, null, {
-        skipProgress: true,
-        silentStatus: Boolean(feedbackEl),
-      });
+
+      if (result.billing) {
+        writeBillingCache(monthInput.value, result.billing);
+        applyBackendBilling(result.billing, successMessage, null, {
+          skipProgress: true,
+          silentStatus: Boolean(feedbackEl),
+        });
+      } else if (applyBillingSaveResult(payload.action, result)) {
+        writeBillingCache(monthInput.value, backendBilling);
+        attendanceRows =
+          backendBilling?.attendance?.length > 0
+            ? backendBilling.attendance
+            : createSampleAttendance();
+        render();
+        updatePageTitle();
+        if (!feedbackEl) {
+          setStatus(successMessage, "success");
+        }
+      } else {
+        await loadBillingMonth(successMessage);
+      }
+
       if (feedbackEl) {
         setSectionStatus(feedbackEl, successMessage, "success");
       }

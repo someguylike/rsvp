@@ -362,7 +362,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "saveCourtBlock",
-        billing: saveBillingCourtBlock_(params),
+        courtBlock: saveBillingCourtBlock_(params),
       });
     }
 
@@ -371,7 +371,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "toggleCourtBlock",
-        billing: toggleBillingCourtBlock_(params),
+        courtBlock: toggleBillingCourtBlock_(params),
       });
     }
 
@@ -389,7 +389,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "saveBirdiePurchase",
-        billing: saveBillingBirdiePurchase_(params),
+        birdiePurchase: saveBillingBirdiePurchase_(params),
       });
     }
 
@@ -398,7 +398,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "removeBirdiePurchase",
-        billing: removeBillingBirdiePurchase_(params),
+        birdiePurchase: removeBillingBirdiePurchase_(params),
       });
     }
 
@@ -407,7 +407,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "saveBillingPaymentStatus",
-        billing: saveBillingPaymentStatus_(params),
+        payment: saveBillingPaymentStatus_(params),
       });
     }
 
@@ -416,7 +416,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "saveBillingMonthStatus",
-        billing: saveBillingMonthStatus_(params),
+        monthStatus: saveBillingMonthStatus_(params),
       });
     }
 
@@ -425,7 +425,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "saveBillingAdjustment",
-        billing: saveBillingAdjustment_(params),
+        adjustment: saveBillingAdjustment_(params),
       });
     }
 
@@ -434,7 +434,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "removeBillingAdjustment",
-        billing: removeBillingAdjustment_(params),
+        adjustment: removeBillingAdjustment_(params),
       });
     }
 
@@ -1481,6 +1481,16 @@ function getBillingMonths_(includeEditable) {
   return Object.keys(monthSet)
     .sort()
     .map((month) => {
+      if (includeEditable) {
+        return {
+          month,
+          label: formatMonthLabel_(month),
+          playerCount: 0,
+          allPaid: false,
+          billable: Boolean(billableMonthSet[month]),
+        };
+      }
+
       const attendancePlayers = getBillingAttendancePlayers_(month);
       const paidPlayers = getPaidBillingPlayers_(month);
       const allPaid =
@@ -1786,7 +1796,7 @@ function saveBillingCourtBlock_(params) {
       sheet.appendRow(values);
     }
 
-    return getBillingMonth_(month);
+    return billingCourtRowToBlock_(values);
   } finally {
     lock.releaseLock();
   }
@@ -1817,7 +1827,9 @@ function toggleBillingCourtBlock_(params) {
     sheet.getRange(row, 12).setValue(new Date().toISOString());
     sheet.getRange(row, 14).setValue(getBillingActor_(params));
 
-    return getBillingMonth_(month);
+    return billingCourtRowToBlock_(
+      sheet.getRange(row, 1, 1, BILLING_COURT_HEADERS.length).getValues()[0],
+    );
   } finally {
     lock.releaseLock();
   }
@@ -1946,7 +1958,13 @@ function removeBillingBirdiePurchase_(params) {
       sheet.getRange(row, 11).setValue(getBillingActor_(params));
     }
 
-    return getBillingMonth_(month);
+    if (!row) {
+      throw new Error("Birdie row was not found");
+    }
+
+    return billingBirdiePurchaseRowToPurchase_(
+      sheet.getRange(row, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length).getValues()[0],
+    );
   } finally {
     lock.releaseLock();
   }
@@ -1991,7 +2009,7 @@ function saveBillingPaymentStatus_(params) {
       sheet.appendRow(values);
     }
 
-    return getBillingMonth_(month);
+    return billingPaymentRowToPayment_(values);
   } finally {
     lock.releaseLock();
   }
@@ -2023,7 +2041,7 @@ function saveBillingMonthStatus_(params) {
       sheet.appendRow(values);
     }
 
-    return getBillingMonth_(month);
+    return billingMonthStatusRowToStatus_(values);
   } finally {
     lock.releaseLock();
   }
@@ -2075,7 +2093,7 @@ function saveBillingAdjustment_(params) {
       sheet.appendRow(values);
     }
 
-    return getBillingMonth_(month);
+    return billingPaymentRowToAdjustment_(values);
   } finally {
     lock.releaseLock();
   }
@@ -2098,7 +2116,13 @@ function removeBillingAdjustment_(params) {
       sheet.getRange(row, 13).setValue(getBillingActor_(params));
     }
 
-    return getBillingMonth_(month);
+    if (!row) {
+      throw new Error("Adjustment was not found");
+    }
+
+    return billingPaymentRowToAdjustment_(
+      sheet.getRange(row, 1, 1, BILLING_PAYMENT_HEADERS.length).getValues()[0],
+    );
   } finally {
     lock.releaseLock();
   }
@@ -2159,17 +2183,7 @@ function getBillingCourtBlocks_(month) {
     .getRange(2, 1, lastRow - 1, BILLING_COURT_HEADERS.length)
     .getValues()
     .filter((row) => normalizeMonth_(row[1]) === month)
-    .map((row) => ({
-      id: String(row[0] || ""),
-      date: normalizeDate_(row[2]),
-      startTime: normalizeTimeValue_(row[3]),
-      durationHours: parseStoredNumber_(row[4]),
-      courts: parseStoredNumber_(row[5]),
-      amount: parseStoredNumber_(row[6]),
-      paidBy: String(row[7] || ""),
-      status: normalizeBillingStatus_(row[8] || "active"),
-      source: String(row[9] || "Manual"),
-    }));
+    .map(billingCourtRowToBlock_);
 }
 
 function getBillingBirdieInventory_(month) {
@@ -2226,17 +2240,7 @@ function getBillingBirdiePurchases_(month) {
       return rowMonth && rowMonth <= month;
     })
     .filter((row) => normalizeBirdieRecordType_(row[11] || "purchase") !== "inventory")
-    .map((row) => ({
-      id: String(row[0] || ""),
-      date: normalizeDate_(row[2]),
-      tubes: parseStoredNumber_(row[3]),
-      amount: parseStoredNumber_(row[4]),
-      paidBy: String(row[5] || ""),
-      status: normalizeBillingStatus_(row[6] || "active"),
-      recordType: normalizeBirdieRecordType_(row[11] || "purchase"),
-      unitPrice: parseStoredNumber_(row[16]),
-      batch: String(row[17] || ""),
-    }));
+    .map(billingBirdiePurchaseRowToPurchase_);
 }
 
 function getBillingPayments_(month) {
@@ -2250,10 +2254,7 @@ function getBillingPayments_(month) {
     .getRange(2, 1, lastRow - 1, BILLING_PAYMENT_HEADERS.length)
     .getValues()
     .filter((row) => normalizeMonth_(row[0]) === month)
-    .map((row) => ({
-      playerName: String(row[1] || ""),
-      status: String(row[2] || ""),
-    }));
+    .map(billingPaymentRowToPayment_);
 }
 
 function getBillingAdjustments_(month) {
@@ -2268,13 +2269,7 @@ function getBillingAdjustments_(month) {
       .filter((row) => normalizeMonth_(row[0]) === month)
       .filter((row) => String(row[5] || ""))
       .forEach((row) => {
-        adjustments.push({
-          id: String(row[5] || ""),
-          playerName: String(row[1] || ""),
-          amount: parseStoredNumber_(row[6]),
-          note: String(row[7] || ""),
-          status: normalizeBillingStatus_(row[8] || "active"),
-        });
+        adjustments.push(billingPaymentRowToAdjustment_(row));
       });
   }
 
@@ -2325,11 +2320,60 @@ function getBillingMonthStatus_(month) {
   const values = sheet
     .getRange(row, 1, 1, BILLING_MONTH_STATUS_HEADERS.length)
     .getValues()[0];
+  return billingMonthStatusRowToStatus_(values);
+}
+
+function billingCourtRowToBlock_(row) {
   return {
-    status: normalizeBillingMonthStatus_(values[1] || "draft"),
-    note: String(values[2] || ""),
-    updatedAt: formatAuditValue_(values[3]),
-    updatedBy: String(values[4] || ""),
+    id: String(row[0] || ""),
+    date: normalizeDate_(row[2]),
+    startTime: normalizeTimeValue_(row[3]),
+    durationHours: parseStoredNumber_(row[4]),
+    courts: parseStoredNumber_(row[5]),
+    amount: parseStoredNumber_(row[6]),
+    paidBy: String(row[7] || ""),
+    status: normalizeBillingStatus_(row[8] || "active"),
+    source: String(row[9] || "Manual"),
+  };
+}
+
+function billingBirdiePurchaseRowToPurchase_(row) {
+  return {
+    id: String(row[0] || ""),
+    date: normalizeDate_(row[2]),
+    tubes: parseStoredNumber_(row[3]),
+    amount: parseStoredNumber_(row[4]),
+    paidBy: String(row[5] || ""),
+    status: normalizeBillingStatus_(row[6] || "active"),
+    recordType: normalizeBirdieRecordType_(row[11] || "purchase"),
+    unitPrice: parseStoredNumber_(row[16]),
+    batch: String(row[17] || ""),
+  };
+}
+
+function billingPaymentRowToPayment_(row) {
+  return {
+    playerName: String(row[1] || ""),
+    status: String(row[2] || ""),
+  };
+}
+
+function billingPaymentRowToAdjustment_(row) {
+  return {
+    id: String(row[5] || ""),
+    playerName: String(row[1] || ""),
+    amount: parseStoredNumber_(row[6]),
+    note: String(row[7] || ""),
+    status: normalizeBillingStatus_(row[8] || "active"),
+  };
+}
+
+function billingMonthStatusRowToStatus_(row) {
+  return {
+    status: normalizeBillingMonthStatus_(row[1] || "draft"),
+    note: String(row[2] || ""),
+    updatedAt: formatAuditValue_(row[3]),
+    updatedBy: String(row[4] || ""),
   };
 }
 
