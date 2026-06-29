@@ -58,6 +58,8 @@
   const BILLING_CACHE_PREFIX = "billing:backend:";
   const MEMBER_BILLING_CACHE_TTL_MS = 15 * 60 * 1000;
   const ADMIN_BILLING_CACHE_TTL_MS = 60 * 1000;
+  const VENMO_RECIPIENT_NAME = "Nam Pham";
+  const VENMO_RECIPIENT_USERNAME = "nampham2022";
   const LOCAL_BILLING_FIXTURE = new URLSearchParams(window.location.search).get(
     "localBillingFixture",
   );
@@ -428,6 +430,10 @@
       maximumFractionDigits: digits,
       minimumFractionDigits: digits,
     });
+  }
+
+  function normalizeText(value) {
+    return String(value || "").trim().toLowerCase();
   }
 
   function getMonthParts() {
@@ -1579,6 +1585,66 @@
     memberDetail.append(row);
   }
 
+  function isMobilePaymentDevice() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  }
+
+  function getVenmoPaymentNote(member) {
+    return `${member.name} - Badminton ${formatMonthLabel(monthInput.value)}`;
+  }
+
+  function buildVenmoPaymentUrls(member) {
+    const amount = roundMoney(member.netBalance).toFixed(2);
+    const encodedNote = encodeURIComponent(getVenmoPaymentNote(member));
+    const encodedRecipient = encodeURIComponent(VENMO_RECIPIENT_USERNAME);
+
+    return {
+      amount,
+      appUrl: `venmo://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${amount}&note=${encodedNote}`,
+      webUrl: `https://venmo.com/${encodedRecipient}?txn=pay&amount=${amount}&note=${encodedNote}`,
+    };
+  }
+
+  function renderVenmoPaymentAction(member) {
+    if (
+      member.netBalance <= 0.005 ||
+      normalizeText(getPaymentStatus(member.name)) === "paid"
+    ) {
+      return;
+    }
+
+    const urls = buildVenmoPaymentUrls(member);
+    const section = document.createElement("section");
+    section.className = "billing-payment-action";
+    const button = document.createElement("button");
+    button.className = "billing-payment-button";
+    button.type = "button";
+    button.textContent = `Pay ${formatMoney(urls.amount)} with Venmo`;
+    const note = document.createElement("p");
+    note.textContent = `To ${VENMO_RECIPIENT_NAME}: ${getVenmoPaymentNote(member)}`;
+    const help = document.createElement("p");
+    help.className = "billing-payment-help";
+    help.textContent = "Venmo opens best from a phone.";
+
+    button.addEventListener("click", () => {
+      if (!isMobilePaymentDevice()) {
+        help.textContent = "Please open this page on your phone to pay with Venmo.";
+        return;
+      }
+
+      help.textContent = "Opening Venmo...";
+      window.location.href = urls.appUrl;
+      window.setTimeout(() => {
+        if (!document.hidden) {
+          window.location.href = urls.webUrl;
+        }
+      }, 900);
+    });
+
+    section.append(button, note, help);
+    memberDetail.append(section);
+  }
+
   function renderMemberDetail(name) {
     const member = billing.members.find((candidate) => candidate.name === name);
     clearElement(memberDetail);
@@ -1595,6 +1661,7 @@
     appendDetailRow("Paid credits", formatMoney(member.credits), member.credits ? "money-credit" : "");
     appendDetailRow("Net balance", formatMoney(member.netBalance), getMoneyClass(member.netBalance));
     appendDetailRow("Payment", getPaymentStatus(member.name));
+    renderVenmoPaymentAction(member);
 
     const attendance = document.createElement("section");
     attendance.className = "billing-detail-section";
