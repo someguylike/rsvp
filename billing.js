@@ -54,6 +54,9 @@
   const PLAY_DAYS = [2, 4, 5, 0];
   const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
   const STATUS_OPTIONS = ["Not requested", "Requested", "Paid", "Credit carryover"];
+  const BILLING_CACHE_PREFIX = "billing:backend:";
+  const MEMBER_BILLING_CACHE_TTL_MS = 15 * 60 * 1000;
+  const ADMIN_BILLING_CACHE_TTL_MS = 60 * 1000;
   const LOCAL_BILLING_FIXTURE = new URLSearchParams(window.location.search).get(
     "localBillingFixture",
   );
@@ -286,6 +289,58 @@
 
   function writeJson(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function getBillingCacheKey(month) {
+    return `${BILLING_CACHE_PREFIX}${month}`;
+  }
+
+  function getBillingCacheTtl() {
+    return isAdmin ? ADMIN_BILLING_CACHE_TTL_MS : MEMBER_BILLING_CACHE_TTL_MS;
+  }
+
+  function readBillingCache(month) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(getBillingCacheKey(month)));
+      if (!cached?.billing || !Number.isFinite(Number(cached.savedAt))) {
+        return null;
+      }
+      return {
+        billing: cached.billing,
+        savedAt: Number(cached.savedAt),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function writeBillingCache(month, nextBilling) {
+    if (!month || !nextBilling) {
+      return;
+    }
+    writeJson(getBillingCacheKey(month), {
+      savedAt: Date.now(),
+      billing: nextBilling,
+    });
+  }
+
+  function clearBillingCache(month) {
+    if (month) {
+      localStorage.removeItem(getBillingCacheKey(month));
+    }
+  }
+
+  function isBillingCacheFresh(cached) {
+    return Boolean(cached && Date.now() - cached.savedAt < getBillingCacheTtl());
+  }
+
+  function formatCacheAge(savedAt) {
+    const ageSeconds = Math.max(0, Math.round((Date.now() - Number(savedAt || 0)) / 1000));
+    if (ageSeconds < 60) {
+      return `${ageSeconds}s ago`;
+    }
+    const ageMinutes = Math.round(ageSeconds / 60);
+    return `${ageMinutes}m ago`;
   }
 
   function setStatus(message, type) {
@@ -1586,11 +1641,28 @@
   async function loadBillingMonth(message) {
     const requestId = latestBillingRequest + 1;
     latestBillingRequest = requestId;
+    const month = monthInput.value;
     updatePageTitle();
     clearSectionStatuses();
-    setBillingContentVisible(false);
-    setStatus(getBillingLoadingMessage(), "loading");
-    startProgress();
+    const cached = LOCAL_BILLING_FIXTURE ? null : readBillingCache(month);
+
+    if (cached?.billing) {
+      applyBackendBilling(cached.billing, null, "cached billing", {
+        skipProgress: true,
+        silentStatus: true,
+      });
+      setStatus(
+        isBillingCacheFresh(cached)
+          ? `Showing cached billing from ${formatCacheAge(cached.savedAt)}. Refreshing...`
+          : `Showing saved billing from ${formatCacheAge(cached.savedAt)} while refreshing...`,
+        "loading",
+      );
+      startProgress();
+    } else {
+      setBillingContentVisible(false);
+      setStatus(getBillingLoadingMessage(), "loading");
+      startProgress();
+    }
 
     try {
       if (LOCAL_BILLING_FIXTURE) {
@@ -1608,15 +1680,27 @@
 
       const result = await requestAppsScript({
         action: "listBillingMonth",
-        month: monthInput.value,
+        month,
         adminToken,
       });
       if (requestId !== latestBillingRequest) {
         return;
       }
+      writeBillingCache(month, result.billing);
       applyBackendBilling(result.billing, message);
     } catch (error) {
       if (requestId !== latestBillingRequest) {
+        return;
+      }
+      if (cached?.billing) {
+        clearProgress();
+        setBillingContentVisible(true);
+        setStatus(
+          `Could not refresh Apps Script. Showing cached billing from ${formatCacheAge(
+            cached.savedAt,
+          )}.`,
+          "error",
+        );
         return;
       }
       const isUnsupportedAction = /Unsupported action: listBillingMonth/i.test(
@@ -1664,6 +1748,7 @@
         adminToken,
         actor: getRememberedPlayer(),
       });
+      writeBillingCache(monthInput.value, result.billing);
       applyBackendBilling(result.billing, successMessage, null, {
         skipProgress: true,
         silentStatus: Boolean(feedbackEl),
@@ -1838,6 +1923,7 @@
         adminToken,
         actor: getRememberedPlayer(),
       });
+      writeBillingCache(monthInput.value, result.billing);
       applyBackendBilling(result.billing, "Month marked paid.", null, {
         skipProgress: true,
       });
