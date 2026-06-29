@@ -138,7 +138,7 @@
               </div>
               <p id="court-feedback" class="section-status" role="status" aria-live="polite"></p>
 
-              <form id="court-form" class="billing-inline-form">
+              <form id="court-form" class="billing-inline-form court-billing-form">
                 <label class="field">
                   <span>Date</span>
                   <input id="court-date" type="date" required />
@@ -157,8 +157,20 @@
                   <input id="court-count" type="number" min="1" max="8" step="1" value="1" required />
                 </label>
                 <label class="field">
+                  <span>Rate</span>
+                  <select id="court-rate-preset" required>
+                    <option value="14.89">Bellevue weekday - $14.89/hr</option>
+                    <option value="27.63">Renton weekend - $27.63/hr</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Hourly Rate</span>
+                  <input id="court-hourly-rate" type="number" min="0" step="0.01" value="14.89" required />
+                </label>
+                <label class="field">
                   <span>Amount</span>
-                  <input id="court-amount" type="number" min="0" step="0.01" value="48.35" required />
+                  <input id="court-amount" type="number" min="0" step="0.01" value="29.78" readonly required />
                 </label>
                 <label class="field">
                   <span>Paid By</span>
@@ -237,6 +249,6 @@
 
     <script src="./admin-auth.js?v=20260609-3"></script>
     <script src="./billing-parser.js?v=20260627-5"></script>
-    <script src="./billing.js?v=20260628-2"></script>
+    <script src="./billing.js?v=20260628-3"></script>
   </body>
 </html>

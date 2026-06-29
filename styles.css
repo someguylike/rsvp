@@ -1095,6 +1095,19 @@ button:disabled {
   padding: 0 16px;
 }
 
+.court-billing-form {
+  grid-template-columns:
+    minmax(130px, 0.75fr)
+    minmax(110px, 0.55fr)
+    minmax(100px, 0.5fr)
+    minmax(74px, 0.35fr)
+    minmax(170px, 0.9fr)
+    minmax(102px, 0.5fr)
+    minmax(104px, 0.5fr)
+    minmax(150px, 0.8fr)
+    auto;
+}
+
 .compact-billing-form {
   grid-template-columns:
     minmax(118px, 148px)

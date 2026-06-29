@@ -53,6 +53,7 @@
   ];
   const PLAY_DAYS = [2, 4, 5, 0];
   const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
+  const DEFAULT_COURT_PAYER = "Hoan Nguyen";
   const STATUS_OPTIONS = ["Not requested", "Requested", "Paid", "Credit carryover"];
   const BILLING_CACHE_PREFIX = "billing:backend:";
   const MEMBER_BILLING_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -85,6 +86,8 @@
   const courtStartTimeInput = document.querySelector("#court-start-time");
   const courtDurationInput = document.querySelector("#court-duration");
   const courtCountInput = document.querySelector("#court-count");
+  const courtRatePresetInput = document.querySelector("#court-rate-preset");
+  const courtHourlyRateInput = document.querySelector("#court-hourly-rate");
   const courtAmountInput = document.querySelector("#court-amount");
   const courtPaidByInput = document.querySelector("#court-paid-by");
   const courtFeedback = document.querySelector("#court-feedback");
@@ -584,6 +587,10 @@
     return Number.isFinite(amount) ? Math.max(0, amount) : 0;
   }
 
+  function roundMoney(value) {
+    return Math.round(Number(value || 0) * 100) / 100;
+  }
+
   function parseDurationHours(value) {
     const text = String(value || "").trim();
     const match = text.match(/^(\d{1,2})(?::([0-5]\d))?$/);
@@ -600,6 +607,49 @@
     const wholeHours = Math.floor(totalMinutes / 60);
     const minutes = String(totalMinutes % 60).padStart(2, "0");
     return `${wholeHours}:${minutes}`;
+  }
+
+  function isWeekendDate(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      return false;
+    }
+    const date = new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+    );
+    return date.getDay() === 0 || date.getDay() === 6;
+  }
+
+  function updateCourtRateFromDate() {
+    courtRatePresetInput.value = isWeekendDate(courtDateInput.value) ? "27.63" : "14.89";
+    updateCourtAmount();
+  }
+
+  function updateCourtAmount() {
+    const presetRate = courtRatePresetInput.value;
+    const hourlyRate =
+      presetRate === "other"
+        ? parseAmount(courtHourlyRateInput.value)
+        : parseAmount(presetRate);
+    const hours = parseDurationHours(courtDurationInput.value);
+    const courts = Math.max(1, Number(courtCountInput.value || 1));
+
+    if (presetRate !== "other") {
+      courtHourlyRateInput.value = String(hourlyRate);
+    }
+    courtAmountInput.value = String(roundMoney(hourlyRate * hours * courts));
+  }
+
+  function getCourtRateSource() {
+    if (courtRatePresetInput.value === "14.89") {
+      return "Bellevue weekday";
+    }
+    if (courtRatePresetInput.value === "27.63") {
+      return "Renton weekend";
+    }
+    return "Other rate";
   }
 
   function normalizeClockValue(value) {
@@ -1785,7 +1835,7 @@
       courts: Math.max(1, Number(courtCountInput.value || 1)),
       amount: parseAmount(courtAmountInput.value),
       paidBy: courtPaidByInput.value,
-      source: "Manual",
+      source: getCourtRateSource(),
       status: "active",
     };
     saveBillingAction(
@@ -1949,13 +1999,16 @@
   function initializeInputs() {
     fillPlayerSelect(courtPaidByInput);
     fillPlayerSelect(birdiePaidByInput);
-    courtPaidByInput.value = getRememberedPlayer();
+    courtPaidByInput.value = PLAYERS.includes(DEFAULT_COURT_PAYER)
+      ? DEFAULT_COURT_PAYER
+      : getRememberedPlayer();
     birdiePaidByInput.value = getRememberedPlayer();
     courtDateInput.value = `${monthInput.value}-01`;
     courtStartTimeInput.value = "06:00";
     courtDurationInput.value = "2:00";
     birdieDateInput.value = getMonthEndDateValue();
     birdieUsageDateInput.value = getMonthEndDateValue();
+    updateCourtRateFromDate();
     updateBirdiePurchaseAmount();
   }
 
@@ -2013,6 +2066,11 @@
   });
   reloadBillingButton.addEventListener("click", () => loadBillingMonth("Billing reloaded."));
   courtForm.addEventListener("submit", handleCourtSubmit);
+  courtDateInput.addEventListener("change", updateCourtRateFromDate);
+  courtDurationInput.addEventListener("input", updateCourtAmount);
+  courtCountInput.addEventListener("input", updateCourtAmount);
+  courtRatePresetInput.addEventListener("change", updateCourtAmount);
+  courtHourlyRateInput.addEventListener("input", updateCourtAmount);
   birdiePurchaseForm.addEventListener("submit", handleBirdiePurchaseSubmit);
   birdieUsageForm.addEventListener("submit", handleBirdieUsageSubmit);
   birdieTubesInput.addEventListener("input", updateBirdiePurchaseAmount);
