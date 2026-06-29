@@ -1045,6 +1045,13 @@ function getRosterNames_() {
   return getRoster_().map((member) => member.name);
 }
 
+function getRosterNameSet_() {
+  return getRosterNames_().reduce((names, playerName) => {
+    names[normalize_(playerName)] = true;
+    return names;
+  }, {});
+}
+
 function findRosterRow_(sheet, playerName) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) {
@@ -1351,10 +1358,11 @@ function cleanupNonRosterRows_() {
     }
 
     const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    const rosterNameSet = getRosterNameSet_();
 
     for (let index = rows.length - 1; index >= 0; index -= 1) {
       const playerName = String(rows[index][1] || "").trim();
-      if (!isRosterPlayer_(playerName)) {
+      if (!isRosterPlayer_(playerName, rosterNameSet)) {
         deletedNames.push(playerName || "(blank)");
         sheet.deleteRow(index + 2);
       }
@@ -2100,6 +2108,7 @@ function getBillingAttendance_(month) {
   validateMonth_(month);
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
+  const rosterNameSet = getRosterNameSet_();
   const byDate = {};
 
   if (lastRow >= 2) {
@@ -2113,7 +2122,7 @@ function getBillingAttendance_(month) {
       if (
         date.indexOf(`${month}-`) !== 0 ||
         vote !== "yes" ||
-        !isRosterPlayer_(playerName)
+        !isRosterPlayer_(playerName, rosterNameSet)
       ) {
         return;
       }
@@ -2735,6 +2744,7 @@ function getExportDatesForMonth_(sheet, month) {
 
 function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
   const lastRow = sheet.getLastRow();
+  const rosterNameSet = getRosterNameSet_();
   const totals = {};
 
   if (lastRow < 2) {
@@ -2748,7 +2758,11 @@ function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
     const vote = normalize_(row[2]);
     const participantCount = clampStoredParticipantCount_(row[3]);
 
-    if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
+    if (
+      rowDate !== playDate ||
+      vote !== "yes" ||
+      !isRosterPlayer_(playerName, rosterNameSet)
+    ) {
       return;
     }
 
@@ -2817,6 +2831,7 @@ function formatDisplayDate_(dateValue) {
 function getTally_(playDate) {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
+  const rosterNameSet = getRosterNameSet_();
   const tally = {
     playDate,
     playerCount: 0,
@@ -2836,7 +2851,11 @@ function getTally_(playDate) {
     const vote = normalize_(row[2]);
     const participantCount = clampStoredParticipantCount_(row[3]);
 
-    if (rowDate !== playDate || vote !== "yes" || !isRosterPlayer_(playerName)) {
+    if (
+      rowDate !== playDate ||
+      vote !== "yes" ||
+      !isRosterPlayer_(playerName, rosterNameSet)
+    ) {
       return;
     }
 
@@ -2920,8 +2939,11 @@ function formatDate_(date) {
   return `${year}-${month}-${day}`;
 }
 
-function isRosterPlayer_(playerName) {
+function isRosterPlayer_(playerName, rosterNameSet) {
   const normalizedName = normalize_(playerName);
+  if (rosterNameSet) {
+    return Boolean(rosterNameSet[normalizedName]);
+  }
   return getRosterNames_().some((player) => normalize_(player) === normalizedName);
 }
 
