@@ -6,6 +6,7 @@
   let adminToken = "";
   let expiresAt = 0;
   const listeners = new Set();
+  const REQUEST_TIMEOUT_MS = 12000;
 
   function readAdminAuth() {
     try {
@@ -59,15 +60,48 @@
     return JSON.parse(trimmed.slice(prefix.length, -2));
   }
 
+  function fetchWithTimeout(url, options, timeoutMs) {
+    if (typeof AbortController === "undefined") {
+      return new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(
+          () => reject(new Error("Request timed out")),
+          timeoutMs,
+        );
+        fetch(url, options)
+          .then(resolve)
+          .catch(reject)
+          .finally(() => window.clearTimeout(timeout));
+      });
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+      .catch((error) => {
+        if (error.name === "AbortError") {
+          throw new Error("Request timed out");
+        }
+        throw error;
+      })
+      .finally(() => window.clearTimeout(timeout));
+  }
+
   async function requestAppsScript(payload) {
     const callbackName = `adminAuthCallback_${Date.now()}_${Math.random()
       .toString(36)
       .slice(2)}`;
-    const response = await fetch(buildAppsScriptUrl(payload, callbackName), {
-      cache: "no-store",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
-    });
+    const response = await fetchWithTimeout(
+      buildAppsScriptUrl(payload, callbackName),
+      {
+        cache: "no-store",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+      },
+      REQUEST_TIMEOUT_MS,
+    );
     const parsed = parseJsonpResponse(await response.text(), callbackName);
 
     if (response.ok && parsed.ok) {

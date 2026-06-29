@@ -61,6 +61,8 @@
   const ADMIN_BILLING_CACHE_TTL_MS = 60 * 1000;
   const MEMBER_BILLING_MONTHS_CACHE_TTL_MS = 5 * 60 * 1000;
   const ADMIN_BILLING_MONTHS_CACHE_TTL_MS = 60 * 1000;
+  const FETCH_TIMEOUT_MS = 12000;
+  const JSONP_TIMEOUT_MS = 30000;
   const VENMO_RECIPIENT_NAME = "Nam Pham";
   const VENMO_RECIPIENT_USERNAME = "nampham2022";
   const LOCAL_BILLING_FIXTURE = new URLSearchParams(window.location.search).get(
@@ -145,15 +147,48 @@
     return JSON.parse(trimmed.slice(prefix.length, -2));
   }
 
+  function fetchWithTimeout(url, options, timeoutMs) {
+    if (typeof AbortController === "undefined") {
+      return new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(
+          () => reject(new Error("Request timed out")),
+          timeoutMs,
+        );
+        fetch(url, options)
+          .then(resolve)
+          .catch(reject)
+          .finally(() => window.clearTimeout(timeout));
+      });
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+      .catch((error) => {
+        if (error.name === "AbortError") {
+          throw new Error("Request timed out");
+        }
+        throw error;
+      })
+      .finally(() => window.clearTimeout(timeout));
+  }
+
   async function requestViaFetch(payload) {
     const callbackName = `billingCallback_${Date.now()}_${Math.random()
       .toString(36)
       .slice(2)}`;
-    const response = await fetch(buildAppsScriptUrl(payload, callbackName), {
-      cache: "no-store",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
-    });
+    const response = await fetchWithTimeout(
+      buildAppsScriptUrl(payload, callbackName),
+      {
+        cache: "no-store",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+      },
+      FETCH_TIMEOUT_MS,
+    );
     const parsed = parseJsonp(await response.text(), callbackName);
 
     if (response.ok && parsed.ok) {
@@ -173,7 +208,7 @@
       const timeout = window.setTimeout(() => {
         cleanup();
         reject(new Error("Apps Script took too long to respond"));
-      }, 90000);
+      }, JSONP_TIMEOUT_MS);
 
       function cleanup() {
         window.clearTimeout(timeout);
