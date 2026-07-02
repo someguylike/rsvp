@@ -2,6 +2,8 @@ const SHEET_NAME = "RSVPs";
 const ROSTER_SHEET_NAME = "Roster";
 const AUDIT_SHEET_NAME = "RSVP Audit Log";
 const SPREADSHEET_ID_PROPERTY = "RSVP_SPREADSHEET_ID";
+const ROSTER_CACHE_KEY = "rsvp-public-roster-v1";
+const ROSTER_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const PLAY_START_HOUR = 6;
 const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
 const UNVOTE_LOCK_MESSAGE =
@@ -50,6 +52,14 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         roster: getRoster_(),
+      });
+    }
+
+    if (params.action === "refreshRosterCache") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "refreshRosterCache",
+        roster: refreshRosterCache_(),
       });
     }
 
@@ -110,10 +120,14 @@ function deleteRsvp_(params) {
   try {
     const playDate = required_(params.playDate, "Missing play date");
     const playerName = required_(params.playerName, "Missing player name").trim();
-    validatePlayerName_(playerName);
     const sheet = getSheet_();
-    const rows = findExistingRows_(sheet, playDate, playerName);
-    const existingRsvp = rows.length > 0 ? getRsvpAtRow_(sheet, rows[0]) : null;
+    const rosterNameSet = getRosterNameSet_();
+    validatePlayerName_(playerName, rosterNameSet);
+    const snapshot = readRsvpRows_(sheet);
+    const rows = findExistingRowsInSnapshot_(snapshot, playDate, playerName);
+    const existingRsvp = rows.length > 0
+      ? getRsvpFromSnapshot_(snapshot, rows[0])
+      : null;
 
     if (isUnvoteLocked_(playDate)) {
       appendAuditLog_(params, "blocked_unvote", rows[0] || null, existingRsvp);
@@ -126,7 +140,7 @@ function deleteRsvp_(params) {
         action: "not_found",
         row: null,
         audit,
-        tally: getTally_(playDate),
+        tally: buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet),
       };
     }
 
@@ -138,7 +152,11 @@ function deleteRsvp_(params) {
       action: "deleted",
       row: rows[0],
       audit,
-      tally: getTally_(playDate),
+      tally: buildTallyFromSnapshot_(
+        removeRowsFromSnapshot_(snapshot, rows),
+        playDate,
+        rosterNameSet,
+      ),
     };
   } finally {
     lock.releaseLock();
@@ -150,7 +168,8 @@ function upsertRsvpWithLock_(params) {
   const playerName = sanitizeText_(
     required_(params.playerName, "Missing player name").trim(),
   );
-  validatePlayerName_(playerName);
+  const rosterNameSet = getRosterNameSet_();
+  validatePlayerName_(playerName, rosterNameSet);
   const participantCount = clampSubmittedParticipantCount_(
     params.participantCount,
   );
@@ -162,9 +181,10 @@ function upsertRsvpWithLock_(params) {
   const updatedAt = new Date().toISOString();
 
   const sheet = getSheet_();
-  const matchingRows = findExistingRows_(sheet, playDate, playerName);
+  const snapshot = readRsvpRows_(sheet);
+  const matchingRows = findExistingRowsInSnapshot_(snapshot, playDate, playerName);
   const row = matchingRows[0] || null;
-  const existingRsvp = row ? getRsvpAtRow_(sheet, row) : null;
+  const existingRsvp = row ? getRsvpFromSnapshot_(snapshot, row) : null;
   let audit;
 
   if (normalize_(vote) === "no") {
@@ -182,7 +202,11 @@ function upsertRsvpWithLock_(params) {
         action: "deleted",
         row,
         audit,
-        tally: getTally_(playDate),
+        tally: buildTallyFromSnapshot_(
+          removeRowsFromSnapshot_(snapshot, matchingRows),
+          playDate,
+          rosterNameSet,
+        ),
       };
     }
 
@@ -191,7 +215,7 @@ function upsertRsvpWithLock_(params) {
       action: "not_found",
       row: null,
       audit,
-      tally: getTally_(playDate),
+      tally: buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet),
     };
   }
 
@@ -213,7 +237,7 @@ function upsertRsvpWithLock_(params) {
         row,
         existing: existingRsvp,
         audit,
-        tally: getTally_(playDate),
+        tally: buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet),
       };
     }
 
@@ -221,7 +245,23 @@ function upsertRsvpWithLock_(params) {
     values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
     audit = appendAuditLog_(params, "updated", row, existingRsvp);
-    return { action: "updated", row, audit, tally: getTally_(playDate) };
+    return {
+      action: "updated",
+      row,
+      audit,
+      tally: buildTallyFromSnapshot_(
+        upsertSnapshotRow_(
+          removeRowsFromSnapshot_(
+            snapshot,
+            matchingRows.filter((rowNumber) => rowNumber !== row),
+          ),
+          row,
+          values,
+        ),
+        playDate,
+        rosterNameSet,
+      ),
+    };
   }
 
   sheet.appendRow(values);
@@ -231,7 +271,11 @@ function upsertRsvpWithLock_(params) {
     action: "created",
     row: appendedRow,
     audit,
-    tally: getTally_(playDate),
+    tally: buildTallyFromSnapshot_(
+      upsertSnapshotRow_(snapshot, appendedRow, values),
+      playDate,
+      rosterNameSet,
+    ),
   };
 }
 
@@ -363,6 +407,30 @@ function appendAuditLog_(params, action, row, existingRsvp) {
 }
 
 function getRoster_() {
+  const cached = CacheService.getScriptCache().get(ROSTER_CACHE_KEY);
+  if (cached) {
+    try {
+      const roster = JSON.parse(cached);
+      if (Array.isArray(roster)) {
+        return roster;
+      }
+    } catch {
+      // Fall through and refresh the cache from the sheet.
+    }
+  }
+
+  return refreshRosterCache_();
+}
+
+function refreshRosterCache_() {
+  const roster = getRosterFromSheet_();
+  CacheService
+    .getScriptCache()
+    .put(ROSTER_CACHE_KEY, JSON.stringify(roster), ROSTER_CACHE_TTL_SECONDS);
+  return roster;
+}
+
+function getRosterFromSheet_() {
   const sheet = getRosterSheet_();
   const lastRow = sheet.getLastRow();
 
@@ -388,6 +456,76 @@ function getRosterNameSet_() {
     names[normalize_(member.name)] = true;
     return names;
   }, {});
+}
+
+function readRsvpRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, HEADERS.length)
+    .getValues()
+    .map((values, index) => ({
+      rowNumber: index + 2,
+      values,
+    }));
+}
+
+function findExistingRowsInSnapshot_(snapshot, playDate, playerName) {
+  const normalizedName = normalize_(playerName);
+  return snapshot
+    .filter((entry) => {
+      const rowDate = normalizeDate_(entry.values[0]);
+      const rowName = normalize_(entry.values[1]);
+      return rowDate === playDate && rowName === normalizedName;
+    })
+    .map((entry) => entry.rowNumber);
+}
+
+function getRsvpFromSnapshot_(snapshot, rowNumber) {
+  const entry = snapshot.find((candidate) => candidate.rowNumber === rowNumber);
+  if (!entry) {
+    return null;
+  }
+
+  return rsvpValuesToRecord_(entry.values);
+}
+
+function removeRowsFromSnapshot_(snapshot, rowNumbers) {
+  const rowsToRemove = rowNumbers.reduce((rows, rowNumber) => {
+    rows[rowNumber] = true;
+    return rows;
+  }, {});
+
+  return snapshot.filter((entry) => !rowsToRemove[entry.rowNumber]);
+}
+
+function upsertSnapshotRow_(snapshot, rowNumber, values) {
+  const nextEntry = {
+    rowNumber,
+    values,
+  };
+  const existingIndex = snapshot.findIndex((entry) => entry.rowNumber === rowNumber);
+  if (existingIndex === -1) {
+    return snapshot.concat(nextEntry);
+  }
+
+  return snapshot.map((entry, index) => (
+    index === existingIndex ? nextEntry : entry
+  ));
+}
+
+function rsvpValuesToRecord_(values) {
+  return {
+    playDate: normalizeDate_(values[0]),
+    playerName: String(values[1] || "").trim(),
+    vote: String(values[2] || "").trim(),
+    participantCount: clampStoredParticipantCount_(values[3]),
+    submittedAt: String(values[4] || ""),
+    updatedAt: String(values[5] || ""),
+  };
 }
 
 function findExistingRows_(sheet, playDate, playerName) {
@@ -422,20 +560,16 @@ function deleteDuplicateRows_(sheet, rows, keepRow) {
 
 function getRsvpAtRow_(sheet, row) {
   const values = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
-  return {
-    playDate: normalizeDate_(values[0]),
-    playerName: String(values[1] || "").trim(),
-    vote: String(values[2] || "").trim(),
-    participantCount: clampStoredParticipantCount_(values[3]),
-    submittedAt: String(values[4] || ""),
-    updatedAt: String(values[5] || ""),
-  };
+  return rsvpValuesToRecord_(values);
 }
 
 function getTally_(playDate) {
   const sheet = getSheet_();
-  const lastRow = sheet.getLastRow();
   const rosterNameSet = getRosterNameSet_();
+  return buildTallyFromSnapshot_(readRsvpRows_(sheet), playDate, rosterNameSet);
+}
+
+function buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet) {
   const tally = {
     playDate,
     playerCount: 0,
@@ -443,43 +577,30 @@ function getTally_(playDate) {
     players: [],
   };
 
-  if (lastRow < 2) {
-    return tally;
-  }
-
-  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
-
-  rows.forEach((row) => {
-    const rowDate = normalizeDate_(row[0]);
-    const playerName = String(row[1] || "").trim();
-    const vote = normalize_(row[2]);
-    const participantCount = clampStoredParticipantCount_(row[3]);
+  snapshot.forEach((entry) => {
+    const rsvp = rsvpValuesToRecord_(entry.values);
 
     if (
-      rowDate !== playDate ||
-      vote !== "yes" ||
-      !isRosterPlayer_(playerName, rosterNameSet)
+      rsvp.playDate !== playDate ||
+      normalize_(rsvp.vote) !== "yes" ||
+      !isRosterPlayer_(rsvp.playerName, rosterNameSet)
     ) {
       return;
     }
 
-    const normalizedPlayer = normalize_(playerName);
+    const normalizedPlayer = normalize_(rsvp.playerName);
     const existingPlayer = tally.players.find(
       (player) => normalize_(player.name) === normalizedPlayer,
     );
 
     if (existingPlayer) {
-      existingPlayer.participantCount += Number.isFinite(participantCount)
-        ? participantCount
-        : 1;
+      existingPlayer.participantCount += rsvp.participantCount;
       return;
     }
 
     tally.players.push({
-      name: playerName,
-      participantCount: Number.isFinite(participantCount)
-        ? participantCount
-        : 1,
+      name: rsvp.playerName,
+      participantCount: rsvp.participantCount,
     });
   });
 

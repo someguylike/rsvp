@@ -1,6 +1,8 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
+  const RSVP_PUBLIC_APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbwkQT5n28qD0wVpRCA3qgJs5fZy_YG_TmNIXAyqQ-AZFTYJVyMOCjGKfsE-D9_R4x64VQ/exec";
 
   const form = document.querySelector("#roster-form");
   const adminAuth = window.RsvpAdminAuth;
@@ -114,6 +116,37 @@
 
   function requestAppsScript(payload) {
     return requestViaFetch(payload).catch(() => requestViaJsonp(payload));
+  }
+
+  function refreshPublicRsvpRosterCache() {
+    return new Promise((resolve) => {
+      if (!RSVP_PUBLIC_APPS_SCRIPT_URL) {
+        resolve();
+        return;
+      }
+
+      const callbackName = `publicRosterRefresh_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      const script = document.createElement("script");
+      const url = new URL(RSVP_PUBLIC_APPS_SCRIPT_URL);
+      const timeout = window.setTimeout(cleanup, 15000);
+
+      function cleanup() {
+        window.clearTimeout(timeout);
+        script.remove();
+        delete window[callbackName];
+        resolve();
+      }
+
+      window[callbackName] = cleanup;
+      script.onerror = cleanup;
+      script.referrerPolicy = "no-referrer";
+      url.searchParams.set("callback", callbackName);
+      url.searchParams.set("action", "refreshRosterCache");
+      script.src = url.toString();
+      document.body.append(script);
+    });
   }
 
   function clearForm() {
@@ -527,6 +560,7 @@
         ...payload,
       });
       roster = Array.isArray(result.roster) ? result.roster : [];
+      refreshPublicRsvpRosterCache();
       renderMemberNameOptions();
       renderRoster();
       clearForm();
@@ -582,6 +616,7 @@
         playerName,
       });
       roster = Array.isArray(result.roster) ? result.roster : [];
+      refreshPublicRsvpRosterCache();
       renderMemberNameOptions();
       renderRoster();
       clearForm();

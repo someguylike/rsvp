@@ -1220,21 +1220,27 @@
     }
   }
 
-  async function initialize() {
+  function initialize() {
     restoreRosterContacts();
     restoreLastPlayer();
     renderDateOptions();
 
     participantInput.value = "1";
     updatePlayerMemory();
-    await loadRoster();
-    if (playerInput.value && !selectedPlayerName) {
-      const exactMatch = exactPlayerMatch(playerInput.value);
-      if (exactMatch) {
-        selectPlayerName(exactMatch, { remember: false, keepFocus: true });
+
+    loadRoster().then(() => {
+      if (playerInput.value && !selectedPlayerName) {
+        const exactMatch = exactPlayerMatch(playerInput.value);
+        if (exactMatch) {
+          selectPlayerName(exactMatch, { remember: false, keepFocus: true });
+        }
       }
-    }
-    updatePlayerMemory();
+      updatePlayerMemory();
+      if (document.activeElement === playerInput && !selectedPlayerName) {
+        renderPlayerMatches(playerInput.value);
+      }
+    });
+
     if (!selectedPlayerName && !isMobileViewport()) {
       focusPlayerInput();
       renderPlayerMatches("");
