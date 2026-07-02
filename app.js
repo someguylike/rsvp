@@ -57,8 +57,8 @@
   const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
-  const FETCH_TIMEOUT_MS = 12000;
-  const JSONP_TIMEOUT_MS = 30000;
+  const FETCH_TIMEOUT_MS = 45000;
+  const JSONP_TIMEOUT_MS = 45000;
   const PARTICIPANT_OPTIONS = [
     { value: "0", label: "Not going", isUnvote: true },
     { value: "1", label: "Just me" },
