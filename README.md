@@ -108,9 +108,14 @@ GitHub Pages will publish from `main` after a short delay.
 
 ## Apps Script Backend Notes
 
-The backend source is intentionally checked into this public repo at `google-apps-script/Code.gs`.
+The backend source is intentionally checked into this public repo.
 
-Apps Script deployment is manual:
+- `google-apps-script/rsvp-web-app/Code.gs`: small public RSVP backend for `index.html` only.
+- `google-apps-script/Code.gs`: full admin backend for roster, report, billing, backfill, and admin tools.
+
+Use two Apps Script Web App deployments so the hot RSVP form does not cold-start the larger Billing/export/admin backend.
+
+Full admin backend deployment is manual:
 
 1. Open the RSVP Google Sheet.
 2. Go to `Extensions > Apps Script`.
@@ -121,7 +126,26 @@ Apps Script deployment is manual:
 7. Select **New version**.
 8. Deploy.
 
-The Web App URL must stay in both `app.js` and `export.js`.
+The full admin backend Web App URL must stay in:
+
+- `admin-auth.js`
+- `admin.js`
+- `backfill-finalized.js`
+- `billing.js`
+- `export.js`
+- `roster.js`
+
+RSVP backend deployment is also manual:
+
+1. Open the same RSVP Google Sheet.
+2. Create a separate Apps Script project for the RSVP Web App, or open the existing RSVP-only project if it already exists.
+3. Replace its `Code.gs` with `google-apps-script/rsvp-web-app/Code.gs`.
+4. If the project is standalone, set script property `RSVP_SPREADSHEET_ID` to the RSVP Google Sheet ID.
+5. Click Save.
+6. Deploy it as a Web App with the same access settings as the current public backend.
+7. Copy the RSVP Web App URL into `app.js` as `APPS_SCRIPT_URL`.
+8. Bump the `app.js` query string in `index.html`.
+9. Commit and push the URL/cachebuster change.
 
 ## Production Reset
 

@@ -1,0 +1,574 @@
+const SHEET_NAME = "RSVPs";
+const ROSTER_SHEET_NAME = "Roster";
+const AUDIT_SHEET_NAME = "RSVP Audit Log";
+const SPREADSHEET_ID_PROPERTY = "RSVP_SPREADSHEET_ID";
+const PLAY_START_HOUR = 6;
+const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
+const UNVOTE_LOCK_MESSAGE =
+  "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.";
+
+const HEADERS = [
+  "Play Date",
+  "Player Name",
+  "Vote",
+  "Participant Count",
+  "Submitted At",
+  "Updated At",
+];
+const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Note"];
+const AUDIT_HEADERS = [
+  "Logged At",
+  "Action",
+  "Play Date",
+  "Player Name",
+  "Participant Count",
+  "Row",
+  "Browser ID",
+  "Browser Signature",
+  "Client Device",
+  "Client Time Zone",
+  "Client Language",
+  "Client Screen",
+  "Client IP",
+  "Submitted At",
+  "Existing RSVP",
+  "Public IP",
+  "Public IP Source",
+  "Client User Agent",
+  "Client Platform",
+  "Client Vendor",
+  "Client Referrer",
+  "Page URL",
+];
+
+function doGet(event) {
+  const params = event && event.parameter ? event.parameter : {};
+  const callback = params.callback || "callback";
+
+  try {
+    if (params.action === "listRoster") {
+      return jsonp_(callback, {
+        ok: true,
+        roster: getRoster_(),
+      });
+    }
+
+    if (params.action === "list") {
+      return jsonp_(callback, {
+        ok: true,
+        tally: getTally_(required_(params.playDate, "Missing play date")),
+      });
+    }
+
+    if (params.action === "delete") {
+      const result = deleteRsvp_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: result.action,
+        row: result.row,
+        audit: result.audit || null,
+        tally: result.tally,
+      });
+    }
+
+    if (params.action) {
+      throw new Error(`Unsupported action: ${params.action}`);
+    }
+
+    const result = upsertRsvp_(params);
+    return jsonp_(callback, {
+      ok: true,
+      action: result.action,
+      row: result.row,
+      existing: result.existing || null,
+      audit: result.audit || null,
+      tally: result.tally,
+    });
+  } catch (error) {
+    return jsonp_(callback, {
+      ok: false,
+      error: error.message,
+    });
+  }
+}
+
+function upsertRsvp_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    return upsertRsvpWithLock_(params);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteRsvp_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const playDate = required_(params.playDate, "Missing play date");
+    const playerName = required_(params.playerName, "Missing player name").trim();
+    validatePlayerName_(playerName);
+    const sheet = getSheet_();
+    const rows = findExistingRows_(sheet, playDate, playerName);
+    const existingRsvp = rows.length > 0 ? getRsvpAtRow_(sheet, rows[0]) : null;
+
+    if (isUnvoteLocked_(playDate)) {
+      appendAuditLog_(params, "blocked_unvote", rows[0] || null, existingRsvp);
+      throw new Error(UNVOTE_LOCK_MESSAGE);
+    }
+
+    if (rows.length === 0) {
+      const audit = appendAuditLog_(params, "delete_not_found", null, null);
+      return {
+        action: "not_found",
+        row: null,
+        audit,
+        tally: getTally_(playDate),
+      };
+    }
+
+    rows.sort((first, second) => second - first).forEach((row) => {
+      sheet.deleteRow(row);
+    });
+    const audit = appendAuditLog_(params, "deleted", rows[0], existingRsvp);
+    return {
+      action: "deleted",
+      row: rows[0],
+      audit,
+      tally: getTally_(playDate),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function upsertRsvpWithLock_(params) {
+  const playDate = required_(params.playDate, "Missing play date");
+  const playerName = sanitizeText_(
+    required_(params.playerName, "Missing player name").trim(),
+  );
+  validatePlayerName_(playerName);
+  const participantCount = clampSubmittedParticipantCount_(
+    params.participantCount,
+  );
+  const vote =
+    participantCount > 0 && normalize_(params.vote || "Yes") !== "no"
+      ? "Yes"
+      : "No";
+  const submittedAt = params.submittedAt || new Date().toISOString();
+  const updatedAt = new Date().toISOString();
+
+  const sheet = getSheet_();
+  const matchingRows = findExistingRows_(sheet, playDate, playerName);
+  const row = matchingRows[0] || null;
+  const existingRsvp = row ? getRsvpAtRow_(sheet, row) : null;
+  let audit;
+
+  if (normalize_(vote) === "no") {
+    if (isUnvoteLocked_(playDate)) {
+      appendAuditLog_(params, "blocked_unvote", row, existingRsvp);
+      throw new Error(UNVOTE_LOCK_MESSAGE);
+    }
+
+    if (row) {
+      matchingRows.sort((first, second) => second - first).forEach((rowNumber) => {
+        sheet.deleteRow(rowNumber);
+      });
+      audit = appendAuditLog_(params, "deleted", row, existingRsvp);
+      return {
+        action: "deleted",
+        row,
+        audit,
+        tally: getTally_(playDate),
+      };
+    }
+
+    audit = appendAuditLog_(params, "delete_not_found", null, null);
+    return {
+      action: "not_found",
+      row: null,
+      audit,
+      tally: getTally_(playDate),
+    };
+  }
+
+  const values = [
+    playDate,
+    playerName,
+    vote,
+    participantCount,
+    submittedAt,
+    updatedAt,
+  ];
+
+  if (row) {
+    deleteDuplicateRows_(sheet, matchingRows, row);
+    if (normalize_(existingRsvp.vote) !== "no" && params.confirmOverride !== "true") {
+      audit = appendAuditLog_(params, "needs_confirmation", row, existingRsvp);
+      return {
+        action: "needs_confirmation",
+        row,
+        existing: existingRsvp,
+        audit,
+        tally: getTally_(playDate),
+      };
+    }
+
+    const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
+    values[4] = originalSubmittedAt;
+    sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    audit = appendAuditLog_(params, "updated", row, existingRsvp);
+    return { action: "updated", row, audit, tally: getTally_(playDate) };
+  }
+
+  sheet.appendRow(values);
+  const appendedRow = sheet.getLastRow();
+  audit = appendAuditLog_(params, "created", appendedRow, null);
+  return {
+    action: "created",
+    row: appendedRow,
+    audit,
+    tally: getTally_(playDate),
+  };
+}
+
+function getSheet_() {
+  const spreadsheet = getSpreadsheet_();
+  let sheet = spreadsheet.getSheetByName(SHEET_NAME);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(SHEET_NAME);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+  const currentHeaders = headerRange.getValues()[0];
+  const needsHeaders = HEADERS.some((header, index) => currentHeaders[index] !== header);
+
+  if (needsHeaders) {
+    headerRange.setValues([HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+
+  return sheet;
+}
+
+function getRosterSheet_() {
+  const spreadsheet = getSpreadsheet_();
+  let sheet = spreadsheet.getSheetByName(ROSTER_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(ROSTER_SHEET_NAME);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, ROSTER_HEADERS.length);
+  const currentHeaders = headerRange.getValues()[0];
+  const needsHeaders = ROSTER_HEADERS.some(
+    (header, index) => currentHeaders[index] !== header,
+  );
+
+  if (needsHeaders) {
+    headerRange.setValues([ROSTER_HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+
+  return sheet;
+}
+
+function getAuditSheet_() {
+  const spreadsheet = getSpreadsheet_();
+  let sheet = spreadsheet.getSheetByName(AUDIT_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(AUDIT_SHEET_NAME);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, AUDIT_HEADERS.length);
+  const currentHeaders = headerRange.getValues()[0];
+  const needsHeaders = AUDIT_HEADERS.some((header, index) => currentHeaders[index] !== header);
+
+  if (needsHeaders) {
+    headerRange.setValues([AUDIT_HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+  sheet.getRange("C:C").setNumberFormat("@");
+
+  return sheet;
+}
+
+function getSpreadsheet_() {
+  const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (activeSpreadsheet) {
+    return activeSpreadsheet;
+  }
+
+  const spreadsheetId = PropertiesService
+    .getScriptProperties()
+    .getProperty(SPREADSHEET_ID_PROPERTY);
+  if (!spreadsheetId) {
+    throw new Error(`Set script property ${SPREADSHEET_ID_PROPERTY}`);
+  }
+
+  return SpreadsheetApp.openById(spreadsheetId);
+}
+
+function appendAuditLog_(params, action, row, existingRsvp) {
+  try {
+    const sheet = getAuditSheet_();
+    const auditPlayDate = normalizeDate_(params.playDate || "");
+    const values = [
+      new Date().toISOString(),
+      action,
+      sanitizeText_(auditPlayDate),
+      sanitizeText_(params.playerName || ""),
+      sanitizeText_(params.participantCount || ""),
+      row || "",
+      sanitizeText_(params.browserId || ""),
+      sanitizeText_(params.browserSignature || ""),
+      sanitizeText_(params.clientDeviceClass || ""),
+      sanitizeText_(params.clientTimeZone || ""),
+      sanitizeText_(params.clientLanguage || ""),
+      sanitizeText_(params.clientScreen || ""),
+      sanitizeText_(params.clientIp || "Unavailable in Apps Script"),
+      sanitizeText_(params.submittedAt || ""),
+      existingRsvp ? JSON.stringify(existingRsvp) : "",
+      sanitizeText_(params.clientPublicIp || ""),
+      sanitizeText_(params.clientPublicIpSource || ""),
+      sanitizeText_(params.clientUserAgent || ""),
+      sanitizeText_(params.clientPlatform || ""),
+      sanitizeText_(params.clientVendor || ""),
+      sanitizeText_(params.clientReferrer || ""),
+      sanitizeText_(params.clientPageUrl || ""),
+    ];
+    sheet.appendRow(values);
+    return {
+      ok: true,
+      sheet: AUDIT_SHEET_NAME,
+      row: sheet.getLastRow(),
+      action,
+      playDate: auditPlayDate,
+    };
+  } catch (error) {
+    console.warn(`Could not append RSVP audit log: ${error.message}`);
+    return {
+      ok: false,
+      sheet: AUDIT_SHEET_NAME,
+      action,
+      playDate: normalizeDate_(params.playDate || ""),
+      error: error.message,
+    };
+  }
+}
+
+function getRoster_() {
+  const sheet = getRosterSheet_();
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, ROSTER_HEADERS.length)
+    .getValues()
+    .map((row) => ({
+      name: String(row[0] || "").trim(),
+      venmo: String(row[1] || "").trim(),
+      messenger: String(row[2] || "").trim(),
+      note: String(row[3] || "").trim(),
+    }))
+    .filter((member) => member.name)
+    .sort((first, second) => first.name.localeCompare(second.name));
+}
+
+function getRosterNameSet_() {
+  return getRoster_().reduce((names, member) => {
+    names[normalize_(member.name)] = true;
+    return names;
+  }, {});
+}
+
+function findExistingRows_(sheet, playDate, playerName) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  const normalizedName = normalize_(playerName);
+  const rows = [];
+
+  for (let index = 0; index < data.length; index += 1) {
+    const rowDate = normalizeDate_(data[index][0]);
+    const rowName = normalize_(data[index][1]);
+    if (rowDate === playDate && rowName === normalizedName) {
+      rows.push(index + 2);
+    }
+  }
+
+  return rows;
+}
+
+function deleteDuplicateRows_(sheet, rows, keepRow) {
+  rows
+    .filter((row) => row !== keepRow)
+    .sort((first, second) => second - first)
+    .forEach((row) => {
+      sheet.deleteRow(row);
+    });
+}
+
+function getRsvpAtRow_(sheet, row) {
+  const values = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+  return {
+    playDate: normalizeDate_(values[0]),
+    playerName: String(values[1] || "").trim(),
+    vote: String(values[2] || "").trim(),
+    participantCount: clampStoredParticipantCount_(values[3]),
+    submittedAt: String(values[4] || ""),
+    updatedAt: String(values[5] || ""),
+  };
+}
+
+function getTally_(playDate) {
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  const rosterNameSet = getRosterNameSet_();
+  const tally = {
+    playDate,
+    playerCount: 0,
+    totalCount: 0,
+    players: [],
+  };
+
+  if (lastRow < 2) {
+    return tally;
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+
+  rows.forEach((row) => {
+    const rowDate = normalizeDate_(row[0]);
+    const playerName = String(row[1] || "").trim();
+    const vote = normalize_(row[2]);
+    const participantCount = clampStoredParticipantCount_(row[3]);
+
+    if (
+      rowDate !== playDate ||
+      vote !== "yes" ||
+      !isRosterPlayer_(playerName, rosterNameSet)
+    ) {
+      return;
+    }
+
+    const normalizedPlayer = normalize_(playerName);
+    const existingPlayer = tally.players.find(
+      (player) => normalize_(player.name) === normalizedPlayer,
+    );
+
+    if (existingPlayer) {
+      existingPlayer.participantCount += Number.isFinite(participantCount)
+        ? participantCount
+        : 1;
+      return;
+    }
+
+    tally.players.push({
+      name: playerName,
+      participantCount: Number.isFinite(participantCount)
+        ? participantCount
+        : 1,
+    });
+  });
+
+  tally.players.sort((first, second) => first.name.localeCompare(second.name));
+  tally.playerCount = tally.players.length;
+  tally.totalCount = tally.players.reduce(
+    (sum, player) => sum + player.participantCount,
+    0,
+  );
+
+  return tally;
+}
+
+function normalize_(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function clampSubmittedParticipantCount_(value) {
+  const count = Math.trunc(Number(value || 0));
+  return Number.isFinite(count) ? Math.min(5, Math.max(0, count)) : 1;
+}
+
+function clampStoredParticipantCount_(value) {
+  const count = Math.trunc(Number(value || 1));
+  return Number.isFinite(count) ? Math.min(5, Math.max(1, count)) : 1;
+}
+
+function isUnvoteLocked_(playDate) {
+  const match = String(playDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return false;
+  }
+
+  const playStart = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    PLAY_START_HOUR,
+    0,
+    0,
+    0,
+  );
+  const lockTime = new Date(
+    playStart.getTime() - UNVOTE_LOCK_HOURS_BEFORE_PLAY * 60 * 60 * 1000,
+  );
+  return new Date() >= lockTime;
+}
+
+function isRosterPlayer_(playerName, rosterNameSet) {
+  const normalizedName = normalize_(playerName);
+  if (rosterNameSet) {
+    return Boolean(rosterNameSet[normalizedName]);
+  }
+  return getRoster_().some((member) => normalize_(member.name) === normalizedName);
+}
+
+function validatePlayerName_(playerName) {
+  if (!isRosterPlayer_(playerName)) {
+    throw new Error("Please choose a player from the roster");
+  }
+}
+
+function sanitizeText_(value) {
+  const text = String(value || "").trim();
+  return /^[=+\-]/.test(text) ? `'${text}` : text;
+}
+
+function normalizeDate_(value) {
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value)) {
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      "yyyy-MM-dd",
+    );
+  }
+
+  return String(value || "").trim();
+}
+
+function required_(value, message) {
+  if (!String(value || "").trim()) {
+    throw new Error(message);
+  }
+  return String(value);
+}
+
+function jsonp_(callback, payload) {
+  const safeCallback = String(callback).replace(/[^\w.$]/g, "");
+  return ContentService.createTextOutput(
+    `${safeCallback}(${JSON.stringify(payload)});`,
+  ).setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
