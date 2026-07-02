@@ -2702,25 +2702,48 @@ function resetExportSheet_(sheet) {
 function viewMonthRoster_(month) {
   validateMonth_(month);
 
+  const sourceSheet = getSheet_();
   const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
   const exportSheetName = formatMonthTabName_(month);
   const exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
+  const currentDates = getCurrentExportDatesForMonth_(sourceSheet, month);
 
-  if (!exportSheet) {
-    const previewRows = trimEmptyEdges_(buildMonthRosterMatrix_(getSheet_(), month));
+  if (exportSheet) {
+    const savedRows = getPreviewRows_(exportSheet);
+    const savedDates = getPreviewDateHeaders_(savedRows);
+    const missingDates = getMissingDates_(currentDates, savedDates);
+
+    if (missingDates.length === 0) {
+      return {
+        sheetName: exportSheetName,
+        exportedDates: savedDates.length,
+        previewRows: savedRows,
+        url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
+        isStale: false,
+      };
+    }
+
+    const liveRows = trimEmptyEdges_(buildMonthRosterMatrix_(sourceSheet, month));
     return {
       sheetName: `${exportSheetName} live preview`,
-      exportedDates: previewRows.length > 0 ? Math.max(0, previewRows[0].length - 1) : 0,
-      previewRows,
-      url: "",
+      exportedDates: liveRows.length > 0 ? Math.max(0, liveRows[0].length - 1) : 0,
+      previewRows: liveRows,
+      url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
+      isStale: true,
+      staleMessage: `Saved report is missing ${missingDates
+        .map(formatDisplayDate_)
+        .join(", ")}. Showing live preview; admin should recreate the latest report.`,
     };
   }
 
+  const previewRows = trimEmptyEdges_(buildMonthRosterMatrix_(sourceSheet, month));
+
   return {
-    sheetName: exportSheetName,
-    exportedDates: getExportedDateCount_(exportSheet),
-    previewRows: getPreviewRows_(exportSheet),
-    url: `${targetSpreadsheet.getUrl()}#gid=${exportSheet.getSheetId()}`,
+    sheetName: `${exportSheetName} live preview`,
+    exportedDates: previewRows.length > 0 ? Math.max(0, previewRows[0].length - 1) : 0,
+    previewRows,
+    url: "",
+    isStale: false,
   };
 }
 
@@ -2784,6 +2807,89 @@ function getExportDatesForMonth_(sheet, month) {
   }
 
   return Object.keys(dateSet).sort();
+}
+
+function getCurrentExportDatesForMonth_(sheet, month) {
+  validateMonth_(month);
+  const totalsByDate = {};
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(5, 7)) - 1;
+  const current = new Date(year, monthIndex, 1);
+  const rosterNameSet = getRosterNameSet_();
+
+  while (current.getMonth() === monthIndex) {
+    if (PLAY_DAYS.indexOf(current.getDay()) !== -1) {
+      totalsByDate[formatDate_(current)] = 0;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    sheet
+      .getRange(2, 1, lastRow - 1, 4)
+      .getValues()
+      .forEach((row) => {
+        const date = normalizeDate_(row[0]);
+        const playerName = String(row[1] || "").trim();
+        const vote = normalize_(row[2]);
+
+        if (date.indexOf(`${month}-`) !== 0) {
+          return;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(totalsByDate, date)) {
+          totalsByDate[date] = 0;
+        }
+
+        if (vote === "yes" && isRosterPlayer_(playerName, rosterNameSet)) {
+          totalsByDate[date] += clampStoredParticipantCount_(row[3]);
+        }
+      });
+  }
+
+  return Object.keys(totalsByDate)
+    .filter((date) => totalsByDate[date] >= EXPORT_MIN_PARTICIPANTS)
+    .sort();
+}
+
+function getPreviewDateHeaders_(previewRows) {
+  if (!Array.isArray(previewRows) || previewRows.length === 0) {
+    return [];
+  }
+
+  return previewRows[0]
+    .slice(1)
+    .map(normalizeExportHeaderDate_)
+    .filter(Boolean);
+}
+
+function normalizeExportHeaderDate_(value) {
+  const text = String(value || "").trim();
+  const isoDate = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) {
+    return text;
+  }
+
+  const slashDate = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashDate) {
+    return [
+      slashDate[3],
+      String(slashDate[1]).padStart(2, "0"),
+      String(slashDate[2]).padStart(2, "0"),
+    ].join("-");
+  }
+
+  return "";
+}
+
+function getMissingDates_(currentDates, savedDates) {
+  const savedDateSet = savedDates.reduce((dateSet, date) => {
+    dateSet[date] = true;
+    return dateSet;
+  }, {});
+
+  return currentDates.filter((date) => !savedDateSet[date]);
 }
 
 function getRsvpTotalsByPlayerForDate_(sheet, playDate) {

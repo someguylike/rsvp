@@ -607,6 +607,11 @@ button:disabled {
   color: var(--success);
 }
 
+.status.warning {
+  color: #7a4b00;
+  font-weight: 800;
+}
+
 .status.error {
   color: var(--error);
 }

@@ -104,10 +104,10 @@
     window.setTimeout(clearProgress, 900);
   }
 
-  function setReportStatus(message, href, month) {
-    latestReportStatus = { message, href, month };
+  function setReportStatus(message, href, month, type) {
+    latestReportStatus = { message, href, month, type };
     status.textContent = message;
-    status.className = "status success";
+    status.className = `status ${type || "success"}`;
   }
 
   function renderAccessNotice() {
@@ -568,10 +568,15 @@
       if (requestId !== latestLoadRequest) {
         return;
       }
+      const reportMessage =
+        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`;
       setReportStatus(
-        `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates from ${result.sheetName}.`,
+        result.staleMessage
+          ? `${reportMessage} ${result.staleMessage}`
+          : reportMessage,
         result.url,
         month,
+        result.isStale ? "warning" : "success",
       );
       finishProgress(
         `${mode === "export" ? "Generated" : "Loaded"} ${result.exportedDates} dates.`,
@@ -684,6 +689,7 @@
         latestReportStatus.message,
         latestReportStatus.href,
         latestReportStatus.month,
+        latestReportStatus.type,
       );
     }
   });

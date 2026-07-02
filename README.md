@@ -138,7 +138,7 @@ This removes all rows below the `RSVPs` header and removes old extra columns.
 
 ## Admin Export
 
-Open `export.html`, choose a month, and click `Export Month`. After export, the page shows a shareable month URL like `export.html?month=2026-06`; opening that URL renders the existing exported tab.
+Open `export.html`, choose a month, and click `Export Month`. After export, the page shows a shareable month URL like `export.html?month=2026-06`; opening that URL renders the saved export tab when it is current, or a live preview if the saved tab is missing current RSVP dates.
 
 The export writes to the spreadsheet ID configured in `google-apps-script/Code.gs` as `EXPORT_SPREADSHEET_ID`.
 
