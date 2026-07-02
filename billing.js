@@ -390,7 +390,22 @@
       return `${ageSeconds}s ago`;
     }
     const ageMinutes = Math.round(ageSeconds / 60);
-    return `${ageMinutes}m ago`;
+    if (ageMinutes < 60) {
+      return `${ageMinutes}m ago`;
+    }
+    const ageHours = Math.round(ageMinutes / 60);
+    if (ageHours < 24) {
+      return `${ageHours}h ago`;
+    }
+    const ageDays = Math.round(ageHours / 24);
+    if (ageDays < 14) {
+      return `${ageDays}d ago`;
+    }
+    const ageWeeks = Math.round(ageDays / 7);
+    if (ageWeeks < 8) {
+      return `${ageWeeks}w ago`;
+    }
+    return "a while ago";
   }
 
   function setStatus(message, type) {
