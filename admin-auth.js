@@ -49,66 +49,39 @@
     return url.toString();
   }
 
-  function parseJsonpResponse(text, callbackName) {
-    const trimmed = text.trim();
-    const prefix = `${callbackName}(`;
+  function requestAppsScript(payload) {
+    return new Promise((resolve, reject) => {
+      const callbackName = `adminAuthCallback_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      const script = document.createElement("script");
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("Request timed out"));
+      }, REQUEST_TIMEOUT_MS);
 
-    if (!trimmed.startsWith(prefix) || !trimmed.endsWith(");")) {
-      throw new Error("Unexpected Apps Script response");
-    }
+      function cleanup() {
+        window.clearTimeout(timeout);
+        script.remove();
+        delete window[callbackName];
+      }
 
-    return JSON.parse(trimmed.slice(prefix.length, -2));
-  }
-
-  function fetchWithTimeout(url, options, timeoutMs) {
-    if (typeof AbortController === "undefined") {
-      return new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(
-          () => reject(new Error("Request timed out")),
-          timeoutMs,
-        );
-        fetch(url, options)
-          .then(resolve)
-          .catch(reject)
-          .finally(() => window.clearTimeout(timeout));
-      });
-    }
-
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-    return fetch(url, {
-      ...options,
-      signal: controller.signal,
-    })
-      .catch((error) => {
-        if (error.name === "AbortError") {
-          throw new Error("Request timed out");
+      window[callbackName] = (parsed) => {
+        cleanup();
+        if (parsed?.ok) {
+          resolve(parsed);
+          return;
         }
-        throw error;
-      })
-      .finally(() => window.clearTimeout(timeout));
-  }
-
-  async function requestAppsScript(payload) {
-    const callbackName = `adminAuthCallback_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2)}`;
-    const response = await fetchWithTimeout(
-      buildAppsScriptUrl(payload, callbackName),
-      {
-        cache: "no-store",
-        credentials: "omit",
-        referrerPolicy: "no-referrer",
-      },
-      REQUEST_TIMEOUT_MS,
-    );
-    const parsed = parseJsonpResponse(await response.text(), callbackName);
-
-    if (response.ok && parsed.ok) {
-      return parsed;
-    }
-
-    throw new Error(parsed?.error || "Request failed");
+        reject(new Error(parsed?.error || "Request failed"));
+      };
+      script.onerror = () => {
+        cleanup();
+        reject(new Error("Unable to reach Apps Script"));
+      };
+      script.referrerPolicy = "no-referrer";
+      script.src = buildAppsScriptUrl(payload, callbackName);
+      document.head.append(script);
+    });
   }
 
   async function login(password) {

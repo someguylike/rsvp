@@ -518,33 +518,39 @@
     return url.toString();
   }
 
-  function parseJsonp(text, callbackName) {
-    const trimmed = text.trim();
-    const prefix = `${callbackName}(`;
+  function requestAppsScript(payload) {
+    return new Promise((resolve, reject) => {
+      const callbackName = `adminCallback_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      const script = document.createElement("script");
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("Request timed out"));
+      }, 15000);
 
-    if (!trimmed.startsWith(prefix) || !trimmed.endsWith(");")) {
-      throw new Error("Unexpected Apps Script response");
-    }
+      function cleanup() {
+        window.clearTimeout(timeout);
+        script.remove();
+        delete window[callbackName];
+      }
 
-    return JSON.parse(trimmed.slice(prefix.length, -2));
-  }
-
-  async function requestAppsScript(payload) {
-    const callbackName = `adminCallback_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2)}`;
-    const response = await fetch(buildUrl(payload, callbackName), {
-      cache: "no-store",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
+      window[callbackName] = (parsed) => {
+        cleanup();
+        if (parsed?.ok) {
+          resolve(parsed);
+          return;
+        }
+        reject(new Error(parsed?.error || "Report failed"));
+      };
+      script.onerror = () => {
+        cleanup();
+        reject(new Error("Unable to reach Apps Script"));
+      };
+      script.referrerPolicy = "no-referrer";
+      script.src = buildUrl(payload, callbackName);
+      document.head.append(script);
     });
-    const parsed = parseJsonp(await response.text(), callbackName);
-
-    if (response.ok && parsed.ok) {
-      return parsed;
-    }
-
-    throw new Error(parsed?.error || "Report failed");
   }
 
   async function loadMonth(month, mode) {
