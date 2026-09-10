@@ -113,6 +113,14 @@ The backend source is intentionally checked into this public repo.
 - `google-apps-script/rsvp-web-app/Code.gs`: small public RSVP backend for `index.html` only.
 - `google-apps-script/Code.gs`: full admin backend for roster, report, billing, backfill, and admin tools.
 
+The public RSVP backend keeps each date's tally in Apps Script cache for 45
+seconds. Public RSVP writes replace that cached tally immediately. The browser
+shows a clearly labeled local snapshot while it refreshes, refreshes the
+selected date every 30 seconds while visible, and refreshes immediately when a
+hidden tab becomes visible again. Direct Sheet edits and edits through the
+separate admin backend can take up to one cache window plus the next browser
+refresh to appear.
+
 Use two Apps Script Web App deployments so the hot RSVP form does not cold-start the larger Billing/export/admin backend.
 
 Full admin backend deployment is manual:

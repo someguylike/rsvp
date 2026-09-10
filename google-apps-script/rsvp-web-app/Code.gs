@@ -4,6 +4,11 @@ const AUDIT_SHEET_NAME = "RSVP Audit Log";
 const SPREADSHEET_ID_PROPERTY = "RSVP_SPREADSHEET_ID";
 const ROSTER_CACHE_KEY = "rsvp-public-roster-v1";
 const ROSTER_CACHE_TTL_SECONDS = 6 * 60 * 60;
+const TALLY_CACHE_KEY_PREFIX = "rsvp-tally-v1:";
+// The admin tool writes through a separate Apps Script project and cannot
+// invalidate this cache. Keep this below one minute while spanning the
+// frontend's 30-second refresh interval so every other poll can be a cache hit.
+const TALLY_CACHE_TTL_SECONDS = 45;
 const PLAY_START_HOUR = 6;
 const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
 const UNVOTE_LOCK_MESSAGE =
@@ -123,6 +128,7 @@ function deleteRsvp_(params) {
     const sheet = getSheet_();
     const rosterNameSet = getRosterNameSet_();
     validatePlayerName_(playerName, rosterNameSet);
+    invalidateTallyCache_(playDate);
     const snapshot = readRsvpRows_(sheet);
     const rows = findExistingRowsInSnapshot_(snapshot, playDate, playerName);
     const existingRsvp = rows.length > 0
@@ -135,28 +141,30 @@ function deleteRsvp_(params) {
     }
 
     if (rows.length === 0) {
+      const tally = buildAndCacheTally_(snapshot, playDate, rosterNameSet);
       const audit = appendAuditLog_(params, "delete_not_found", null, null);
       return {
         action: "not_found",
         row: null,
         audit,
-        tally: buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet),
+        tally,
       };
     }
 
     rows.sort((first, second) => second - first).forEach((row) => {
       sheet.deleteRow(row);
     });
+    const tally = buildAndCacheTally_(
+      removeRowsFromSnapshot_(snapshot, rows),
+      playDate,
+      rosterNameSet,
+    );
     const audit = appendAuditLog_(params, "deleted", rows[0], existingRsvp);
     return {
       action: "deleted",
       row: rows[0],
       audit,
-      tally: buildTallyFromSnapshot_(
-        removeRowsFromSnapshot_(snapshot, rows),
-        playDate,
-        rosterNameSet,
-      ),
+      tally,
     };
   } finally {
     lock.releaseLock();
@@ -180,6 +188,7 @@ function upsertRsvpWithLock_(params) {
   const submittedAt = params.submittedAt || new Date().toISOString();
   const updatedAt = new Date().toISOString();
 
+  invalidateTallyCache_(playDate);
   const sheet = getSheet_();
   const snapshot = readRsvpRows_(sheet);
   const matchingRows = findExistingRowsInSnapshot_(snapshot, playDate, playerName);
@@ -197,25 +206,27 @@ function upsertRsvpWithLock_(params) {
       matchingRows.sort((first, second) => second - first).forEach((rowNumber) => {
         sheet.deleteRow(rowNumber);
       });
+      const tally = buildAndCacheTally_(
+        removeRowsFromSnapshot_(snapshot, matchingRows),
+        playDate,
+        rosterNameSet,
+      );
       audit = appendAuditLog_(params, "deleted", row, existingRsvp);
       return {
         action: "deleted",
         row,
         audit,
-        tally: buildTallyFromSnapshot_(
-          removeRowsFromSnapshot_(snapshot, matchingRows),
-          playDate,
-          rosterNameSet,
-        ),
+        tally,
       };
     }
 
+    const tally = buildAndCacheTally_(snapshot, playDate, rosterNameSet);
     audit = appendAuditLog_(params, "delete_not_found", null, null);
     return {
       action: "not_found",
       row: null,
       audit,
-      tally: buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet),
+      tally,
     };
   }
 
@@ -231,51 +242,61 @@ function upsertRsvpWithLock_(params) {
   if (row) {
     deleteDuplicateRows_(sheet, matchingRows, row);
     if (normalize_(existingRsvp.vote) !== "no" && params.confirmOverride !== "true") {
+      const tally = buildAndCacheTally_(
+        removeRowsFromSnapshot_(
+          snapshot,
+          matchingRows.filter((rowNumber) => rowNumber !== row),
+        ),
+        playDate,
+        rosterNameSet,
+      );
       audit = appendAuditLog_(params, "needs_confirmation", row, existingRsvp);
       return {
         action: "needs_confirmation",
         row,
         existing: existingRsvp,
         audit,
-        tally: buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet),
+        tally,
       };
     }
 
     const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
     values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    const tally = buildAndCacheTally_(
+      upsertSnapshotRow_(
+        removeRowsFromSnapshot_(
+          snapshot,
+          matchingRows.filter((rowNumber) => rowNumber !== row),
+        ),
+        row,
+        values,
+      ),
+      playDate,
+      rosterNameSet,
+    );
     audit = appendAuditLog_(params, "updated", row, existingRsvp);
     return {
       action: "updated",
       row,
       audit,
-      tally: buildTallyFromSnapshot_(
-        upsertSnapshotRow_(
-          removeRowsFromSnapshot_(
-            snapshot,
-            matchingRows.filter((rowNumber) => rowNumber !== row),
-          ),
-          row,
-          values,
-        ),
-        playDate,
-        rosterNameSet,
-      ),
+      tally,
     };
   }
 
   sheet.appendRow(values);
   const appendedRow = sheet.getLastRow();
+  const tally = buildAndCacheTally_(
+    upsertSnapshotRow_(snapshot, appendedRow, values),
+    playDate,
+    rosterNameSet,
+  );
   audit = appendAuditLog_(params, "created", appendedRow, null);
   return {
     action: "created",
     row: appendedRow,
     audit,
-    tally: buildTallyFromSnapshot_(
-      upsertSnapshotRow_(snapshot, appendedRow, values),
-      playDate,
-      rosterNameSet,
-    ),
+    tally,
   };
 }
 
@@ -296,6 +317,16 @@ function getSheet_() {
     sheet.setFrozenRows(1);
   }
 
+  return sheet;
+}
+
+function getRsvpSheetForRead_() {
+  // Header repair belongs on write paths. Re-reading the header range for every
+  // tally cache miss adds a Sheets round trip without changing the response.
+  const sheet = getSpreadsheet_().getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    throw new Error(`Missing required sheet: ${SHEET_NAME}`);
+  }
   return sheet;
 }
 
@@ -564,9 +595,88 @@ function getRsvpAtRow_(sheet, row) {
 }
 
 function getTally_(playDate) {
-  const sheet = getSheet_();
-  const rosterNameSet = getRosterNameSet_();
-  return buildTallyFromSnapshot_(readRsvpRows_(sheet), playDate, rosterNameSet);
+  const cached = getCachedTally_(playDate);
+  if (cached) {
+    return cached;
+  }
+
+  // Build the candidate outside the lock because Sheets reads can take seconds.
+  // The short locked recheck below prevents a reader that started before a
+  // write from overwriting that writer's fresh write-through value.
+  const sheet = getRsvpSheetForRead_();
+  const snapshot = readRsvpRows_(sheet);
+  const rosterNameSet = snapshot.length > 0 ? getRosterNameSet_() : {};
+  const candidate = buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const rechecked = getCachedTally_(playDate);
+    if (rechecked) {
+      return rechecked;
+    }
+
+    return cacheTally_(candidate);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getCachedTally_(playDate) {
+  try {
+    const cached = CacheService
+      .getScriptCache()
+      .get(getTallyCacheKey_(playDate));
+    if (!cached) {
+      return null;
+    }
+
+    const tally = JSON.parse(cached);
+    return tally &&
+      tally.playDate === playDate &&
+      Array.isArray(tally.players)
+      ? tally
+      : null;
+  } catch (error) {
+    console.warn(`Could not read RSVP tally cache: ${error.message}`);
+    return null;
+  }
+}
+
+function cacheTally_(tally) {
+  try {
+    CacheService
+      .getScriptCache()
+      .put(
+        getTallyCacheKey_(tally.playDate),
+        JSON.stringify(tally),
+        TALLY_CACHE_TTL_SECONDS,
+      );
+  } catch (error) {
+    // Cache failures must never make an RSVP read or write fail.
+    console.warn(`Could not cache RSVP tally: ${error.message}`);
+  }
+  return tally;
+}
+
+function buildAndCacheTally_(snapshot, playDate, rosterNameSet) {
+  return cacheTally_(
+    buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet),
+  );
+}
+
+function invalidateTallyCache_(playDate) {
+  try {
+    CacheService.getScriptCache().remove(getTallyCacheKey_(playDate));
+  } catch (error) {
+    // A subsequent write-through attempt will still replace the old value.
+    console.warn(`Could not invalidate RSVP tally cache: ${error.message}`);
+  }
+}
+
+function getTallyCacheKey_(playDate) {
+  return `${TALLY_CACHE_KEY_PREFIX}${playDate}`;
 }
 
 function buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet) {
@@ -657,8 +767,8 @@ function isRosterPlayer_(playerName, rosterNameSet) {
   return getRoster_().some((member) => normalize_(member.name) === normalizedName);
 }
 
-function validatePlayerName_(playerName) {
-  if (!isRosterPlayer_(playerName)) {
+function validatePlayerName_(playerName, rosterNameSet) {
+  if (!isRosterPlayer_(playerName, rosterNameSet)) {
     throw new Error("Please choose a player from the roster");
   }
 }

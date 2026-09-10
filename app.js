@@ -55,10 +55,13 @@
   const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
   const ROSTER_CONTACTS_KEY = "play-rsvp.rosterContacts";
   const BROWSER_ID_KEY = "play-rsvp.browserId";
+  const TALLY_CACHE_KEY_PREFIX = "play-rsvp.tally.";
   const DISPLAY_LOCALE = "en-US";
   const PLAY_DAYS = [2, 4, 5, 0];
-  const FETCH_TIMEOUT_MS = 45000;
-  const JSONP_TIMEOUT_MS = 45000;
+  const READ_REQUEST_TIMEOUT_MS = 20000;
+  const MUTATION_REQUEST_TIMEOUT_MS = 45000;
+  const TALLY_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+  const TALLY_REFRESH_INTERVAL_MS = 30 * 1000;
   const PARTICIPANT_OPTIONS = [
     { value: "0", label: "Not going", isUnvote: true },
     { value: "1", label: "Just me" },
@@ -98,8 +101,11 @@
   let lastSubmittedPayload = null;
   let publicIpPromise = null;
   let activePlayerOptionIndex = -1;
+  let tallyRefreshTimer = null;
+  let activeTallyRequest = null;
   const rosterContactsByName = new Map();
   const rosterContactsByNormalizedName = new Map();
+  const tallySnapshotsByDate = new Map();
 
   function readJson(key, fallback) {
     try {
@@ -218,13 +224,13 @@
     setRemoveRsvpAction(null);
     renderParticipantOptions();
     updatePlayerMemory();
-    loadTally(value);
+    return loadTally(value);
   }
 
   function selectCustomDateOption() {
     customDateField?.classList.add("active");
     dateInput.value = customDateInput?.value || "";
-    latestTallyRequest += 1;
+    invalidateTallyRefresh();
     setRemoveRsvpAction(null);
     renderParticipantOptions();
     updatePlayerMemory();
@@ -292,7 +298,7 @@
       }
     });
 
-    selectPlayDate(formatDate(getNextPlayDate()));
+    return selectPlayDate(formatDate(getNextPlayDate()));
   }
 
   function canSelectNotGoing(playDate) {
@@ -958,7 +964,7 @@
         credentials: "omit",
         referrerPolicy: "no-referrer",
       },
-      FETCH_TIMEOUT_MS,
+      READ_REQUEST_TIMEOUT_MS,
     );
     const text = await response.text();
 
@@ -974,7 +980,7 @@
     throw new Error(parsed?.error || "Submission failed");
   }
 
-  function requestViaJsonp(payload) {
+  function requestViaJsonp(payload, timeoutMs) {
     return new Promise((resolve, reject) => {
       if (!APPS_SCRIPT_URL) {
         reject(new Error("Missing Apps Script URL in app.js"));
@@ -989,7 +995,7 @@
       const timeout = window.setTimeout(() => {
         cleanup();
         reject(new Error("Apps Script took too long to respond"));
-      }, JSONP_TIMEOUT_MS);
+      }, timeoutMs);
 
       function cleanup() {
         window.clearTimeout(timeout);
@@ -1008,23 +1014,34 @@
 
       script.onerror = () => {
         cleanup();
-        reject(new Error("Could not reach Apps Script"));
+        const error = new Error("Could not reach Apps Script");
+        error.code = "SCRIPT_LOAD_FAILED";
+        reject(error);
       };
       script.src = buildAppsScriptUrl(payload, callbackName);
       document.body.append(script);
     });
   }
 
-  function requestAppsScript(payload, attempt) {
-    return requestViaFetch(payload).catch(() => requestViaJsonp(payload)).catch((error) => {
-      if (!attempt) {
-        return new Promise((resolve) => {
-          window.setTimeout(resolve, 1200);
-        }).then(() => requestAppsScript(payload, 1));
-      }
-
-      throw error;
-    });
+  function requestAppsScript(payload) {
+    // JSONP is the most reliable cross-origin path for Apps Script. A timed-out
+    // write may still complete server-side, so only idempotent reads may try
+    // the fetch compatibility fallback.
+    const isReadOnly =
+      payload.action === "list" || payload.action === "listRoster";
+    const jsonpRequest = requestViaJsonp(
+      payload,
+      isReadOnly ? READ_REQUEST_TIMEOUT_MS : MUTATION_REQUEST_TIMEOUT_MS,
+    );
+    if (isReadOnly) {
+      return jsonpRequest.catch((error) => {
+        if (error.code !== "SCRIPT_LOAD_FAILED") {
+          throw error;
+        }
+        return requestViaFetch(payload);
+      });
+    }
+    return jsonpRequest;
   }
 
   async function submitRsvp(payload) {
@@ -1044,7 +1061,7 @@
       rememberPlayerName(payload.playerName);
       selectedPlayerName = payload.playerName;
       updatePlayerMemory();
-      renderTally(result.tally);
+      applyMutationTally(payload.playDate, result.tally);
       if (result.action === "deleted") {
         setRemoveRsvpAction(null);
         setStatus("Removed your RSVP.", "success");
@@ -1105,7 +1122,7 @@
         }),
       );
 
-      renderTally(result.tally);
+      applyMutationTally(payload.playDate, result.tally);
       setRemoveRsvpAction(null);
       setStatus("Removed the existing RSVP.", "success");
     } catch (error) {
@@ -1118,14 +1135,58 @@
     }
   }
 
-  function renderTally(tally) {
+  function formatCachedTallyAge(cachedAt) {
+    const ageMs = Math.max(0, Date.now() - cachedAt);
+    const ageMinutes = Math.floor(ageMs / (60 * 1000));
+
+    if (ageMinutes < 1) {
+      return "less than a minute ago";
+    }
+    return `${ageMinutes} minute${ageMinutes === 1 ? "" : "s"} ago`;
+  }
+
+  function readCachedTally(playDate) {
+    const memorySnapshot = tallySnapshotsByDate.get(playDate);
+    const cached =
+      memorySnapshot || readJson(`${TALLY_CACHE_KEY_PREFIX}${playDate}`, null);
+    const cachedAt = Number(cached?.cachedAt || 0);
+    const ageMs = Date.now() - cachedAt;
+    if (
+      !cached?.tally ||
+      !Number.isFinite(cachedAt) ||
+      ageMs < 0 ||
+      ageMs > TALLY_CACHE_MAX_AGE_MS
+    ) {
+      return null;
+    }
+    tallySnapshotsByDate.set(playDate, cached);
+    return { tally: cached.tally, cachedAt };
+  }
+
+  function cacheTally(playDate, tally) {
+    if (!playDate || !tally) {
+      return;
+    }
+    const snapshot = { tally, cachedAt: Date.now() };
+    tallySnapshotsByDate.set(playDate, snapshot);
+    try {
+      writeJson(`${TALLY_CACHE_KEY_PREFIX}${playDate}`, snapshot);
+    } catch {
+      // A live tally should still render when browser storage is unavailable.
+    }
+  }
+
+  function renderTally(tally, freshnessLabel) {
     const players = Array.isArray(tally?.players) ? tally.players : [];
     const totalCount = Number(tally?.totalCount || 0);
-
-    tallyCount.textContent =
+    const countLabel =
       totalCount > 0
         ? formatParticipantCount(totalCount)
         : "No reservations yet";
+
+    tallyCount.textContent = freshnessLabel
+      ? `${countLabel} · ${freshnessLabel}`
+      : countLabel;
 
     tallyList.replaceChildren(
       ...players.map((player) => {
@@ -1145,17 +1206,74 @@
     );
   }
 
-  async function loadTally(playDate, attempt) {
-    if (!playDate || !APPS_SCRIPT_URL) {
+  function invalidateTallyRefresh() {
+    latestTallyRequest += 1;
+    activeTallyRequest = null;
+    window.clearTimeout(tallyRefreshTimer);
+    tallyRefreshTimer = null;
+    tallySection?.removeAttribute("aria-busy");
+  }
+
+  function applyMutationTally(playDate, tally) {
+    invalidateTallyRefresh();
+    cacheTally(playDate, tally);
+    if (dateInput.value === playDate) {
+      renderTally(tally, "Checked just now");
+      scheduleTallyRefresh();
+    } else if (dateInput.value) {
+      loadTally(dateInput.value);
+    }
+  }
+
+  function scheduleTallyRefresh() {
+    window.clearTimeout(tallyRefreshTimer);
+    tallyRefreshTimer = null;
+    if (document.visibilityState === "hidden" || !dateInput.value) {
       return;
+    }
+    tallyRefreshTimer = window.setTimeout(() => {
+      loadTally(dateInput.value);
+    }, TALLY_REFRESH_INTERVAL_MS);
+  }
+
+  function loadTally(playDate) {
+    if (!playDate || !APPS_SCRIPT_URL) {
+      return Promise.resolve();
+    }
+    if (
+      activeTallyRequest?.playDate === playDate &&
+      activeTallyRequest.requestId === latestTallyRequest
+    ) {
+      return activeTallyRequest.promise;
     }
 
     const requestId = latestTallyRequest + 1;
     latestTallyRequest = requestId;
+    const promise = refreshTally(playDate, requestId);
+    activeTallyRequest = { playDate, promise, requestId };
+    promise.finally(() => {
+      if (activeTallyRequest?.promise === promise) {
+        activeTallyRequest = null;
+      }
+    });
+    return promise;
+  }
+
+  async function refreshTally(playDate, requestId) {
+    window.clearTimeout(tallyRefreshTimer);
+    tallyRefreshTimer = null;
+    const cached = readCachedTally(playDate);
 
     try {
-      tallyCount.textContent = "Loading reservations...";
-      tallyList.replaceChildren();
+      if (cached) {
+        renderTally(
+          cached.tally,
+          `Cached ${formatCachedTallyAge(cached.cachedAt)} · Refreshing...`,
+        );
+      } else {
+        tallyCount.textContent = "Loading reservations...";
+        tallyList.replaceChildren();
+      }
       tallySection?.setAttribute("aria-busy", "true");
       const result = await requestAppsScript({
         action: "list",
@@ -1164,22 +1282,26 @@
       if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
         return;
       }
-      tallySection?.removeAttribute("aria-busy");
-      renderTally(result.tally);
+      cacheTally(playDate, result.tally);
+      renderTally(result.tally, "Checked just now");
     } catch (error) {
       if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
         return;
       }
-      if (!attempt) {
-        window.setTimeout(() => {
-          loadTally(playDate, 1);
-        }, 1200);
-        return;
+      if (cached) {
+        renderTally(
+          cached.tally,
+          `Cached ${formatCachedTallyAge(cached.cachedAt)} · Refresh failed`,
+        );
+      } else {
+        tallyCount.textContent = "Could not load reservations. Try refreshing.";
+        tallyList.replaceChildren();
       }
-
-      tallySection?.removeAttribute("aria-busy");
-      tallyCount.textContent = "Could not load reservations. Try refreshing.";
-      tallyList.replaceChildren();
+    } finally {
+      if (requestId === latestTallyRequest && dateInput.value === playDate) {
+        tallySection?.removeAttribute("aria-busy");
+        scheduleTallyRefresh();
+      }
     }
   }
 
@@ -1223,12 +1345,12 @@
   function initialize() {
     restoreRosterContacts();
     restoreLastPlayer();
-    renderDateOptions();
+    const initialTallyRequest = renderDateOptions();
 
     participantInput.value = "1";
     updatePlayerMemory();
 
-    loadRoster().then(() => {
+    initialTallyRequest.then(() => loadRoster()).then(() => {
       if (playerInput.value && !selectedPlayerName) {
         const exactMatch = exactPlayerMatch(playerInput.value);
         if (exactMatch) {
@@ -1345,6 +1467,14 @@
 
   playerInput.addEventListener("blur", () => {
     window.setTimeout(hidePlayerList, 120);
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    window.clearTimeout(tallyRefreshTimer);
+    tallyRefreshTimer = null;
+    if (document.visibilityState !== "hidden" && dateInput.value) {
+      loadTally(dateInput.value);
+    }
   });
 
   initialize();
