@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-store, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Make Payments</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css?v=20260918-3" />
+  </head>
+  <body>
+    <main class="shell billing-shell">
+      <section class="panel admin-panel balance-page" aria-labelledby="page-title">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">Monthly payments</p>
+            <h1 id="page-title">Make Payments</h1>
+          </div>
+        </div>
+
+        <nav class="page-nav" aria-label="Page navigation">
+          <input id="page-nav-toggle" class="page-nav-toggle" type="checkbox" />
+          <label class="page-nav-button" for="page-nav-toggle" aria-label="Open page menu">☰</label>
+          <div class="page-nav-links">
+            <a href="./index.html">RSVP</a>
+            <a href="./roster.html">Members</a>
+            <a href="./export.html">Report</a>
+            <a href="./billing.html">Billing</a>
+            <a class="active" href="./balances.html" aria-current="page">Pay</a>
+            <a href="./admin.html">Admin</a>
+          </div>
+        </nav>
+
+        <section class="balance-member-panel" aria-label="Member selection">
+          <label class="field">
+            <span>Member</span>
+            <select id="balance-member" aria-label="Member"></select>
+          </label>
+          <button id="refresh-balances" class="secondary-button" type="button">
+            Refresh
+          </button>
+        </section>
+
+        <p id="balance-status" class="status" role="status" aria-live="polite">
+          Loading monthly balances...
+        </p>
+
+        <div id="balance-content" class="balance-content" hidden>
+          <section class="balance-overview" aria-label="Balance summary">
+            <div class="billing-metric">
+              <span>Months due</span>
+              <strong id="balance-month-count">0</strong>
+            </div>
+            <div class="billing-metric">
+              <span>Total due</span>
+              <strong id="balance-total">$0.00</strong>
+            </div>
+          </section>
+
+          <div class="balance-list-heading">
+            <div>
+              <h2>Pay by month</h2>
+              <p>Open a month for details. Paid months remain visible with $0.00 due.</p>
+            </div>
+          </div>
+          <div class="balance-list-columns" aria-hidden="true">
+            <span>Month</span>
+            <span>Balance due</span>
+            <span>Payment</span>
+          </div>
+          <section id="balance-list" class="balance-list" aria-label="Monthly balances"></section>
+          <div class="balance-total-row">
+            <strong>Total due</strong>
+            <strong id="balance-list-total">$0.00</strong>
+            <span></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./balances-core.js?v=20260918-2"></script>
+    <script src="./balances.js?v=20260918-3"></script>
+  </body>
+</html>

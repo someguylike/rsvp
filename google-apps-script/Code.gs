@@ -1453,30 +1453,38 @@ function getBillingMonths_(includeEditable) {
       });
   }
 
-  if (includeEditable) {
-    addBillingMonthsFromSheet_(monthSet, getSheet_(), 1, currentMonth, true);
-    addBillingMonthsFromSheet_(
-      monthSet,
-      getBillingCourtSheet_(),
-      2,
-      currentMonth,
-      false,
-    );
-    addBillingMonthsFromSheet_(
-      monthSet,
-      getBillingPaymentSheet_(),
-      1,
-      currentMonth,
-      false,
-    );
-    addBillingMonthsFromSheet_(
-      monthSet,
-      getBillingMonthStatusSheet_(),
-      1,
-      currentMonth,
-      false,
-    );
-  }
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getSheet_(),
+    1,
+    currentMonth,
+    true,
+    includeEditable,
+  );
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getBillingCourtSheet_(),
+    2,
+    currentMonth,
+    false,
+    includeEditable,
+  );
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getBillingPaymentSheet_(),
+    1,
+    currentMonth,
+    false,
+    includeEditable,
+  );
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getBillingMonthStatusSheet_(),
+    1,
+    currentMonth,
+    false,
+    includeEditable,
+  );
 
   return Object.keys(monthSet)
     .sort()
@@ -1496,12 +1504,14 @@ function getBillingMonths_(includeEditable) {
       const allPaid =
         attendancePlayers.length > 0 &&
         attendancePlayers.every((playerName) => paidPlayers[normalize_(playerName)]);
+      const monthStatus = getBillingMonthStatus_(month);
       return {
         month,
         label: formatMonthLabel_(month),
         playerCount: attendancePlayers.length,
         allPaid,
-        billable: Boolean(billableMonthSet[month]),
+        billable:
+          Boolean(billableMonthSet[month]) || monthStatus.status === "finalized",
       };
     });
 }
@@ -1512,6 +1522,7 @@ function addBillingMonthsFromSheet_(
   monthColumn,
   currentMonth,
   valueIsDate,
+  includeCurrent,
 ) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) {
@@ -1525,7 +1536,10 @@ function addBillingMonthsFromSheet_(
       const month = valueIsDate
         ? normalizeMonth_(normalizeDate_(row[0]))
         : normalizeMonth_(row[0]);
-      if (month && month <= currentMonth) {
+      if (
+        month &&
+        (includeCurrent ? month <= currentMonth : month < currentMonth)
+      ) {
         monthSet[month] = true;
       }
     });
