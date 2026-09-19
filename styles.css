@@ -1512,6 +1512,74 @@ body:not(.billing-admin) .admin-payment-column {
   color: var(--muted);
 }
 
+.billing-credit-breakdown {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.billing-credit-breakdown > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  padding: 9px 11px;
+}
+
+.billing-credit-breakdown > summary::-webkit-details-marker {
+  display: none;
+}
+
+.billing-credit-breakdown > summary::before {
+  color: var(--accent-strong);
+  content: "+";
+  font-weight: 900;
+}
+
+.billing-credit-breakdown[open] > summary::before {
+  content: "−";
+}
+
+.billing-credit-breakdown > summary strong {
+  margin-right: auto;
+}
+
+.billing-credit-breakdown > summary small {
+  color: var(--muted);
+  text-align: right;
+}
+
+.billing-credit-items {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid var(--line);
+  padding: 9px 11px;
+}
+
+.billing-credit-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.billing-credit-item > span {
+  display: grid;
+  gap: 2px;
+}
+
+.billing-credit-item small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.billing-credit-item > strong {
+  white-space: nowrap;
+}
+
 .billing-detail-section {
   display: grid;
   gap: 8px;
@@ -2294,6 +2362,16 @@ body:not(.billing-admin) .admin-payment-column {
 
   .billing-member-detail-band .billing-detail-list {
     grid-template-columns: 1fr;
+  }
+
+  .billing-credit-breakdown > summary {
+    flex-wrap: wrap;
+  }
+
+  .billing-credit-breakdown > summary small {
+    flex-basis: 100%;
+    padding-left: 19px;
+    text-align: left;
   }
 
   .billing-heading {

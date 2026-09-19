@@ -1241,7 +1241,6 @@
     const birdieState = getBirdieState();
     const activeCourtBlocks = courtBlocks.filter((block) => block.status === "active");
     const courtByDate = new Map();
-    const credits = new Map();
     const members = new Map();
     let totalWeightedSpots = 0;
     let totalSpots = 0;
@@ -1255,6 +1254,11 @@
           courtFee: 0,
           birdieFee: 0,
           credits: 0,
+          creditDetails: {
+            court: 0,
+            birdiePurchases: [],
+            adjustments: [],
+          },
           netBalance: 0,
           attendance: [],
         });
@@ -1266,7 +1270,9 @@
       courtByDate.set(block.date, (courtByDate.get(block.date) || 0) + Number(block.amount || 0));
       if (block.paidBy) {
         const payer = ensureMember(block.paidBy);
-        payer.credits += Number(block.amount || 0);
+        const amount = Number(block.amount || 0);
+        payer.credits += amount;
+        payer.creditDetails.court += amount;
       }
     });
 
@@ -1275,7 +1281,15 @@
       .forEach((purchase) => {
         if (purchase.paidBy) {
           const payer = ensureMember(purchase.paidBy);
-          payer.credits += Number(purchase.amount || 0);
+          const amount = Number(purchase.amount || 0);
+          payer.credits += amount;
+          payer.creditDetails.birdiePurchases.push({
+            batch: purchase.batch || "Birdie purchase",
+            date: purchase.date,
+            tubes: Number(purchase.tubes || 0),
+            unitPrice: getBirdieUnitPrice(purchase),
+            amount,
+          });
         }
       });
 
@@ -1283,7 +1297,12 @@
       .filter((adjustment) => adjustment.status !== "canceled")
       .forEach((adjustment) => {
         const member = ensureMember(adjustment.playerName);
-        member.credits += Number(adjustment.amount || 0);
+        const amount = Number(adjustment.amount || 0);
+        member.credits += amount;
+        member.creditDetails.adjustments.push({
+          note: adjustment.note || "Credit adjustment",
+          amount,
+        });
       });
 
     attendanceRows.forEach((day) => {
@@ -1833,6 +1852,97 @@
     memberDetail.append(row);
   }
 
+  function appendCreditBreakdownItem(container, label, meta, amount) {
+    const row = document.createElement("div");
+    row.className = "billing-credit-item";
+    const description = document.createElement("span");
+    description.append(createCell("strong", label));
+    if (meta) {
+      description.append(createCell("small", meta));
+    }
+    row.append(
+      description,
+      createCell(
+        "strong",
+        formatMoney(amount),
+        amount >= 0 ? "money-credit" : "money-owed",
+      ),
+    );
+    container.append(row);
+  }
+
+  function renderCreditBreakdown(member) {
+    if (member.credits <= 0.005 || !member.creditDetails) {
+      return;
+    }
+
+    const courtTotal = roundMoney(member.creditDetails.court);
+    const birdieTotal = roundMoney(
+      member.creditDetails.birdiePurchases.reduce(
+        (sum, purchase) => sum + Number(purchase.amount || 0),
+        0,
+      ),
+    );
+    const adjustmentTotal = roundMoney(
+      member.creditDetails.adjustments.reduce(
+        (sum, adjustment) => sum + Number(adjustment.amount || 0),
+        0,
+      ),
+    );
+    const summaryParts = [
+      courtTotal ? `Court ${formatMoney(courtTotal)}` : "",
+      birdieTotal ? `Birdies ${formatMoney(birdieTotal)}` : "",
+      adjustmentTotal ? `Adjustments ${formatMoney(adjustmentTotal)}` : "",
+    ].filter(Boolean);
+    if (!summaryParts.length) {
+      return;
+    }
+
+    const details = document.createElement("details");
+    details.className = "billing-credit-breakdown";
+    const summary = document.createElement("summary");
+    summary.append(
+      createCell("strong", "Credit breakdown"),
+      createCell("small", summaryParts.join(" · ")),
+    );
+    const items = document.createElement("div");
+    items.className = "billing-credit-items";
+
+    if (courtTotal) {
+      appendCreditBreakdownItem(items, "Court fees", "Bookings paid", courtTotal);
+    }
+    member.creditDetails.birdiePurchases
+      .slice()
+      .sort((first, second) =>
+        String(first.date || "").localeCompare(String(second.date || "")),
+      )
+      .forEach((purchase) => {
+        const tubeLabel = `${formatNumber(purchase.tubes, 1)} tube${
+          Number(purchase.tubes) === 1 ? "" : "s"
+        }`;
+        const unitLabel = purchase.unitPrice
+          ? ` @ ${formatMoney(purchase.unitPrice)}`
+          : "";
+        appendCreditBreakdownItem(
+          items,
+          purchase.batch,
+          `${formatDisplayDate(purchase.date)} · ${tubeLabel}${unitLabel}`,
+          purchase.amount,
+        );
+      });
+    member.creditDetails.adjustments.forEach((adjustment) => {
+      appendCreditBreakdownItem(
+        items,
+        "Adjustment",
+        adjustment.note,
+        adjustment.amount,
+      );
+    });
+
+    details.append(summary, items);
+    memberDetail.append(details);
+  }
+
   function isMobilePaymentDevice() {
     return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
   }
@@ -1910,6 +2020,7 @@
     appendDetailRow("Net balance", formatMoney(member.netBalance), getMoneyClass(member.netBalance));
     appendDetailRow("Payment", getPaymentStatus(member.name));
     renderVenmoPaymentAction(member);
+    renderCreditBreakdown(member);
 
     const attendance = document.createElement("section");
     attendance.className = "billing-detail-section";
