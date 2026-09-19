@@ -1943,10 +1943,6 @@
     memberDetail.append(details);
   }
 
-  function isMobilePaymentDevice() {
-    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
-  }
-
   function getVenmoPaymentNote(member) {
     return `${member.name} - Badminton ${formatMonthLabel(monthInput.value)}`;
   }
@@ -1958,7 +1954,6 @@
 
     return {
       amount,
-      appUrl: `venmo://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${amount}&note=${encodedNote}`,
       webUrl: `https://venmo.com/${encodedRecipient}?txn=pay&amount=${amount}&note=${encodedNote}`,
     };
   }
@@ -1974,32 +1969,17 @@
     const urls = buildVenmoPaymentUrls(member);
     const section = document.createElement("section");
     section.className = "billing-payment-action";
-    const button = document.createElement("button");
-    button.className = "billing-payment-button";
-    button.type = "button";
-    button.textContent = `Pay ${formatMoney(urls.amount)} with Venmo`;
+    const link = document.createElement("a");
+    link.className = "billing-payment-button venmo-payment-link";
+    link.href = urls.webUrl;
+    link.textContent = `Pay ${formatMoney(urls.amount)} with Venmo`;
     const note = document.createElement("p");
     note.textContent = `To ${VENMO_RECIPIENT_NAME}: ${getVenmoPaymentNote(member)}`;
     const help = document.createElement("p");
     help.className = "billing-payment-help";
-    help.textContent = "Venmo opens best from a phone.";
+    help.textContent = "Opens the Venmo app or payment website.";
 
-    button.addEventListener("click", () => {
-      if (!isMobilePaymentDevice()) {
-        help.textContent = "Please open this page on your phone to pay with Venmo.";
-        return;
-      }
-
-      help.textContent = "Opening Venmo...";
-      window.location.href = urls.appUrl;
-      window.setTimeout(() => {
-        if (!document.hidden) {
-          window.location.href = urls.webUrl;
-        }
-      }, 900);
-    });
-
-    section.append(button, note, help);
+    section.append(link, note, help);
     memberDetail.append(section);
   }
 

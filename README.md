@@ -206,7 +206,7 @@ The purchaser receives credit for the full inventory purchase in its purchase mo
 
 ## Payment Page Cache
 
-The Payment page displays previously saved billing months immediately, labels the age of the saved data, and refreshes all open months in the background. Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block.
+The Payment page displays previously saved billing months immediately, labels the age of the saved data, and refreshes all open months in the background. Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block. Venmo actions are direct HTTPS payment links rather than custom-scheme redirects, allowing the device to open either the Venmo app or its payment website.
 
 ## Notes From Tool Research
 

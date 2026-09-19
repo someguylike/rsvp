@@ -240,35 +240,23 @@
     const note = `${memberName} - Badminton ${formatMonthLabel(month)}`;
     return {
       note,
-      appUrl: `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(
-        VENMO_RECIPIENT_USERNAME,
-      )}&amount=${paymentAmount}&note=${encodeURIComponent(note)}`,
       webUrl: `https://venmo.com/${encodeURIComponent(
         VENMO_RECIPIENT_USERNAME,
       )}?txn=pay&amount=${paymentAmount}&note=${encodeURIComponent(note)}`,
     };
   }
 
-  function makeVenmoButton(memberName, entry, help) {
-    const button = document.createElement("button");
-    button.className = "balance-pay-button";
-    button.type = "button";
-    button.textContent = `Pay ${formatMoney(entry.balance)} with Venmo`;
-    button.addEventListener("click", () => {
-      const urls = buildVenmoUrls(memberName, entry.month, entry.balance);
-      if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")) {
-        window.location.href = urls.webUrl;
-        return;
-      }
-      help.textContent = "Opening Venmo...";
-      window.location.href = urls.appUrl;
-      window.setTimeout(() => {
-        if (!document.hidden) {
-          window.location.href = urls.webUrl;
-        }
-      }, 900);
-    });
-    return button;
+  function makeVenmoLink(memberName, entry) {
+    const urls = buildVenmoUrls(memberName, entry.month, entry.balance);
+    const link = document.createElement("a");
+    link.className = "balance-pay-button venmo-payment-link";
+    link.href = urls.webUrl;
+    link.textContent = `Pay ${formatMoney(entry.balance)} with Venmo`;
+    link.setAttribute(
+      "aria-label",
+      `Pay ${formatMoney(entry.balance)} for ${formatMonthLabel(entry.month)} with Venmo`,
+    );
+    return link;
   }
 
   function renderBalances() {
@@ -326,10 +314,10 @@
       const help = document.createElement("p");
       help.className = "balance-payment-help";
       if (entry.balance > 0.005) {
-        help.textContent = `To ${VENMO_RECIPIENT_NAME} · separate payment for ${formatMonthLabel(
+        help.textContent = `To ${VENMO_RECIPIENT_NAME} · opens Venmo for ${formatMonthLabel(
           entry.month,
         )}`;
-        payment.append(makeVenmoButton(memberName, entry, help), help);
+        payment.append(makeVenmoLink(memberName, entry), help);
       } else {
         const state = document.createElement("span");
         state.className = "balance-paid-state";

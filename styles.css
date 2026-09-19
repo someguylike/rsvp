@@ -930,6 +930,33 @@ button:disabled {
   white-space: nowrap;
 }
 
+.venmo-payment-link {
+  display: grid;
+  min-height: 48px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-weight: 750;
+  padding: 10px 14px;
+  box-shadow: 0 12px 26px rgb(0 94 184 / 22%);
+  text-align: center;
+  text-decoration: none;
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.venmo-payment-link:hover,
+.venmo-payment-link:focus-visible {
+  background: var(--accent-strong);
+  color: white;
+  box-shadow: 0 14px 30px rgb(0 94 184 / 28%);
+  outline: 0;
+  transform: translateY(-1px);
+}
+
 .balance-paid-state {
   width: fit-content;
   border-radius: 999px;
