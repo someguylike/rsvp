@@ -30,7 +30,7 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 - `roster.html`, `roster.js`: admin page for roster membership, Venmo, and Messenger details.
 - `export.html`, `export.js`: admin page for monthly roster export.
 - `billing.html`, `billing.js`: billing page for court block entry, birdie cost entry, and member balance calculation.
-- `balances.html`, `balances.js`, `balances-core.js`: Make Payments page with monthly balances, paid-month history, and one Venmo action per amount due.
+- `pay.html`, `balances.js`, `balances-core.js`: Payment page with monthly balances, paid-month history, and one Venmo action per amount due.
 - `billing-parser.js`: parsers for finalized monthly billing CSVs and CourtReserve transaction/reservation exports.
 - `vendor/jszip.min.js`: MIT-licensed JSZip browser build used to read XLSX files locally.
 - `google-apps-script/Code.gs`: Apps Script backend source. Paste this into Apps Script and deploy it as the Web App backend.
