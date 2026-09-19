@@ -10,6 +10,9 @@
   const VENMO_RECIPIENT_USERNAME = "nampham2022";
   const REQUEST_TIMEOUT_MS = 12000;
   const JSONP_TIMEOUT_MS = 30000;
+  const IS_META_IN_APP_BROWSER = /FBAN|FBAV|FB_IAB|Messenger/i.test(
+    navigator.userAgent || "",
+  );
 
   const memberSelect = document.querySelector("#balance-member");
   const refreshButton = document.querySelector("#refresh-balances");
@@ -142,6 +145,9 @@
   }
 
   function requestAppsScript(payload) {
+    if (IS_META_IN_APP_BROWSER) {
+      return requestViaJsonp(payload);
+    }
     return requestViaFetch(payload).catch(() => requestViaJsonp(payload));
   }
 
@@ -172,6 +178,57 @@
       }
       throw error;
     }
+  }
+
+  function getVisibleMonths(months) {
+    return (months || [])
+      .filter((entry) => entry.month < getCurrentMonth() && !entry.allPaid)
+      .sort((first, second) => first.month.localeCompare(second.month));
+  }
+
+  function getCachedMonthlyBalances() {
+    const monthCache = readCache(BILLING_MONTHS_CACHE_KEY);
+    if (!Array.isArray(monthCache?.months)) {
+      return null;
+    }
+
+    const savedAtValues = [Number(monthCache.savedAt || 0)].filter(Boolean);
+    const visibleMonths = getVisibleMonths(monthCache.months);
+    const balances = visibleMonths
+      .map((entry) => {
+        const cached = readCache(`${BILLING_CACHE_PREFIX}${entry.month}`);
+        if (!cached?.billing) {
+          return null;
+        }
+        if (cached.savedAt) {
+          savedAtValues.push(Number(cached.savedAt));
+        }
+        return window.BalanceCalculator.calculateMonthBalances(cached.billing);
+      })
+      .filter(Boolean)
+      .sort((first, second) => first.month.localeCompare(second.month));
+
+    return {
+      balances,
+      visibleMonthCount: visibleMonths.length,
+      savedAt: savedAtValues.length ? Math.min(...savedAtValues) : 0,
+    };
+  }
+
+  function formatCacheAge(savedAt) {
+    const elapsedMs = Math.max(0, Date.now() - Number(savedAt || 0));
+    const minutes = Math.floor(elapsedMs / 60000);
+    if (minutes < 1) {
+      return "just now";
+    }
+    if (minutes < 60) {
+      return `${minutes}m ago`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return `${hours}h ago`;
+    }
+    return `${Math.floor(hours / 24)}d ago`;
   }
 
   function getSelectedMember() {
@@ -216,7 +273,9 @@
 
   function renderBalances() {
     const memberName = getSelectedMember();
-    localStorage.setItem(LAST_PLAYER_KEY, memberName);
+    if (memberName) {
+      localStorage.setItem(LAST_PLAYER_KEY, memberName);
+    }
     const rows = monthlyBalances
       .map((entry) => ({
         month: entry.month,
@@ -302,10 +361,31 @@
     memberSelect.value = names.includes(remembered) ? remembered : names[0] || "";
   }
 
+  function showBalances(balances) {
+    monthlyBalances = balances.slice().sort((first, second) =>
+      first.month.localeCompare(second.month),
+    );
+    populateMembers();
+    renderBalances();
+    contentEl.hidden = false;
+  }
+
   async function loadBalances() {
     refreshButton.disabled = true;
-    contentEl.hidden = true;
-    setStatus("Loading monthly balances...", "loading");
+    const cached = getCachedMonthlyBalances();
+    const hasCachedView = Boolean(
+      cached && (cached.balances.length > 0 || cached.visibleMonthCount === 0),
+    );
+    if (hasCachedView) {
+      showBalances(cached.balances);
+      setStatus(
+        `Showing saved balances from ${formatCacheAge(cached.savedAt)}. Refreshing...`,
+        "loading",
+      );
+    } else {
+      contentEl.hidden = true;
+      setStatus("Loading monthly balances...", "loading");
+    }
     try {
       let monthResult;
       try {
@@ -322,29 +402,30 @@
         monthResult = { months: cached.months };
       }
 
-      const months = (monthResult.months || [])
-        .filter((entry) => entry.month < getCurrentMonth() && !entry.allPaid)
-        .sort((first, second) => first.month.localeCompare(second.month));
+      const months = getVisibleMonths(monthResult.months);
       const results = await Promise.allSettled(
         months.map((entry) => loadMonth(entry.month)),
       );
-      monthlyBalances = results
+      const refreshedBalances = results
         .filter((result) => result.status === "fulfilled")
         .map((result) => window.BalanceCalculator.calculateMonthBalances(result.value))
         .sort((first, second) => first.month.localeCompare(second.month));
-      const failedCount = results.length - monthlyBalances.length;
+      const failedCount = results.length - refreshedBalances.length;
 
-      populateMembers();
-      renderBalances();
-      contentEl.hidden = false;
+      showBalances(refreshedBalances);
       setStatus(
         failedCount
-          ? `${monthlyBalances.length} months loaded; ${failedCount} could not be loaded.`
-          : `${monthlyBalances.length} billing month${monthlyBalances.length === 1 ? "" : "s"} loaded.`,
+          ? `${refreshedBalances.length} months loaded; ${failedCount} could not be refreshed.`
+          : `${refreshedBalances.length} billing month${refreshedBalances.length === 1 ? "" : "s"} updated.`,
         failedCount ? "error" : "success",
       );
     } catch (error) {
-      setStatus(error.message, "error");
+      setStatus(
+        hasCachedView
+          ? `Showing saved balances. Refresh failed: ${error.message}`
+          : error.message,
+        "error",
+      );
     } finally {
       refreshButton.disabled = false;
     }

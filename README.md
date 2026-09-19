@@ -204,6 +204,10 @@ Transaction groups use stable IDs, so importing the same export again updates or
 
 The purchaser receives credit for the full inventory purchase in its purchase month. Tube usage is charged to players in the month the tubes are used, without allocating those later usage charges back to individual inventory purchases. Historical finalized imports keep their existing payer adjustments and are not credited a second time.
 
+## Payment Page Cache
+
+The Payment page displays previously saved billing months immediately, labels the age of the saved data, and refreshes all open months in the background. Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block.
+
 ## Notes From Tool Research
 
 - Google Forms is append-first. It does not natively upsert by `player + date`.
