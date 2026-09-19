@@ -167,6 +167,834 @@
     return Math.round(Number(value || 0) * 100) / 100;
   }
 
+  const BOOKING_MONTHS = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12,
+  };
+
+  const BOOKING_DATE_TIME_PATTERN =
+    /(?:\b(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)(?:day)?\s*,?\s*)?\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,\s*(\d{4}))?\s*,?\s*(\d{1,2}):(\d{2})\s*([AP]M)\s*(?:-|–|—|to)\s*(\d{1,2}):(\d{2})\s*([AP]M)/gi;
+
+  function htmlToBookingText(source) {
+    const text = String(source || "");
+    if (!/<(?:!doctype|[A-Za-z][\w:-]*)(?:\s|>|\/)/i.test(text)) {
+      return text;
+    }
+
+    if (typeof DOMParser === "undefined") {
+      return text.replace(/<[^>]+>/g, " ");
+    }
+
+    const isXml = /^\s*<\?xml\b/i.test(text);
+    const documentNode = new DOMParser().parseFromString(
+      text,
+      isXml ? "application/xml" : "text/html",
+    );
+    documentNode.querySelectorAll("script, style, noscript, template, svg").forEach((node) =>
+      node.remove(),
+    );
+    const blockTags = new Set([
+      "ARTICLE",
+      "BR",
+      "DD",
+      "DIV",
+      "DT",
+      "H1",
+      "H2",
+      "H3",
+      "H4",
+      "H5",
+      "H6",
+      "LI",
+      "P",
+      "SECTION",
+      "TD",
+      "TH",
+      "TR",
+    ]);
+    let output = "";
+
+    function visit(node) {
+      if (node.nodeType === 3) {
+        output += node.nodeValue || "";
+        return;
+      }
+      if (node.nodeType !== 1) {
+        return;
+      }
+      const isBlock = isXml || blockTags.has(node.tagName);
+      if (isBlock) {
+        output += "\n";
+      }
+      Array.from(node.childNodes).forEach(visit);
+      if (isBlock) {
+        output += "\n";
+      }
+    }
+
+    visit(documentNode.body || documentNode.documentElement);
+    return output;
+  }
+
+  function normalizeBookingText(source) {
+    return htmlToBookingText(source)
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t\f\v]+/g, " ")
+      .replace(/ *\n */g, "\n")
+      .replace(/\n{2,}/g, "\n")
+      .trim();
+  }
+
+  function to24Hour(hour, minute, suffix) {
+    let normalizedHour = Number(hour) % 12;
+    if (String(suffix).toUpperCase() === "PM") {
+      normalizedHour += 12;
+    }
+    return `${String(normalizedHour).padStart(2, "0")}:${minute}`;
+  }
+
+  function getDurationHours(startTime, endTime) {
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+    let minutes = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+    if (minutes <= 0) {
+      minutes += 24 * 60;
+    }
+    return minutes / 60;
+  }
+
+  function formatIsoDate(year, month, day) {
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function getBookingRate(date, options) {
+    const parts = date.split("-").map(Number);
+    const day = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+    const isWeekend = day === 0 || day === 6;
+    return Number(
+      isWeekend
+        ? options?.weekendHourlyRate ?? 27.63
+        : options?.weekdayHourlyRate ?? 14.89,
+    );
+  }
+
+  function stripMiddleInitials(value) {
+    const parts = normalizeText(value)
+      .replace(/[^A-Za-z' -]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    return parts.filter((part, index) => index === 0 || index === parts.length - 1 || part.length > 1).join(" ");
+  }
+
+  function resolveBookingPayer(value, players) {
+    const raw = normalizeText(value);
+    if (!raw) {
+      return "";
+    }
+    const roster = Array.isArray(players) ? players : [];
+    const exact = roster.find((player) => player.toLowerCase() === raw.toLowerCase());
+    if (exact) {
+      return exact;
+    }
+
+    const simplified = stripMiddleInitials(raw).toLowerCase();
+    const matches = roster.filter(
+      (player) => stripMiddleInitials(player).toLowerCase() === simplified,
+    );
+    return matches.length === 1 ? matches[0] : raw;
+  }
+
+  function getBookingTitle(prefix) {
+    const ignored = /^(?:active|cancelled|details|\d+ bookings? found)$/i;
+    const lines = prefix
+      .split("\n")
+      .map(normalizeText)
+      .filter((line) => line && !ignored.test(line));
+    return lines[lines.length - 1] || "Court booking";
+  }
+
+  function getBookingAmount(segment) {
+    const totalPatterns = [
+      /\b(?:total|paid|amount|cost|price)\b[^$\d]{0,30}\$\s*([\d,]+(?:\.\d{2})?)/gi,
+      /\$\s*([\d,]+(?:\.\d{2})?)[^\n]{0,30}\b(?:total|paid|amount|cost|price)\b/gi,
+    ];
+    for (const pattern of totalPatterns) {
+      const matches = Array.from(segment.matchAll(pattern));
+      if (matches.length > 0) {
+        return parseMoney(matches[matches.length - 1][1]);
+      }
+    }
+
+    const moneyMatches = Array.from(segment.matchAll(/\$\s*([\d,]+(?:\.\d{2})?)/g));
+    return moneyMatches.length === 1 ? parseMoney(moneyMatches[0][1]) : null;
+  }
+
+  function cleanParticipantText(value) {
+    return normalizeText(value)
+      .replace(/\b(?:participants?|players?|attendees?)\s*:?/gi, "")
+      .replace(/\bDetails\b/gi, "")
+      .replace(/\n+/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[,;:\s]+|[,;:\s]+$/g, "");
+  }
+
+  function parseCourtBookingExport(source, options) {
+    const text = normalizeBookingText(source);
+    const matches = Array.from(text.matchAll(BOOKING_DATE_TIME_PATTERN));
+    const defaultYear = Number(options?.year || new Date().getFullYear());
+    const players = options?.players || [];
+    const bookings = [];
+    const warnings = [];
+
+    matches.forEach((match, index) => {
+      const nextIndex = matches[index + 1]?.index ?? text.length;
+      const previousEnd = index > 0
+        ? matches[index - 1].index + matches[index - 1][0].length
+        : 0;
+      const prefix = text.slice(previousEnd, match.index);
+      const segment = text.slice(match.index + match[0].length, nextIndex);
+      const referenceMatch = segment.match(/\b(\d{4,})\s*#/);
+      const courtMatch = segment.match(/\b(Renton|Bellevue)\s+(\d+)\b/i);
+      const participantEnd = referenceMatch?.index ?? courtMatch?.index ?? segment.length;
+      const participantText = cleanParticipantText(segment.slice(0, participantEnd));
+      const participants = participantText
+        .split(/\s*,\s*/)
+        .map(cleanParticipantText)
+        .filter(Boolean);
+      const month = BOOKING_MONTHS[match[1].toLowerCase()];
+      const year = Number(match[3] || defaultYear);
+      const date = formatIsoDate(year, month, Number(match[2]));
+      const startTime = to24Hour(match[4], match[5], match[6]);
+      const endTime = to24Hour(match[7], match[8], match[9]);
+      const durationHours = getDurationHours(startTime, endTime);
+      const hourlyRate = getBookingRate(date, options);
+      const exportedAmount = getBookingAmount(segment);
+      const rawPaidBy = participants[0] || "";
+      const paidBy = resolveBookingPayer(rawPaidBy, players);
+      const location = courtMatch
+        ? `${courtMatch[1][0].toUpperCase()}${courtMatch[1].slice(1).toLowerCase()}`
+        : "";
+      const court = courtMatch ? `${location} ${courtMatch[2]}` : "";
+      const eventName = getBookingTitle(prefix);
+      const reference = referenceMatch?.[1] || "";
+      const amount = exportedAmount === null
+        ? roundMoney(hourlyRate * durationHours)
+        : roundMoney(exportedAmount);
+
+      if (!rawPaidBy) {
+        warnings.push(`Could not find the payer for ${date} at ${startTime}.`);
+      }
+      if (!reference) {
+        warnings.push(`Could not find a booking number for ${date} at ${startTime}.`);
+      }
+
+      bookings.push({
+        reference,
+        date,
+        startTime,
+        endTime,
+        durationHours,
+        courts: 1,
+        amount,
+        amountSource: exportedAmount === null ? "calculated" : "export",
+        hourlyRate,
+        paidBy,
+        rawPaidBy,
+        participants,
+        eventName,
+        location,
+        court,
+        status: "active",
+      });
+    });
+
+    if (matches.length === 0 && text) {
+      warnings.push(
+        "No booking date/time rows were found. Paste the rendered page text or upload HTML copied from the page inspector.",
+      );
+    }
+
+    return { bookings, warnings };
+  }
+
+  function parseCompactClock(value) {
+    const match = normalizeText(value).match(/^(\d{1,2})(?::([0-5]\d))?\s*([ap])(?:m)?$/i);
+    if (!match) {
+      return "";
+    }
+    return to24Hour(match[1], match[2] || "00", `${match[3]}M`);
+  }
+
+  function parseUsDateParts(value) {
+    const match = normalizeText(value).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return match
+      ? { month: Number(match[1]), day: Number(match[2]), year: Number(match[3]) }
+      : null;
+  }
+
+  function parseCourtReservePlayDateTime(value, options) {
+    const match = normalizeText(value).match(
+      /^(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)(?:day)?\s*,?\s*(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,\s*(\d{4}))?\s*,?\s*(\d{1,2}(?::\d{2})?\s*[ap](?:m)?)\s*(?:-|–|—|to)\s*(\d{1,2}(?::\d{2})?\s*[ap](?:m)?)$/i,
+    );
+    if (!match) {
+      return null;
+    }
+
+    const month = BOOKING_MONTHS[match[1].toLowerCase()];
+    const transactionDate = parseUsDateParts(options?.transactionDate);
+    let year = Number(match[3] || transactionDate?.year || options?.year || new Date().getFullYear());
+    if (!match[3] && transactionDate) {
+      if (transactionDate.month === 12 && month === 1) {
+        year += 1;
+      } else if (transactionDate.month === 1 && month === 12) {
+        year -= 1;
+      }
+    }
+    const startTime = parseCompactClock(match[4]);
+    const endTime = parseCompactClock(match[5]);
+    if (!startTime || !endTime) {
+      return null;
+    }
+    return {
+      date: formatIsoDate(year, month, Number(match[2])),
+      startTime,
+      endTime,
+      durationHours: getDurationHours(startTime, endTime),
+    };
+  }
+
+  function normalizeHeader(value) {
+    return normalizeText(value).toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function getTransactionLocation(category) {
+    const match = normalizeText(category).match(/\b(Renton|Bellevue)\b/i);
+    return match
+      ? `${match[1][0].toUpperCase()}${match[1].slice(1).toLowerCase()}`
+      : "";
+  }
+
+  function toMoneyCents(value) {
+    return Math.round(Math.abs(Number(value || 0)) * 100);
+  }
+
+  function findRefundedFeeIndexes(fees, refundAmount) {
+    const target = toMoneyCents(refundAmount);
+    if (!target) {
+      return [];
+    }
+    const sums = new Map([[0, []]]);
+    fees.forEach((fee, index) => {
+      const cents = toMoneyCents(fee.amount);
+      Array.from(sums.entries())
+        .sort(([first], [second]) => second - first)
+        .forEach(([sum, indexes]) => {
+          const next = sum + cents;
+          if (next <= target && !sums.has(next)) {
+            sums.set(next, [...indexes, index]);
+          }
+        });
+    });
+    return sums.get(target) || [];
+  }
+
+  function parseCourtReserveTransactionRows(rows, options) {
+    if (!Array.isArray(rows) || rows.length < 2) {
+      throw new Error("The CourtReserve workbook does not contain transaction rows.");
+    }
+    const headers = rows[0].map(normalizeHeader);
+    const requiredHeaders = [
+      "type",
+      "amount",
+      "unpaid amount",
+      "paid date",
+      "payment type",
+      "category",
+      "date/time",
+      "member",
+    ];
+    const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
+    if (missingHeaders.length) {
+      throw new Error(
+        `This is not a CourtReserve transaction export. Missing: ${missingHeaders.join(", ")}.`,
+      );
+    }
+
+    const column = Object.fromEntries(headers.map((header, index) => [header, index]));
+    const parsedRows = [];
+    const warnings = [];
+    rows.slice(1).forEach((values, index) => {
+      if (!values.some((value) => normalizeText(value))) {
+        return;
+      }
+      const get = (name) => values[column[name]];
+      const type = normalizeText(get("type"));
+      const play = parseCourtReservePlayDateTime(get("date/time"), {
+        year: options?.year,
+        transactionDate: get("date"),
+      });
+      const amount = parseMoney(get("amount"));
+      const unpaidAmount = parseMoney(get("unpaid amount"));
+      const category = normalizeText(get("category"));
+      const member = normalizeText(get("member"));
+      if (!play && /^(?:fee|payment|refund)/i.test(type)) {
+        warnings.push(`Row ${index + 2} has an unrecognized play date/time.`);
+      }
+      parsedRows.push({
+        sourceRow: index + 2,
+        transactionDate: normalizeText(get("date")),
+        type,
+        amount: Math.abs(Number(amount || 0)),
+        unpaidAmount: Math.abs(Number(unpaidAmount || 0)),
+        paidDate: normalizeText(get("paid date")),
+        paymentType: normalizeText(get("payment type")),
+        category,
+        dateTime: normalizeText(get("date/time")),
+        member,
+        paidBy: resolveBookingPayer(member, options?.players || []),
+        location: getTransactionLocation(category),
+        ...play,
+      });
+    });
+
+    const groups = new Map();
+    function getGroup(row) {
+      if (!row.date || !row.startTime) {
+        return null;
+      }
+      const key = [
+        row.date,
+        row.startTime,
+        row.endTime,
+        row.category.toLowerCase(),
+        row.member.toLowerCase(),
+      ].join("|");
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          date: row.date,
+          startTime: row.startTime,
+          endTime: row.endTime,
+          durationHours: row.durationHours,
+          category: row.category,
+          member: row.member,
+          paidBy: row.paidBy,
+          location: row.location,
+          fees: [],
+          payments: [],
+          refunds: [],
+        });
+      }
+      return groups.get(key);
+    }
+
+    parsedRows.forEach((row) => {
+      const group = getGroup(row);
+      if (!group) {
+        return;
+      }
+      if (/^fee$/i.test(row.type)) {
+        group.fees.push(row);
+      } else if (/^payment/i.test(row.type)) {
+        group.payments.push(row);
+      } else if (/^refund/i.test(row.type)) {
+        group.refunds.push(row);
+      }
+    });
+
+    const bookings = [];
+    const canceled = [];
+    const unmatchedRefunds = [];
+    groups.forEach((group) => {
+      if (!group.fees.length) {
+        if (group.refunds.length) {
+          unmatchedRefunds.push(group);
+        }
+        return;
+      }
+      const feeAmount = roundMoney(
+        group.fees.reduce((sum, row) => sum + row.amount, 0),
+      );
+      const refundAmount = roundMoney(
+        group.refunds.reduce((sum, row) => sum + row.amount, 0),
+      );
+      const netAmount = roundMoney(Math.max(0, feeAmount - refundAmount));
+      const unpaidAmount = roundMoney(
+        group.fees.reduce((sum, row) => sum + row.unpaidAmount, 0),
+      );
+      const paymentAmount = roundMoney(
+        group.payments.reduce((sum, row) => sum + row.amount, 0),
+      );
+      const refundedFeeIndexes = findRefundedFeeIndexes(group.fees, refundAmount);
+      const refundMatchesFees =
+        refundAmount === 0 || refundedFeeIndexes.length > 0 || refundAmount === feeAmount;
+      const courts = netAmount === 0
+        ? 0
+        : Math.max(
+            1,
+            group.fees.length - (refundMatchesFees ? refundedFeeIndexes.length : 0),
+          );
+      const reviewReasons = [];
+      if (unpaidAmount > 0 || group.fees.some((row) => !row.paidDate)) {
+        reviewReasons.push(`$${unpaidAmount.toFixed(2)} unpaid`);
+      }
+      if (refundAmount > 0 && !refundMatchesFees) {
+        reviewReasons.push(`partial/unmatched refund $${refundAmount.toFixed(2)}`);
+      }
+      const expectedPaid = roundMoney(feeAmount - unpaidAmount);
+      if (Math.abs(paymentAmount - expectedPaid) > 0.011) {
+        reviewReasons.push(
+          `payments $${paymentAmount.toFixed(2)} do not match paid fees $${expectedPaid.toFixed(2)}`,
+        );
+      }
+      if (!group.paidBy || !(options?.players || []).includes(group.paidBy)) {
+        reviewReasons.push(`payer “${group.member || "unknown"}” is not on the roster`);
+      }
+
+      const baseRecord = {
+        externalKey: group.key,
+        reference: "",
+        date: group.date,
+        startTime: group.startTime,
+        endTime: group.endTime,
+        durationHours: group.durationHours,
+        amountSource: "transaction",
+        paidBy: group.paidBy,
+        rawPaidBy: group.member,
+        participants: [group.member].filter(Boolean),
+        eventName: group.category,
+        location: group.location,
+        court: group.location || group.category,
+      };
+      if (netAmount === 0) {
+        canceled.push({
+          ...baseRecord,
+          courts,
+          amount: netAmount,
+          grossAmount: feeAmount,
+          refundAmount,
+          unpaidAmount,
+          paymentAmount,
+          status: "canceled",
+          feeCount: group.fees.length,
+          paymentTypes: Array.from(
+            new Set(group.payments.map((row) => row.paymentType)),
+          ).filter(Boolean),
+          sourceRows: group.fees
+            .concat(group.payments, group.refunds)
+            .map((row) => row.sourceRow)
+            .sort((first, second) => first - second),
+          reviewReasons,
+        });
+        return;
+      }
+
+      if (!refundMatchesFees) {
+        bookings.push({
+          ...baseRecord,
+          courts,
+          amount: netAmount,
+          grossAmount: feeAmount,
+          refundAmount,
+          unpaidAmount,
+          paymentAmount,
+          status: "active",
+          feeCount: group.fees.length,
+          paymentTypes: Array.from(
+            new Set(group.payments.map((row) => row.paymentType)),
+          ).filter(Boolean),
+          sourceRows: group.fees
+            .concat(group.payments, group.refunds)
+            .map((row) => row.sourceRow)
+            .sort((first, second) => first - second),
+          reviewReasons,
+        });
+        return;
+      }
+
+      const assignedPaymentIndexes = new Set();
+      const paymentsByFee = group.fees.map(() => []);
+      group.fees.forEach((fee, feeIndex) => {
+        const available = group.payments
+          .map((payment, paymentIndex) => ({ payment, paymentIndex }))
+          .filter(
+            ({ payment, paymentIndex }) =>
+              !assignedPaymentIndexes.has(paymentIndex) &&
+              payment.transactionDate === fee.transactionDate,
+          );
+        const exact = available.find(
+          ({ payment }) => Math.abs(payment.amount - fee.amount) < 0.011,
+        );
+        let matches = exact ? [exact] : [];
+        if (
+          !matches.length &&
+          Math.abs(
+            available.reduce((sum, entry) => sum + entry.payment.amount, 0) -
+              fee.amount,
+          ) < 0.011
+        ) {
+          matches = available;
+        }
+        if (!matches.length && group.fees.length === 1) {
+          matches = group.payments.map((payment, paymentIndex) => ({
+            payment,
+            paymentIndex,
+          }));
+        }
+        matches.forEach(({ payment, paymentIndex }) => {
+          assignedPaymentIndexes.add(paymentIndex);
+          paymentsByFee[feeIndex].push(payment);
+        });
+      });
+
+      const feeOccurrences = new Map();
+      const feeIdentities = group.fees.map((fee) => {
+        const signature = `${fee.transactionDate}|${fee.amount.toFixed(2)}`;
+        const occurrence = (feeOccurrences.get(signature) || 0) + 1;
+        feeOccurrences.set(signature, occurrence);
+        return `${signature}|${occurrence}`;
+      });
+      group.fees.forEach((fee, feeIndex) => {
+        if (refundedFeeIndexes.includes(feeIndex)) {
+          return;
+        }
+        const assignedPayments = paymentsByFee[feeIndex];
+        const sourceRows = [fee]
+          .concat(assignedPayments)
+          .map((row) => row.sourceRow)
+          .sort((first, second) => first - second);
+        bookings.push({
+          ...baseRecord,
+          externalKey:
+            group.fees.length === 1
+              ? group.key
+              : `${group.key}|fee:${feeIdentities[feeIndex]}`,
+          courts: 1,
+          amount: roundMoney(fee.amount),
+          grossAmount: roundMoney(fee.amount),
+          refundAmount: 0,
+          unpaidAmount: roundMoney(fee.unpaidAmount),
+          paymentAmount: roundMoney(
+            assignedPayments.reduce((sum, row) => sum + row.amount, 0),
+          ),
+          status: "active",
+          feeCount: 1,
+          paymentTypes: Array.from(
+            new Set(assignedPayments.map((row) => row.paymentType)),
+          ).filter(Boolean),
+          sourceRows,
+          reviewReasons: [...reviewReasons],
+        });
+      });
+    });
+
+    bookings.sort((first, second) =>
+      `${first.date}-${first.startTime}-${first.eventName}-${first.externalKey}`.localeCompare(
+        `${second.date}-${second.startTime}-${second.eventName}-${second.externalKey}`,
+      ),
+    );
+    canceled.sort((first, second) =>
+      `${first.date}-${first.startTime}`.localeCompare(`${second.date}-${second.startTime}`),
+    );
+
+    const feeRows = parsedRows.filter((row) => /^fee$/i.test(row.type));
+    const refundRows = parsedRows.filter((row) => /^refund/i.test(row.type));
+    return {
+      bookings,
+      canceled,
+      unmatchedRefunds,
+      warnings,
+      rows: parsedRows,
+      totals: {
+        sourceRows: parsedRows.length,
+        feeRows: feeRows.length,
+        feeAmount: roundMoney(feeRows.reduce((sum, row) => sum + row.amount, 0)),
+        refundRows: refundRows.length,
+        refundAmount: roundMoney(
+          refundRows.reduce((sum, row) => sum + row.amount, 0),
+        ),
+        activeAmount: roundMoney(
+          bookings.reduce((sum, booking) => sum + booking.amount, 0),
+        ),
+      },
+    };
+  }
+
+  function decodeXmlText(value) {
+    return String(value || "")
+      .replace(/&#(x[0-9a-f]+|\d+);/gi, (match, code) => {
+        const radix = code[0].toLowerCase() === "x" ? 16 : 10;
+        const number = Number.parseInt(radix === 16 ? code.slice(1) : code, radix);
+        return Number.isFinite(number) ? String.fromCodePoint(number) : match;
+      })
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, "&");
+  }
+
+  function parseXmlAttributes(source) {
+    const attributes = {};
+    String(source || "").replace(
+      /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g,
+      (match, name, doubleQuoted, singleQuoted) => {
+        attributes[name] = decodeXmlText(doubleQuoted ?? singleQuoted ?? "");
+        return match;
+      },
+    );
+    return attributes;
+  }
+
+  function getXmlTagText(source, localName) {
+    const expression = new RegExp(
+      `<(?:[\\w.-]+:)?${localName}\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w.-]+:)?${localName}>`,
+      "gi",
+    );
+    return Array.from(String(source || "").matchAll(expression))
+      .map((match) => decodeXmlText(match[1].replace(/<[^>]+>/g, "")))
+      .join("");
+  }
+
+  function getColumnIndex(cellReference) {
+    const letters = String(cellReference || "").match(/^[A-Z]+/i)?.[0] || "A";
+    return letters
+      .toUpperCase()
+      .split("")
+      .reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+  }
+
+  function parseXlsxWorksheetRows(xmlText, sharedStrings) {
+    const rowExpression = /<(?:[\w.-]+:)?row\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?row>/gi;
+    const cellExpression = /<(?:[\w.-]+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:[\w.-]+:)?c>)/gi;
+    const rows = Array.from(String(xmlText || "").matchAll(rowExpression)).map((rowMatch) => {
+      const values = [];
+      Array.from(rowMatch[1].matchAll(cellExpression)).forEach((cellMatch) => {
+        const attributes = parseXmlAttributes(cellMatch[1]);
+        const body = cellMatch[2] || "";
+        const index = getColumnIndex(attributes.r);
+        const type = attributes.t || "";
+        const raw = type === "inlineStr"
+          ? getXmlTagText(body, "t")
+          : getXmlTagText(body, "v");
+        if (type === "s") {
+          values[index] = sharedStrings[Number(raw)] || "";
+        } else if (type === "b") {
+          values[index] = raw === "1";
+        } else if (type === "str" || type === "inlineStr") {
+          values[index] = raw;
+        } else if (raw !== "" && Number.isFinite(Number(raw))) {
+          values[index] = Number(raw);
+        } else {
+          values[index] = raw;
+        }
+      });
+      return values;
+    });
+    if (!rows.length) {
+      throw new Error("CourtReserve worksheet XML could not be read.");
+    }
+    return rows;
+  }
+
+  function resolveXlsxPath(basePath, target) {
+    if (target.startsWith("/")) {
+      return target.slice(1);
+    }
+    const parts = `${basePath}/${target}`.split("/");
+    const resolved = [];
+    parts.forEach((part) => {
+      if (!part || part === ".") {
+        return;
+      }
+      if (part === "..") {
+        resolved.pop();
+      } else {
+        resolved.push(part);
+      }
+    });
+    return resolved.join("/");
+  }
+
+  async function parseCourtReserveTransactionWorkbook(arrayBuffer, options) {
+    if (!global.JSZip) {
+      throw new Error("The XLSX reader is not loaded.");
+    }
+    const zip = await global.JSZip.loadAsync(arrayBuffer);
+    const workbookFile = zip.file("xl/workbook.xml");
+    const relationshipsFile = zip.file("xl/_rels/workbook.xml.rels");
+    if (!workbookFile || !relationshipsFile) {
+      throw new Error("The selected file is not a valid XLSX workbook.");
+    }
+
+    const workbookXml = await workbookFile.async("string");
+    const relationshipsXml = await relationshipsFile.async("string");
+    const sheets = Array.from(
+      workbookXml.matchAll(/<(?:[\w.-]+:)?sheet\b([^>]*?)(?:\/>|>)/gi),
+    ).map((match) => parseXmlAttributes(match[1]));
+    const selectedSheet =
+      sheets.find((sheet) => /all transactions/i.test(sheet.name || "")) ||
+      sheets[0];
+    if (!selectedSheet) {
+      throw new Error("The workbook does not contain a worksheet.");
+    }
+    const relationshipId =
+      selectedSheet["r:id"] || selectedSheet.id;
+    const relationships = Array.from(
+      relationshipsXml.matchAll(
+        /<(?:[\w.-]+:)?Relationship\b([^>]*?)(?:\/>|>)/gi,
+      ),
+    ).map((match) => parseXmlAttributes(match[1]));
+    const relationship = relationships.find((entry) => entry.Id === relationshipId);
+    const target = relationship?.Target || "worksheets/sheet1.xml";
+    const worksheetPath = resolveXlsxPath("xl", target);
+    const worksheetFile = zip.file(worksheetPath);
+    if (!worksheetFile) {
+      throw new Error("The CourtReserve transaction worksheet is missing.");
+    }
+
+    let sharedStrings = [];
+    const sharedStringsFile = zip.file("xl/sharedStrings.xml");
+    if (sharedStringsFile) {
+      const sharedXml = await sharedStringsFile.async("string");
+      sharedStrings = Array.from(
+        sharedXml.matchAll(
+          /<(?:[\w.-]+:)?si\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?si>/gi,
+        ),
+      ).map((match) => getXmlTagText(match[1], "t"));
+    }
+    const rows = parseXlsxWorksheetRows(
+      await worksheetFile.async("string"),
+      sharedStrings,
+    );
+    return {
+      ...parseCourtReserveTransactionRows(rows, options),
+      sheetName: selectedSheet.name || "All Transactions",
+    };
+  }
+
   function findRowIndex(rows, label) {
     return rows.findIndex((row) => normalizeText(row[0]) === label);
   }
@@ -650,5 +1478,9 @@
     parseBirdieInventory,
     parseFinalizedBillingCsv,
     buildFinalizedBillingBackfill,
+    parseCourtBookingExport,
+    resolveBookingPayer,
+    parseCourtReserveTransactionRows,
+    parseCourtReserveTransactionWorkbook,
   };
 })(window);

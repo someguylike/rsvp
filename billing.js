@@ -65,14 +65,15 @@
   const JSONP_TIMEOUT_MS = 30000;
   const VENMO_RECIPIENT_NAME = "Nam Pham";
   const VENMO_RECIPIENT_USERNAME = "nampham2022";
-  const LOCAL_BILLING_FIXTURE = new URLSearchParams(window.location.search).get(
-    "localBillingFixture",
-  );
+  const BILLING_QUERY = new URLSearchParams(window.location.search);
+  const LOCAL_BILLING_FIXTURE = BILLING_QUERY.get("localBillingFixture");
+  const REQUESTED_BILLING_MONTH = BILLING_QUERY.get("month") || "";
   let isAdmin = false;
   let adminToken = "";
   let backendBilling = null;
   let backendAvailable = false;
   let latestBillingRequest = 0;
+  let requestedBillingMonthApplied = false;
 
   const monthInput = document.querySelector("#billing-month");
   const reloadBillingButton = document.querySelector("#reload-billing-button");
@@ -99,6 +100,22 @@
   const courtPaidByInput = document.querySelector("#court-paid-by");
   const courtFeedback = document.querySelector("#court-feedback");
   const courtBlockTable = document.querySelector("#court-block-table");
+  const courtReserveExportBookmarklet = document.querySelector(
+    "#courtreserve-export-bookmarklet",
+  );
+  const courtImportForm = document.querySelector("#court-import-form");
+  const courtImportFileInput = document.querySelector("#court-import-file");
+  const courtReservationAuditFileInput = document.querySelector(
+    "#court-reservation-audit-file",
+  );
+  const courtReservationAuditImage = document.querySelector(
+    "#court-reservation-audit-image",
+  );
+  const courtImportTextInput = document.querySelector("#court-import-text");
+  const courtImportFeedback = document.querySelector("#court-import-feedback");
+  const courtImportPreview = document.querySelector("#court-import-preview");
+  const courtImportTable = document.querySelector("#court-import-table");
+  const courtImportSaveButton = document.querySelector("#court-import-save-button");
   const birdiePurchaseForm = document.querySelector("#birdie-purchase-form");
   const birdieDateInput = document.querySelector("#birdie-date");
   const birdieBatchInput = document.querySelector("#birdie-batch");
@@ -124,6 +141,8 @@
   let billingMonths = [];
   let progressTimer = 0;
   let progressPercent = 0;
+  let courtImportBookings = [];
+  let courtReservationAuditImageUrl = "";
 
   function buildAppsScriptUrl(payload, callbackName) {
     const url = new URL(APPS_SCRIPT_URL);
@@ -459,6 +478,7 @@
 
   function clearSectionStatuses() {
     setSectionStatus(courtFeedback, "");
+    setSectionStatus(courtImportFeedback, "");
     setSectionStatus(birdieFeedback, "");
     setSectionStatus(memberFeedback, "");
   }
@@ -603,7 +623,12 @@
   function populateBillingMonthOptions(months) {
     const currentSelection = monthInput.value;
     const openMonths = months
-      .filter((month) => isAdmin || !month.allPaid)
+      .filter(
+        (month) =>
+          isAdmin ||
+          !month.allPaid ||
+          month.month === REQUESTED_BILLING_MONTH,
+      )
       .sort((first, second) => first.month.localeCompare(second.month));
 
     billingMonths = openMonths;
@@ -618,7 +643,13 @@
       monthInput.append(option);
     });
 
-    if (openMonths.some((month) => month.month === currentSelection)) {
+    if (
+      !requestedBillingMonthApplied &&
+      openMonths.some((month) => month.month === REQUESTED_BILLING_MONTH)
+    ) {
+      monthInput.value = REQUESTED_BILLING_MONTH;
+      requestedBillingMonthApplied = true;
+    } else if (openMonths.some((month) => month.month === currentSelection)) {
       monthInput.value = currentSelection;
     } else if (openMonths.length) {
       monthInput.value = openMonths[openMonths.length - 1].month;
@@ -1094,13 +1125,20 @@
           batch,
           unitPrice,
           purchaseDates: [],
+          activityDates: [],
+          inventoryPurchases: [],
           purchased: 0,
           used: 0,
           remaining: 0,
           amount: 0,
         };
 
+        if (purchase.date && !current.activityDates.includes(purchase.date)) {
+          current.activityDates.push(purchase.date);
+        }
+
         if (recordType === "inventory_purchase") {
+          current.inventoryPurchases.push(purchase);
           if (purchase.date && !current.purchaseDates.includes(purchase.date)) {
             current.purchaseDates.push(purchase.date);
           }
@@ -1418,8 +1456,25 @@
   }
 
   function renderCourtBlocks() {
+    const sortedCourtBlocks = billing.courtBlocks.slice().sort((first, second) => {
+      const dateOrder = String(first.date || "").localeCompare(String(second.date || ""));
+      if (dateOrder) {
+        return dateOrder;
+      }
+      const timeOrder = normalizeClockValue(first.startTime).localeCompare(
+        normalizeClockValue(second.startTime),
+      );
+      if (timeOrder) {
+        return timeOrder;
+      }
+      return String(first.id || "").localeCompare(String(second.id || ""));
+    });
     const activeCourtBlocks = billing.courtBlocks.filter(
       (block) => block.status === "active",
+    );
+    const activeBookingCount = activeCourtBlocks.reduce(
+      (sum, block) => sum + Number(block.courts || 0),
+      0,
     );
     const totalCourtHours = activeCourtBlocks.reduce(
       (sum, block) =>
@@ -1434,7 +1489,7 @@
     renderTable(
       courtBlockTable,
       ["Date", "Block", "Courts", "Paid By", "Amount", "Source", "Status", "Actions"],
-      billing.courtBlocks.map((block) => {
+      sortedCourtBlocks.map((block) => {
         const statusCell = makeBadge(
           block.status === "active" ? "Active" : "Canceled",
           block.status === "active" ? "paid" : "review",
@@ -1475,15 +1530,15 @@
           { text: String(block.courts), className: "numeric-cell" },
           { text: block.paidBy },
           { text: formatMoney(block.amount), className: "numeric-cell" },
-          { text: block.source },
+          { text: formatCourtSource(block.source) },
           statusCell,
           actions,
         ];
       }),
       [
-        "Total",
+        "Active total",
         `${formatNumber(totalCourtHours, 1)} court-hours`,
-        "",
+        `${activeBookingCount} booking${activeBookingCount === 1 ? "" : "s"}`,
         "",
         formatMoney(totalCost),
         "",
@@ -1493,18 +1548,60 @@
     );
   }
 
+  function removeBirdieEntry(purchase) {
+    const isInventory = getBirdieRecordType(purchase) === "inventory_purchase";
+    saveBillingAction(
+      {
+        action: "removeBirdiePurchase",
+        id: purchase.id,
+      },
+      () => {
+        setBirdieState({
+          ...getBirdieState(),
+          purchases: getBirdieState().purchases.filter(
+            (candidate) => candidate.id !== purchase.id,
+          ),
+        });
+      },
+      isInventory ? "Birdie inventory entry removed." : "Birdie entry removed.",
+      birdieFeedback,
+    );
+  }
+
+  function makeBirdieRemoveButton(purchase, label) {
+    const recordType = getBirdieRecordType(purchase);
+    const entryLabel = recordType === "inventory_purchase"
+      ? "birdie inventory"
+      : recordType === "usage"
+        ? "birdie usage"
+        : "birdie";
+    const remove = document.createElement("button");
+    remove.className = "inline-action remove";
+    remove.type = "button";
+    remove.textContent = label || "x";
+    remove.title = `Remove ${purchase.tubes} tube${Number(purchase.tubes) === 1 ? "" : "s"} from ${purchase.date}`;
+    remove.setAttribute(
+      "aria-label",
+      `Remove ${entryLabel} entry from ${purchase.date}`,
+    );
+    remove.addEventListener("click", () => removeBirdieEntry(purchase));
+    return remove;
+  }
+
   function renderBirdies() {
     const state = billing.birdieState;
     const inventoryBatches = getBirdieInventoryBatches(state.purchases);
+    const visibleInventoryBatches = inventoryBatches.filter(
+      (batch) =>
+        batch.remaining > 0 ||
+        batch.activityDates.some((date) => String(date).startsWith(`${monthInput.value}-`)),
+    );
     const currentMonthRows = state.purchases.filter(
       (purchase) =>
         isActiveBirdiePurchase(purchase) &&
         isCurrentMonthBirdieRow(purchase) &&
         getBirdieRecordType(purchase) !== "inventory_purchase",
     );
-    const activeInventoryPurchaseTubes = state.purchases
-      .filter(isInventoryBirdiePurchase)
-      .reduce((sum, purchase) => sum + Number(purchase.tubes || 0), 0);
     const currentMonthUsedTubes = state.purchases
       .filter(isBilledBirdiePurchase)
       .reduce((sum, purchase) => sum + Number(purchase.tubes || 0), 0);
@@ -1542,56 +1639,46 @@
     renderTable(
       birdiePurchaseTable,
       ["Batch", "Purchase Date", "Tubes", "Unit", "Paid/Source", "Amount", "Status", "Actions"],
-      inventoryBatches.map((batch) => [
-        { text: batch.batch, className: "name-cell" },
-        {
-          text: batch.purchaseDates
-            .slice()
-            .sort()
-            .map(formatDisplayDate)
-            .join(", "),
-        },
-        {
-          text: `${formatNumber(batch.remaining, 1)} left / ${formatNumber(
-            batch.purchased,
-            1,
-          )} bought`,
-          className: "numeric-cell",
-        },
-        { text: formatMoney(batch.unitPrice), className: "numeric-cell" },
-        { text: "Inventory" },
-        { text: formatMoney(batch.amount), className: "numeric-cell" },
-        makeBadge("Inventory", "review"),
-        createCell("td", ""),
-      ]).concat(currentMonthRows.map((purchase) => {
+      visibleInventoryBatches.map((batch) => {
+        const actions = document.createElement("td");
+        batch.inventoryPurchases
+          .slice()
+          .sort((first, second) => String(first.date).localeCompare(String(second.date)))
+          .forEach((purchase) => {
+            const dateLabel = String(purchase.date || "").slice(5).replace("-", "/");
+            actions.append(
+              makeBirdieRemoveButton(purchase, `x ${dateLabel || "entry"}`),
+            );
+          });
+        return [
+          { text: batch.batch, className: "name-cell" },
+          {
+            text: batch.purchaseDates
+              .slice()
+              .sort()
+              .map(formatDisplayDate)
+              .join(", "),
+          },
+          {
+            text: `${formatNumber(batch.remaining, 1)} left / ${formatNumber(
+              batch.purchased,
+              1,
+            )} bought`,
+            className: "numeric-cell",
+          },
+          { text: formatMoney(batch.unitPrice), className: "numeric-cell" },
+          { text: "Inventory" },
+          { text: formatMoney(batch.amount), className: "numeric-cell" },
+          makeBadge("Inventory", "review"),
+          actions,
+        ];
+      }).concat(currentMonthRows.map((purchase) => {
         const recordType = getBirdieRecordType(purchase);
         const batch =
           purchase.batch ||
           (recordType === "usage" ? "Monthly usage" : "Inventory purchase");
         const actions = document.createElement("td");
-        const remove = document.createElement("button");
-        remove.className = "inline-action remove";
-        remove.type = "button";
-        remove.textContent = "x";
-        remove.addEventListener("click", () => {
-          saveBillingAction(
-            {
-              action: "removeBirdiePurchase",
-              id: purchase.id,
-            },
-            () => {
-              setBirdieState({
-                ...getBirdieState(),
-                purchases: getBirdieState().purchases.filter(
-                  (candidate) => candidate.id !== purchase.id,
-                ),
-              });
-            },
-            "Birdie purchase removed.",
-            birdieFeedback,
-          );
-        });
-        actions.append(remove);
+        actions.append(makeBirdieRemoveButton(purchase));
         return [
           { text: batch, className: "name-cell" },
           { text: formatDisplayDate(purchase.date) },
@@ -1615,10 +1702,7 @@
       [
         "Total",
         "",
-        `${formatNumber(activeInventoryPurchaseTubes, 1)} purchased / ${formatNumber(
-          remainingTubes,
-          1,
-        )} left`,
+        `${formatNumber(remainingTubes, 1)} left`,
         `Used: ${formatNumber(currentMonthUsedTubes, 1)}`,
         "",
         formatMoney(currentMonthUsageCost),
@@ -2140,6 +2224,669 @@
     updatePageTitle();
   }
 
+  function slugImportValue(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
+
+  function hashImportValue(value) {
+    let hash = 0;
+    const text = String(value || "");
+    for (let index = 0; index < text.length; index += 1) {
+      hash = (hash * 31 + text.charCodeAt(index)) | 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  function initializeCourtReserveBookmarklet() {
+    function saveCourtReserveHtml() {
+      const page = document.documentElement.cloneNode(true);
+      page
+        .querySelectorAll("script, style, link, iframe, object, embed")
+        .forEach((element) => element.remove());
+      const html = `<!doctype html>\n${page.outerHTML}`;
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `courtreserve-bookings-${new Date()
+        .toISOString()
+        .slice(0, 10)}.html`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }
+
+    courtReserveExportBookmarklet.href = `javascript:(${saveCourtReserveHtml.toString()})()`;
+    courtReserveExportBookmarklet.addEventListener("click", (event) => {
+      event.preventDefault();
+      setSectionStatus(
+        courtImportFeedback,
+        "Drag the Save CourtReserve HTML link to your bookmarks bar, then use that bookmark while viewing CourtReserve.",
+        "",
+      );
+    });
+  }
+
+  function getImportedCourtBlockId(booking) {
+    const key = booking.externalKey || (booking.reference
+      ? `${booking.date}-${booking.reference}`
+      : [
+          booking.date,
+          booking.startTime,
+          booking.endTime,
+          booking.court,
+          booking.rawPaidBy,
+        ].join("-"));
+    const slug = slugImportValue(key);
+    const prefix = booking.amountSource === "transaction"
+      ? "court-transaction"
+      : "court-booking";
+    return `${prefix}-${slug || hashImportValue(key)}`;
+  }
+
+  function formatSourceRows(rowNumbers) {
+    const ranges = [];
+    rowNumbers
+      .map(Number)
+      .filter(Number.isFinite)
+      .sort((first, second) => first - second)
+      .forEach((rowNumber) => {
+        const last = ranges[ranges.length - 1];
+        if (last && rowNumber === last.end + 1) {
+          last.end = rowNumber;
+        } else {
+          ranges.push({ start: rowNumber, end: rowNumber });
+        }
+      });
+    return ranges
+      .map((range) =>
+        range.start === range.end ? range.start : `${range.start}–${range.end}`,
+      )
+      .join(", ");
+  }
+
+  function formatCourtSource(source) {
+    const text = String(source || "");
+    if (!text.startsWith("CourtReserve transaction import")) {
+      return text;
+    }
+    const parts = text.split(/\s*·\s*/);
+    const location = parts.find((part) => /^(?:Renton|Bellevue)(?:\s|$)/i.test(part));
+    const refund = parts.find((part) => /^refund\s/i.test(part));
+    const rows = parts.find((part) => /^XLSX rows\s/i.test(part));
+    const compact = ["CR XLSX", location, refund].filter(Boolean);
+    if (rows) {
+      const rowNumbers = Array.from(rows.matchAll(/\d+/g), (match) => Number(match[0]));
+      compact.push(`rows ${formatSourceRows(rowNumbers)}`);
+    }
+    return compact.join(" · ");
+  }
+
+  function getImportedCourtSource(booking) {
+    const isTransaction = booking.amountSource === "transaction";
+    const parts = [isTransaction ? "CR XLSX" : "CR page"];
+    if (booking.reference) {
+      parts.push(`#${booking.reference}`);
+    }
+    if (booking.court) {
+      parts.push(booking.court);
+    }
+    if (isTransaction) {
+      if (Number(booking.refundAmount || 0) > 0) {
+        parts.push(`refund ${formatMoney(booking.refundAmount)}`);
+      }
+      if (booking.sourceRows?.length) {
+        parts.push(`rows ${formatSourceRows(booking.sourceRows)}`);
+      }
+    } else if (booking.amountSource !== "export") {
+      parts.push(`$${Number(booking.hourlyRate || 0).toFixed(2)}/hr`);
+    }
+    return parts.join(" · ");
+  }
+
+  function getImportedCourtMatch(booking) {
+    const id = getImportedCourtBlockId(booking);
+    const blocks = getCourtBlocks();
+    const exact = blocks.some(
+      (block) =>
+        block.id === id ||
+        (booking.reference &&
+          String(block.source || "").includes(`#${booking.reference}`)),
+    );
+    if (exact) {
+      return "exact";
+    }
+    const overlap = blocks.some(
+      (block) =>
+        block.status === "active" &&
+        block.date === booking.date &&
+        normalizeClockValue(block.startTime) === booking.startTime &&
+        Math.abs(Number(block.durationHours || 0) - Number(booking.durationHours || 0)) < 0.01 &&
+        (!booking.paidBy || block.paidBy === booking.paidBy),
+    );
+    return overlap ? "overlap" : "";
+  }
+
+  function makeImportCheckboxCell(booking) {
+    const cell = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = booking.selected;
+    input.setAttribute(
+      "aria-label",
+      `Import ${booking.date} ${booking.startTime}`,
+    );
+    input.addEventListener("change", () => {
+      booking.selected = input.checked;
+      updateCourtImportSaveButton();
+    });
+    cell.append(input);
+    return cell;
+  }
+
+  function makeImportPayerCell(booking) {
+    const cell = document.createElement("td");
+    const select = document.createElement("select");
+    const unresolved = document.createElement("option");
+    unresolved.value = "";
+    unresolved.textContent = booking.rawPaidBy
+      ? `Choose payer (${booking.rawPaidBy})`
+      : "Choose payer";
+    select.append(unresolved);
+    PLAYERS.forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.append(option);
+    });
+    select.value = PLAYERS.includes(booking.paidBy) ? booking.paidBy : "";
+    select.setAttribute("aria-label", `Payer for ${booking.date}`);
+    select.addEventListener("change", () => {
+      booking.paidBy = select.value;
+      updateCourtImportSaveButton();
+    });
+    cell.append(select);
+    return cell;
+  }
+
+  function makeImportAmountCell(booking) {
+    const cell = document.createElement("td");
+    cell.className = "numeric-cell";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "0.01";
+    input.value = Number(booking.amount || 0).toFixed(2);
+    input.setAttribute("aria-label", `Amount for ${booking.date}`);
+    input.addEventListener("input", () => {
+      booking.amount = parseAmount(input.value);
+      updateCourtImportSaveButton();
+    });
+    cell.append(input);
+    return cell;
+  }
+
+  function makeImportStatusCell(booking) {
+    const cell = document.createElement("td");
+    const reasons = booking.reviewReasons || [];
+    let text = "New";
+    let className = "paid";
+    if (booking.duplicateMatch === "exact") {
+      text = "Already imported";
+      className = "review";
+    } else if (booking.duplicateMatch === "overlap") {
+      text = "Existing overlap";
+      className = "review";
+    } else if (reasons.length) {
+      text = "Review";
+      className = "review";
+    } else if (booking.auditStatus === "verified") {
+      text = "Verified";
+    } else if (booking.amountSource === "transaction") {
+      text = "XLSX ready";
+    }
+    const badge = document.createElement("span");
+    badge.className = `billing-badge ${className}`;
+    badge.textContent = text;
+    if (reasons.length) {
+      badge.title = reasons.join("; ");
+    }
+    cell.append(badge);
+    if (reasons.length) {
+      const note = document.createElement("small");
+      note.className = "court-import-row-note";
+      note.textContent = reasons.join("; ");
+      cell.append(note);
+    }
+    return cell;
+  }
+
+  function updateCourtImportSaveButton() {
+    const selected = courtImportBookings.filter((booking) => booking.selected);
+    const ready = selected.filter(
+      (booking) => booking.paidBy && Number(booking.amount) >= 0,
+    );
+    courtImportSaveButton.disabled = selected.length === 0 || ready.length !== selected.length;
+    courtImportSaveButton.textContent = selected.length
+      ? `Import ${selected.length} Selected`
+      : "Import Selected";
+  }
+
+  function renderCourtImportPreview() {
+    courtImportPreview.hidden = courtImportBookings.length === 0;
+    if (courtImportBookings.length === 0) {
+      courtImportTable.replaceChildren();
+      updateCourtImportSaveButton();
+      return;
+    }
+
+    const sortedBookings = courtImportBookings.slice().sort((first, second) => {
+      const dateOrder = String(first.date || "").localeCompare(String(second.date || ""));
+      if (dateOrder) {
+        return dateOrder;
+      }
+      return String(first.startTime || "").localeCompare(String(second.startTime || ""));
+    });
+    const bookingCount = courtImportBookings.reduce(
+      (sum, booking) => sum + Number(booking.courts || 1),
+      0,
+    );
+    const totalAmount = courtImportBookings.reduce(
+      (sum, booking) => sum + Number(booking.amount || 0),
+      0,
+    );
+    renderTable(
+      courtImportTable,
+      ["Use", "Date", "Time", "Location / Audit", "Courts", "Exported Member", "Paid By", "Net Amount", "Source", "Rows / Booking", "Status"],
+      sortedBookings.map((booking) => [
+        makeImportCheckboxCell(booking),
+        { text: formatDisplayDate(booking.date), className: "name-cell" },
+        { text: formatTimeRange(booking.startTime, booking.durationHours) },
+        { text: booking.court || "Unknown" },
+        { text: String(booking.courts || 1), className: "numeric-cell" },
+        { text: booking.rawPaidBy || "Unknown" },
+        makeImportPayerCell(booking),
+        makeImportAmountCell(booking),
+        makeBadge(
+          booking.amountSource === "transaction"
+            ? "XLSX fee"
+            : booking.amountSource === "export"
+              ? "Page total"
+              : "Calculated",
+          booking.amountSource === "transaction" || booking.amountSource === "export"
+            ? "paid"
+            : "review",
+        ),
+        {
+          text: booking.sourceRows?.length
+            ? booking.sourceRows.join(", ")
+            : booking.reference
+              ? `#${booking.reference}`
+              : "—",
+        },
+        makeImportStatusCell(booking),
+      ]),
+      [
+        "Total",
+        "",
+        "",
+        "",
+        `${bookingCount} booking${bookingCount === 1 ? "" : "s"}`,
+        "",
+        "",
+        formatMoney(totalAmount),
+        "",
+        "",
+        "",
+      ],
+    );
+    updateCourtImportSaveButton();
+  }
+
+  function clearCourtImportPreview() {
+    courtImportBookings = [];
+    courtImportPreview.hidden = true;
+    courtImportTable.replaceChildren();
+    setSectionStatus(courtImportFeedback, "");
+    updateCourtImportSaveButton();
+  }
+
+  async function getReservationAuditSource() {
+    const pasted = courtImportTextInput.value.trim();
+    if (pasted) {
+      return pasted;
+    }
+    const file = courtReservationAuditFileInput.files?.[0];
+    return file && !file.type.startsWith("image/") ? file.text() : "";
+  }
+
+  function getReservationAuditKey(booking, includePayer) {
+    const parts = [
+      booking.date,
+      booking.startTime,
+      booking.endTime || getEndTime(booking.startTime, booking.durationHours),
+      String(booking.location || booking.eventName || "").toLowerCase(),
+    ];
+    if (includePayer) {
+      parts.push(String(booking.paidBy || booking.rawPaidBy || "").toLowerCase());
+    }
+    return parts.join("|");
+  }
+
+  function applyReservationAudit(transactionBookings, canceledBookings, auditBookings) {
+    const byExactKey = new Map();
+    const byScheduleKey = new Map();
+    auditBookings.forEach((booking) => {
+      const exactKey = getReservationAuditKey(booking, true);
+      const scheduleKey = getReservationAuditKey(booking, false);
+      [
+        [byExactKey, exactKey],
+        [byScheduleKey, scheduleKey],
+      ].forEach(([map, key]) => {
+        if (!map.has(key)) {
+          map.set(key, []);
+        }
+        map.get(key).push(booking);
+      });
+    });
+
+    const warnings = [];
+    transactionBookings.forEach((booking) => {
+      const matches =
+        byExactKey.get(getReservationAuditKey(booking, true)) ||
+        byScheduleKey.get(getReservationAuditKey(booking, false)) ||
+        [];
+      const courtLabels = Array.from(
+        new Set(matches.map((match) => match.court).filter(Boolean)),
+      );
+      if (courtLabels.length) {
+        booking.court = courtLabels.join(", ");
+      }
+      if (matches.length === Number(booking.courts || 1)) {
+        booking.auditStatus = "verified";
+      } else {
+        booking.auditStatus = "mismatch";
+        booking.reviewReasons.push(
+          matches.length
+            ? `reservation audit shows ${matches.length} court${matches.length === 1 ? "" : "s"}; XLSX shows ${booking.courts}`
+            : "not found in the Active reservation audit",
+        );
+      }
+    });
+
+    canceledBookings.forEach((booking) => {
+      const matches =
+        byExactKey.get(getReservationAuditKey(booking, true)) ||
+        byScheduleKey.get(getReservationAuditKey(booking, false)) ||
+        [];
+      if (matches.length) {
+        warnings.push(
+          `${formatDisplayDate(booking.date)} ${formatTimeRange(
+            booking.startTime,
+            booking.durationHours,
+          )} was fully refunded but still appears in the Active reservation audit.`,
+        );
+      }
+    });
+    return warnings;
+  }
+
+  async function handleCourtImportReview(event) {
+    event.preventDefault();
+    if (
+      !window.BillingParser?.parseCourtReserveTransactionWorkbook ||
+      !window.BillingParser?.parseCourtBookingExport
+    ) {
+      setSectionStatus(courtImportFeedback, "The CourtReserve parser is not available.", "error");
+      return;
+    }
+
+    const transactionFile = courtImportFileInput.files?.[0];
+    if (!transactionFile) {
+      setSectionStatus(
+        courtImportFeedback,
+        "Choose the CourtReserve All Transactions XLSX file.",
+        "error",
+      );
+      return;
+    }
+
+    const [year] = monthInput.value.split("-").map(Number);
+    setSectionStatus(courtImportFeedback, "Reading and reconciling transactions...", "loading");
+    try {
+      const result = await window.BillingParser.parseCourtReserveTransactionWorkbook(
+        await transactionFile.arrayBuffer(),
+        { year, players: PLAYERS },
+      );
+      const selectedMonthBookings = result.bookings.filter(
+        (booking) => booking.date.slice(0, 7) === monthInput.value,
+      );
+      const selectedMonthCanceled = result.canceled.filter(
+        (booking) => booking.date.slice(0, 7) === monthInput.value,
+      );
+      const otherMonthCount = result.bookings
+        .concat(result.canceled)
+        .filter((booking) => booking.date.slice(0, 7) !== monthInput.value)
+        .reduce((sum, booking) => sum + Number(booking.feeCount || 0), 0);
+
+      courtImportBookings = selectedMonthBookings.map((booking) => {
+        const reviewReasons = [...(booking.reviewReasons || [])];
+        const duplicateMatch = getImportedCourtMatch(booking);
+        const hasKnownPayer = PLAYERS.includes(booking.paidBy);
+        if (duplicateMatch === "overlap") {
+          reviewReasons.push("an existing active court block has the same date and time");
+        }
+        return {
+          ...booking,
+          paidBy: hasKnownPayer ? booking.paidBy : "",
+          duplicateMatch,
+          reviewReasons,
+          selected: !duplicateMatch && hasKnownPayer && reviewReasons.length === 0,
+        };
+      });
+
+      const auditSource = await getReservationAuditSource();
+      let auditWarnings = [];
+      if (auditSource.trim()) {
+        const auditResult = window.BillingParser.parseCourtBookingExport(auditSource, {
+          year,
+          players: PLAYERS,
+          weekdayHourlyRate: 14.89,
+          weekendHourlyRate: 27.63,
+        });
+        const auditBookings = auditResult.bookings.filter(
+          (booking) => booking.date.slice(0, 7) === monthInput.value,
+        );
+        auditWarnings = applyReservationAudit(
+          courtImportBookings,
+          selectedMonthCanceled,
+          auditBookings,
+        ).concat(auditResult.warnings);
+        courtImportBookings.forEach((booking) => {
+          booking.selected =
+            !booking.duplicateMatch &&
+            Boolean(booking.paidBy) &&
+            booking.reviewReasons.length === 0;
+        });
+      }
+      renderCourtImportPreview();
+
+      const courtCount = courtImportBookings.reduce(
+        (sum, booking) => sum + Number(booking.courts || 0),
+        0,
+      );
+      const activeAmount = courtImportBookings.reduce(
+        (sum, booking) => sum + Number(booking.amount || 0),
+        0,
+      );
+      const feeRowCount = courtImportBookings
+        .concat(selectedMonthCanceled)
+        .reduce((sum, booking) => sum + Number(booking.feeCount || 0), 0);
+      const duplicateCount = courtImportBookings.filter(
+        (booking) => booking.duplicateMatch,
+      ).length;
+      const reviewCount = courtImportBookings.filter(
+        (booking) => booking.reviewReasons.length > 0,
+      ).length;
+      const notes = [
+        `${courtCount} booking${courtCount === 1 ? "" : "s"}`,
+        `${formatMoney(activeAmount)} net for ${formatMonthLabel(monthInput.value)}`,
+        `${feeRowCount} fee row${feeRowCount === 1 ? "" : "s"} reconciled`,
+      ];
+      if (selectedMonthCanceled.length) {
+        notes.push(
+          `${selectedMonthCanceled.length} fully refunded block${selectedMonthCanceled.length === 1 ? "" : "s"} excluded`,
+        );
+      }
+      if (reviewCount) {
+        notes.push(`${reviewCount} need review`);
+      }
+      if (duplicateCount) {
+        notes.push(`${duplicateCount} already imported or overlapping`);
+      }
+      if (otherMonthCount) {
+        notes.push(`${otherMonthCount} fee row${otherMonthCount === 1 ? "" : "s"} outside this play month skipped`);
+      }
+      if (courtReservationAuditFileInput.files?.[0]?.type.startsWith("image/")) {
+        notes.push("reservation screenshot shown for manual audit");
+      } else if (auditSource.trim()) {
+        notes.push("reservation export compared automatically");
+      }
+      if (result.unmatchedRefunds.length) {
+        notes.push(`${result.unmatchedRefunds.length} refund${result.unmatchedRefunds.length === 1 ? "" : "s"} could not be matched`);
+      }
+      const warning = result.warnings[0] || auditWarnings[0];
+      if (warning) {
+        notes.push(warning);
+      }
+      setSectionStatus(
+        courtImportFeedback,
+        `${notes.join("; ")}.`,
+        courtImportBookings.length && !warning ? "success" : "error",
+      );
+    } catch (error) {
+      clearCourtImportPreview();
+      setSectionStatus(courtImportFeedback, error.message, "error");
+    }
+  }
+
+  function bookingToCourtBlock(booking) {
+    return {
+      id: getImportedCourtBlockId(booking),
+      date: booking.date,
+      startTime: booking.startTime,
+      durationHours: booking.durationHours,
+      courts: Math.max(1, Number(booking.courts || 1)),
+      amount: roundMoney(booking.amount),
+      paidBy: booking.paidBy,
+      source: getImportedCourtSource(booking),
+      status: "active",
+    };
+  }
+
+  async function saveImportedCourtBlock(block) {
+    const result = await requestAppsScript({
+      action: "saveCourtBlock",
+      month: monthInput.value,
+      adminToken,
+      actor: getRememberedPlayer(),
+      ...block,
+    });
+    if (!result.courtBlock?.id) {
+      throw new Error("The server did not return the saved court block.");
+    }
+    return result.courtBlock;
+  }
+
+  async function handleCourtImportSave() {
+    const selectedBookings = courtImportBookings.filter((booking) => booking.selected);
+    if (!selectedBookings.length) {
+      return;
+    }
+    if (selectedBookings.some((booking) => !booking.paidBy)) {
+      setSectionStatus(courtImportFeedback, "Choose a payer for every selected booking.", "error");
+      return;
+    }
+
+    const blocks = selectedBookings.map(bookingToCourtBlock);
+    courtImportSaveButton.disabled = true;
+    setSectionStatus(
+      courtImportFeedback,
+      `Importing 0 of ${blocks.length} bookings...`,
+      "loading",
+    );
+
+    if (!backendAvailable || !adminToken) {
+      const byId = new Map(getCourtBlocks().map((block) => [block.id, block]));
+      blocks.forEach((block) => byId.set(block.id, block));
+      setCourtBlocks(Array.from(byId.values()));
+      selectedBookings.forEach((booking) => {
+        booking.selected = false;
+        booking.duplicateMatch = "exact";
+      });
+      recalculate(`${blocks.length} court fee block${blocks.length === 1 ? "" : "s"} imported locally.`);
+      renderCourtImportPreview();
+      setSectionStatus(
+        courtImportFeedback,
+        `${blocks.length} court fee block${blocks.length === 1 ? "" : "s"} imported locally.`,
+        "success",
+      );
+      return;
+    }
+
+    const saved = [];
+    const errors = [];
+    let nextIndex = 0;
+    async function worker() {
+      while (nextIndex < blocks.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        try {
+          saved.push(await saveImportedCourtBlock(blocks[index]));
+        } catch (error) {
+          errors.push({ block: blocks[index], error });
+        }
+        setSectionStatus(
+          courtImportFeedback,
+          `Importing ${saved.length + errors.length} of ${blocks.length} bookings...`,
+          "loading",
+        );
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(3, blocks.length) }, () => worker()),
+    );
+    saved.forEach((courtBlock) => {
+      backendBilling = {
+        ...backendBilling,
+        courtBlocks: upsertById(backendBilling.courtBlocks || [], courtBlock),
+      };
+    });
+    if (saved.length) {
+      writeBillingCache(monthInput.value, backendBilling);
+      render();
+      selectedBookings.forEach((booking) => {
+        if (saved.some((block) => block.id === getImportedCourtBlockId(booking))) {
+          booking.selected = false;
+          booking.duplicateMatch = "exact";
+        }
+      });
+    }
+    renderCourtImportPreview();
+    setSectionStatus(
+      courtImportFeedback,
+      errors.length
+        ? `${saved.length} imported; ${errors.length} failed. You can retry the remaining selected rows.`
+        : `${saved.length} court fee block${saved.length === 1 ? "" : "s"} imported.`,
+      errors.length ? "error" : "success",
+    );
+  }
+
   function handleCourtSubmit(event) {
     event.preventDefault();
     const block = {
@@ -2390,6 +3137,7 @@
   }
 
   monthInput.addEventListener("change", () => {
+    clearCourtImportPreview();
     initializeInputs();
     loadBillingMonth("Month changed. Billing data loaded.");
   });
@@ -2402,6 +3150,39 @@
   courtCountInput.addEventListener("input", updateCourtAmount);
   courtRatePresetInput.addEventListener("change", updateCourtAmount);
   courtHourlyRateInput.addEventListener("input", updateCourtAmount);
+  courtImportForm.addEventListener("submit", handleCourtImportReview);
+  courtImportSaveButton.addEventListener("click", handleCourtImportSave);
+  courtImportFileInput.addEventListener("change", () => {
+    if (courtImportFileInput.files?.[0]) {
+      setSectionStatus(
+        courtImportFeedback,
+        `${courtImportFileInput.files[0].name} ready to review.`,
+        "",
+      );
+    }
+  });
+  courtReservationAuditFileInput.addEventListener("change", () => {
+    const file = courtReservationAuditFileInput.files?.[0];
+    if (courtReservationAuditImageUrl) {
+      URL.revokeObjectURL(courtReservationAuditImageUrl);
+      courtReservationAuditImageUrl = "";
+    }
+    courtReservationAuditImage.hidden = true;
+    courtReservationAuditImage.removeAttribute("src");
+    if (file) {
+      courtImportTextInput.value = "";
+      if (file.type.startsWith("image/")) {
+        courtReservationAuditImageUrl = URL.createObjectURL(file);
+        courtReservationAuditImage.src = courtReservationAuditImageUrl;
+        courtReservationAuditImage.hidden = false;
+      }
+      setSectionStatus(
+        courtImportFeedback,
+        `${file.name} will be used as the reservation audit.`,
+        "",
+      );
+    }
+  });
   birdiePurchaseForm.addEventListener("submit", handleBirdiePurchaseSubmit);
   birdieUsageForm.addEventListener("submit", handleBirdieUsageSubmit);
   birdieTubesInput.addEventListener("input", updateBirdiePurchaseAmount);
@@ -2411,6 +3192,7 @@
   markMonthPaidButton.addEventListener("click", handleMarkMonthPaid);
   memberSelect.addEventListener("change", () => renderMemberDetail(memberSelect.value));
 
+  initializeCourtReserveBookmarklet();
   initializeAdminVisibility();
   if (!window.RsvpAdminAuth) {
     initializeBillingPage();

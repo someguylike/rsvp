@@ -30,7 +30,9 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 - `roster.html`, `roster.js`: admin page for roster membership, Venmo, and Messenger details.
 - `export.html`, `export.js`: admin page for monthly roster export.
 - `billing.html`, `billing.js`: billing page for court block entry, birdie cost entry, and member balance calculation.
-- `billing-parser.js`: parser for old finalized monthly billing CSVs, kept for reconciliation/testing.
+- `balances.html`, `balances.js`, `balances-core.js`: Make Payments page with monthly balances, paid-month history, and one Venmo action per amount due.
+- `billing-parser.js`: parsers for finalized monthly billing CSVs and CourtReserve transaction/reservation exports.
+- `vendor/jszip.min.js`: MIT-licensed JSZip browser build used to read XLSX files locally.
 - `google-apps-script/Code.gs`: Apps Script backend source. Paste this into Apps Script and deploy it as the Web App backend.
 
 ## Google Sheets Setup
@@ -182,6 +184,21 @@ Output format:
 - Row 1: `Name` plus play dates with at least 2 participants.
 - Rows: one row per player.
 - Cell value: blank when not joining, otherwise the total reserved spots for that player.
+
+## CourtReserve Court Fee Import
+
+The Billing page imports a booker's CourtReserve **All Transactions** XLSX:
+
+1. Export all transactions from CourtReserve Billing.
+2. In Billing, open **Court Fees > Import CourtReserve transactions** and upload the XLSX.
+3. Optionally attach an Active-reservations screenshot or HTML/XML export as an audit.
+4. Review the reconciled rows, then import the selected court blocks.
+
+The importer uses the reservation `Date/Time` as the play date, not the transaction date. Each active `Fee` row becomes one booking; `Payment` and `Payment (AC)` rows verify settlement without doubling the cost. Full refunds remove canceled charges, exact refunds can remove individual courts from a multi-court time block, and partial refunds, unpaid balances, payment mismatches, unknown payers, and existing overlapping blocks are left unselected for review. Identical fee rows at the same location and time remain separate booking rows.
+
+An HTML/XML reservation audit compares active reservation counts and court labels automatically. A screenshot is displayed beside the preview for manual checking. If the normal browser save omits rendered bookings, drag the **Save CourtReserve HTML** link from the import panel to the bookmarks bar once and use it from the filtered CourtReserve page.
+
+Transaction groups use stable IDs, so importing the same export again updates or flags existing rows instead of silently duplicating fees.
 
 ## Notes From Tool Research
 

@@ -97,7 +97,7 @@ body {
 
 .page-nav-links {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -805,6 +805,148 @@ button:disabled {
   width: min(100%, 1480px);
 }
 
+.balance-page {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 980px);
+}
+
+.balance-content,
+.balance-list {
+  display: grid;
+  gap: 12px;
+}
+
+.balance-member-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) auto;
+  align-items: end;
+  justify-content: start;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.balance-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 220px));
+  gap: 10px;
+}
+
+.balance-list-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.balance-list-heading h2,
+.balance-list-heading p,
+.balance-row-details p,
+.balance-payment-help,
+.balance-empty {
+  margin: 0;
+}
+
+.balance-list-heading h2 {
+  font-size: 1.25rem;
+}
+
+.balance-list-heading p,
+.balance-row-details p,
+.balance-payment-help,
+.balance-empty {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.balance-list-columns,
+.balance-row,
+.balance-total-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) auto minmax(235px, auto);
+  align-items: center;
+  gap: 18px;
+}
+
+.balance-list-columns {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  padding: 0 16px;
+  text-transform: uppercase;
+}
+
+.balance-list-columns span:nth-child(2),
+.balance-total-row strong:nth-child(2) {
+  text-align: right;
+}
+
+.balance-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 16px;
+}
+
+.balance-total-row {
+  border-top: 2px solid var(--line-strong);
+  padding: 14px 16px 0;
+}
+
+.balance-row-details,
+.balance-row-payment {
+  display: grid;
+  gap: 5px;
+}
+
+.balance-month-link {
+  color: var(--accent-strong);
+  font-size: 1.05rem;
+  font-weight: 900;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.balance-row-amount {
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.balance-row-amount.due {
+  color: var(--error);
+}
+
+.balance-row-amount.zero {
+  color: var(--muted);
+}
+
+.balance-pay-button {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.balance-paid-state {
+  width: fit-content;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #047857;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 6px 10px;
+}
+
+.balance-empty {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 18px;
+}
+
 .billing-heading {
   display: flex;
   align-items: end;
@@ -1111,6 +1253,105 @@ button:disabled {
     minmax(104px, 0.5fr)
     minmax(150px, 0.8fr)
     auto;
+}
+
+.court-import-panel {
+  margin: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.court-import-panel > summary {
+  min-height: 46px;
+  user-select: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.court-import-body {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 14px;
+}
+
+.court-import-body > p:first-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.court-import-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.court-import-paste-field {
+  grid-column: 1 / 3;
+}
+
+.court-import-paste-field textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.court-import-body .section-status {
+  margin: 0;
+}
+
+.court-reservation-audit-image {
+  width: min(100%, 920px);
+  max-height: 520px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: contain;
+  object-position: left top;
+}
+
+.court-import-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.court-import-preview[hidden] {
+  display: none;
+}
+
+.court-import-table {
+  min-width: 1480px;
+}
+
+.court-import-table select {
+  min-width: 180px;
+}
+
+.court-import-table input[type="number"] {
+  min-width: 88px;
+  width: 88px;
+}
+
+.court-import-table input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+.court-import-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.court-import-row-note {
+  display: block;
+  max-width: 240px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 .compact-billing-form {
@@ -1867,11 +2108,17 @@ body:not(.billing-admin) .admin-payment-column {
     position: static;
   }
 
-  .billing-inline-form {
+  .billing-inline-form,
+  .court-import-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .billing-inline-form button {
+  .court-import-paste-field {
+    grid-column: 1 / -1;
+  }
+
+  .billing-inline-form button,
+  .court-import-form button {
     width: 100%;
   }
 
@@ -1896,6 +2143,23 @@ body:not(.billing-admin) .admin-payment-column {
 
   #member-billing-table .member-balance-column {
     min-width: 104px;
+  }
+}
+
+@media (max-width: 760px) {
+  .balance-list-columns,
+  .balance-row,
+  .balance-total-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .balance-list-columns span:last-child,
+  .balance-total-row span:last-child {
+    display: none;
+  }
+
+  .balance-row-payment {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1968,14 +2232,50 @@ body:not(.billing-admin) .admin-payment-column {
   .audit-controls,
   .roster-form-grid,
   .billing-inline-form,
+  .court-import-form,
   .compact-billing-form {
     grid-template-columns: 1fr;
     gap: 12px;
   }
 
+  .court-import-paste-field {
+    grid-column: auto;
+  }
+
   .billing-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .balance-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .balance-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .balance-member-panel,
+  .balance-total-row {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-list-columns {
+    display: none;
+  }
+
+  .balance-total-row strong:nth-child(2) {
+    font-size: 1.2rem;
+    text-align: left;
+  }
+
+  .balance-row-payment {
+    grid-column: auto;
+  }
+
+  .balance-row-amount {
+    font-size: 1.35rem;
   }
 
   .billing-metric {

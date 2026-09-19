@@ -217,6 +217,224 @@
           assertEqual(model.notes.inventory.includes("Lingmei"), true);
         });
 
+        const bookingExport = `
+          Active
+          Cancelled
+          29 Bookings Found
+          Early Access - Renton
+          Sun, Aug 2nd, 6:00 AM - 9:00 AM
+          Hoan Nguyen, Thanh V Nguyen
+          746348#
+          Renton 10
+          Details
+          Early Access - Renton
+          Sun, Aug 2nd, 8:00 AM - 9:00 AM
+          Hoan Nguyen, Thanh V Nguyen
+          146592#
+          Renton 11
+          Details
+          Early Access - Bellevue
+          Tue, Aug 4th, 6:00 AM - 7:30 AM
+          Hoan Nguyen, Thanh V Nguyen, Danh Nguyen, Duy V Nguyen
+          822768#
+          Bellevue 8
+          Details
+        `;
+        const parsedBookings = window.BillingParser.parseCourtBookingExport(
+          bookingExport,
+          {
+            year: 2026,
+            players: ["Hoan Nguyen", "Thanh Nguyen", "Danh Nguyen", "Duy Nguyen"],
+          },
+        );
+
+        test("parses CourtReserve booking list text", () => {
+          assertEqual(parsedBookings.bookings.length, 3);
+          assertEqual(parsedBookings.bookings[0].date, "2026-08-02");
+          assertEqual(parsedBookings.bookings[0].startTime, "06:00");
+          assertEqual(parsedBookings.bookings[0].durationHours, 3);
+          assertEqual(parsedBookings.bookings[0].reference, "746348");
+          assertEqual(parsedBookings.bookings[0].court, "Renton 10");
+          assertEqual(parsedBookings.bookings[0].paidBy, "Hoan Nguyen");
+          assertClose(parsedBookings.bookings[0].amount, 82.89);
+          assertEqual(parsedBookings.bookings[0].amountSource, "calculated");
+          assertClose(parsedBookings.bookings[2].amount, 22.34);
+        });
+
+        test("maps CourtReserve middle initials to roster names", () => {
+          assertEqual(
+            window.BillingParser.resolveBookingPayer("Thanh V Nguyen", [
+              "Thanh Nguyen",
+              "Hoan Nguyen",
+            ]),
+            "Thanh Nguyen",
+          );
+        });
+
+        test("reads a page total from saved booking HTML", () => {
+          const html = `
+            <html><body><article>
+              <h3>Early Access - Bellevue</h3>
+              <div>Tue, Aug 4th, 6:00 AM - 7:30 AM</div>
+              <div>Hoan Nguyen, Thanh V Nguyen</div>
+              <div>822768#</div><div>Bellevue 8</div>
+              <div>Total $24.50</div>
+            </article></body></html>
+          `;
+          const result = window.BillingParser.parseCourtBookingExport(html, {
+            year: 2026,
+            players: ["Hoan Nguyen", "Thanh Nguyen"],
+          });
+          assertEqual(result.bookings.length, 1);
+          assertClose(result.bookings[0].amount, 24.5);
+          assertEqual(result.bookings[0].amountSource, "export");
+        });
+
+        test("reads a reservation audit from XML", () => {
+          const xml = `<?xml version="1.0"?>
+            <reservations><reservation>
+              <event>Early Access - Renton</event>
+              <time>Sun, Aug 2nd, 6:00 AM - 9:00 AM</time>
+              <members>Hoan Nguyen, Thanh V Nguyen</members>
+              <number>746348#</number>
+              <court>Renton 10</court>
+            </reservation></reservations>`;
+          const result = window.BillingParser.parseCourtBookingExport(xml, {
+            year: 2026,
+            players: ["Hoan Nguyen", "Thanh Nguyen"],
+          });
+          assertEqual(result.bookings.length, 1);
+          assertEqual(result.bookings[0].court, "Renton 10");
+          assertEqual(result.bookings[0].paidBy, "Hoan Nguyen");
+        });
+
+        const transactionRows = [
+          ["Date", "Type", "Amount", "Unpaid Amount", "Paid Date", "Payment Type", "Category", "Date/Time", "Member", "Instructor(s)"],
+          ["6/1/2026", "Payment", "$55.25", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th, 7a - 9a", "Hoan Nguyen", ""],
+          ["6/1/2026", "Fee", "$55.25", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th, 7a - 9a", "Hoan Nguyen", ""],
+          ["6/6/2026", "Refund - Account Credit", "$55.25", "$0.00", "6/6/2026", "Account Credit", "Early Access - Renton", "Sun, Jun 7th, 7a - 9a", "Hoan Nguyen", ""],
+          ["6/8/2026", "Payment", "$27.63", "$0.00", "6/8/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 14th, 8a - 9a", "Hoan Nguyen", ""],
+          ["6/8/2026", "Fee", "$27.63", "$0.00", "6/8/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 14th, 8a - 9a", "Hoan Nguyen", ""],
+          ["6/8/2026", "Payment", "$27.63", "$0.00", "6/8/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 14th, 8a - 9a", "Hoan Nguyen", ""],
+          ["6/8/2026", "Fee", "$27.63", "$0.00", "6/8/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 14th, 8a - 9a", "Hoan Nguyen", ""],
+          ["6/8/2026", "Payment", "$57.41", "$0.00", "6/8/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 14th, 6a - 9a", "Hoan Nguyen", ""],
+          ["6/8/2026", "Payment (AC)", "$25.47", "$0.00", "6/8/2026", "Account Credit", "Early Access - Renton", "Sun, Jun 14th, 6a - 9a", "Hoan Nguyen", ""],
+          ["6/8/2026", "Fee", "$82.88", "$0.00", "6/8/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 14th, 6a - 9a", "Hoan Nguyen", ""],
+          ["6/28/2026", "Payment", "$27.63", "$0.00", "6/28/2026", "Credit Card", "Early Access - Renton", "Sun, Jul 5th, 8a - 9a", "Hoan Nguyen", ""],
+          ["6/28/2026", "Fee", "$27.63", "$0.00", "6/28/2026", "Credit Card", "Early Access - Renton", "Sun, Jul 5th, 8a - 9a", "Hoan Nguyen", ""],
+        ];
+        const parsedTransactions =
+          window.BillingParser.parseCourtReserveTransactionRows(transactionRows, {
+            year: 2026,
+            players: ["Hoan Nguyen"],
+          });
+
+        test("reconciles CourtReserve fees, payments, credits, and refunds", () => {
+          assertEqual(parsedTransactions.bookings.length, 4);
+          assertEqual(parsedTransactions.canceled.length, 1);
+          assertClose(parsedTransactions.canceled[0].grossAmount, 55.25);
+          assertClose(parsedTransactions.canceled[0].refundAmount, 55.25);
+          const duplicateCourts = parsedTransactions.bookings.filter(
+            (booking) => booking.date === "2026-06-14" && booking.startTime === "08:00",
+          );
+          const splitPayment = parsedTransactions.bookings.find(
+            (booking) => booking.date === "2026-06-14" && booking.startTime === "06:00",
+          );
+          assertEqual(duplicateCourts.length, 2);
+          assertEqual(
+            duplicateCourts.every((booking) => booking.courts === 1),
+            true,
+          );
+          assertClose(
+            duplicateCourts.reduce((sum, booking) => sum + booking.amount, 0),
+            55.26,
+          );
+          assertClose(splitPayment.paymentAmount, 82.88);
+          assertEqual(splitPayment.paymentTypes.includes("Account Credit"), true);
+          assertEqual(splitPayment.reviewReasons.length, 0);
+        });
+
+        test("keeps the replacement June 7 court after the earlier booking is refunded", () => {
+          const june7Rows = [
+            transactionRows[0],
+            ["6/6/2026", "Refund - Account Credit", "$55.25", "$0.00", "6/6/2026", "Account Credit", "Early Access - Renton", "Sun, Jun 7th,\u00a0 7a - 9a", "Hoan Nguyen", ""],
+            ["6/4/2026", "Payment", "$27.63", "$0.00", "6/4/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 8a - 9a", "Hoan Nguyen", ""],
+            ["6/4/2026", "Fee", "$27.63", "$0.00", "6/4/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 8a - 9a", "Hoan Nguyen", ""],
+            ["6/1/2026", "Payment", "$27.63", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 8a - 9a", "Hoan Nguyen", ""],
+            ["6/1/2026", "Fee", "$27.63", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 8a - 9a", "Hoan Nguyen", ""],
+            ["6/1/2026", "Payment", "$55.25", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 7a - 9a", "Hoan Nguyen", ""],
+            ["6/1/2026", "Fee", "$55.25", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 7a - 9a", "Hoan Nguyen", ""],
+            ["6/1/2026", "Payment", "$82.88", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 6a - 9a", "Hoan Nguyen", ""],
+            ["6/1/2026", "Fee", "$82.88", "$0.00", "6/1/2026", "Credit Card", "Early Access - Renton", "Sun, Jun 7th,\u00a0 6a - 9a", "Hoan Nguyen", ""],
+          ];
+          const result = window.BillingParser.parseCourtReserveTransactionRows(
+            june7Rows,
+            { year: 2026, players: ["Hoan Nguyen"] },
+          );
+          const sixToNine = result.bookings.find(
+            (booking) => booking.startTime === "06:00",
+          );
+          const eightToNine = result.bookings.filter(
+            (booking) => booking.startTime === "08:00",
+          );
+
+          assertEqual(result.bookings.length, 3);
+          assertEqual(
+            result.bookings.reduce((sum, booking) => sum + booking.courts, 0),
+            3,
+          );
+          assertEqual(sixToNine.courts, 1);
+          assertClose(sixToNine.amount, 82.88);
+          assertEqual(eightToNine.length, 2);
+          assertEqual(
+            eightToNine.every(
+              (booking) =>
+                booking.courts === 1 &&
+                booking.feeCount === 1 &&
+                Math.abs(booking.amount - 27.63) < 0.001,
+            ),
+            true,
+          );
+          assertEqual(
+            eightToNine.every((booking) => booking.sourceRows.length === 2),
+            true,
+          );
+          assertClose(
+            result.bookings.reduce((sum, booking) => sum + booking.amount, 0),
+            138.14,
+          );
+          assertEqual(result.canceled.length, 1);
+          assertEqual(result.canceled[0].startTime, "07:00");
+          assertClose(result.canceled[0].grossAmount, 55.25);
+          assertClose(result.canceled[0].refundAmount, 55.25);
+          assertEqual(
+            result.bookings.every((booking) => booking.reviewReasons.length === 0),
+            true,
+          );
+        });
+
+        test("uses the play date instead of the transaction date", () => {
+          const july = parsedTransactions.bookings.find(
+            (booking) => booking.date === "2026-07-05",
+          );
+          assertEqual(Boolean(july), true);
+          assertEqual(july.startTime, "08:00");
+        });
+
+        test("flags partial refunds for review", () => {
+          const result = window.BillingParser.parseCourtReserveTransactionRows(
+            [
+              transactionRows[0],
+              ["6/1/2026", "Payment", "$29.78", "$0.00", "6/1/2026", "Credit Card", "Early Access - Bellevue", "Tue, Jun 2nd, 6a - 8a", "Hoan Nguyen", ""],
+              ["6/1/2026", "Fee", "$29.78", "$0.00", "6/1/2026", "Credit Card", "Early Access - Bellevue", "Tue, Jun 2nd, 6a - 8a", "Hoan Nguyen", ""],
+              ["6/2/2026", "Refund - Account Credit", "$10.00", "$0.00", "6/2/2026", "Account Credit", "Early Access - Bellevue", "Tue, Jun 2nd, 6a - 8a", "Hoan Nguyen", ""],
+            ],
+            { year: 2026, players: ["Hoan Nguyen"] },
+          );
+          assertClose(result.bookings[0].amount, 19.78);
+          assertEqual(result.bookings[0].reviewReasons.length > 0, true);
+        });
+
         let passed = 0;
         tests.forEach(({ name, fn }) => {
           const item = document.createElement("li");

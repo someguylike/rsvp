@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Billing</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260627-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260918-3" />
   </head>
   <body>
     <main class="shell billing-shell">
@@ -40,6 +40,7 @@
             <a href="./roster.html">Members</a>
             <a href="./export.html">Report</a>
             <a class="active" href="./billing.html" aria-current="page">Billing</a>
+            <a href="./balances.html">Pay</a>
             <a href="./admin.html">Admin</a>
           </div>
         </nav>
@@ -138,6 +139,44 @@
                 </div>
               </div>
               <p id="court-feedback" class="section-status" role="status" aria-live="polite"></p>
+
+              <details id="court-import-panel" class="court-import-panel">
+                <summary>Import CourtReserve transactions</summary>
+                <div class="court-import-body">
+                  <p>
+                    Upload the booker's CourtReserve <strong>All Transactions XLSX</strong>. Fees become court charges; payments are audit rows, and refunds remove or reduce canceled charges. For an optional reservation check, save the filtered Active page as HTML/XML or drag
+                    <a id="courtreserve-export-bookmarklet" href="#" title="Drag this link to your browser bookmarks bar">Save CourtReserve HTML</a>
+                    to your bookmarks bar and use it from CourtReserve.
+                  </p>
+                  <form id="court-import-form" class="court-import-form">
+                    <label class="field">
+                      <span>Transactions XLSX</span>
+                      <input id="court-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                      <small class="field-help">CourtReserve Billing &gt; Transactions &gt; Export All.</small>
+                    </label>
+                    <label class="field">
+                      <span>Reservation audit (optional)</span>
+                      <input id="court-reservation-audit-file" type="file" accept=".html,.htm,.xml,.txt,.png,.jpg,.jpeg,.webp,text/html,text/xml,application/xml,text/plain,image/png,image/jpeg,image/webp" />
+                      <small class="field-help">Use the Active reservation page to verify counts and times.</small>
+                    </label>
+                    <label class="field court-import-paste-field">
+                      <span>Or paste reservation text / XML</span>
+                      <textarea id="court-import-text" rows="6" placeholder="Early Access - Renton&#10;Sun, Aug 2nd, 6:00 AM - 9:00 AM&#10;Hoan Nguyen, Thanh V Nguyen&#10;746348#&#10;Renton 10"></textarea>
+                    </label>
+                    <button type="submit">Review Court Fees</button>
+                  </form>
+                  <p id="court-import-feedback" class="section-status" role="status" aria-live="polite"></p>
+                  <img id="court-reservation-audit-image" class="court-reservation-audit-image" alt="Reservation screenshot for manual audit" hidden />
+                  <div id="court-import-preview" class="court-import-preview" hidden>
+                    <div class="table-wrap compact-table-wrap">
+                      <table id="court-import-table" class="export-table billing-table"></table>
+                    </div>
+                    <div class="court-import-actions">
+                      <button id="court-import-save-button" type="button">Import Selected</button>
+                    </div>
+                  </div>
+                </div>
+              </details>
 
               <form id="court-form" class="billing-inline-form court-billing-form">
                 <label class="field">
@@ -249,7 +288,8 @@
     </main>
 
     <script src="./admin-auth.js?v=20260811-1"></script>
-    <script src="./billing-parser.js?v=20260627-5"></script>
-    <script src="./billing.js?v=20260701-1"></script>
+    <script src="./vendor/jszip.min.js?v=3.10.1"></script>
+    <script src="./billing-parser.js?v=20260918-2"></script>
+    <script src="./billing.js?v=20260918-9"></script>
   </body>
 </html>
