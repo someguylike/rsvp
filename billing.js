@@ -318,9 +318,17 @@
       attendance: buildBackendAttendance(backfill.attendanceRsvps),
       courtBlocks: backfill.courtBlocks,
       birdieInventory: null,
-      birdiePurchases: backfill.birdieInventoryPurchases.concat(
-        backfill.birdiePurchases,
-      ),
+      birdiePurchases: backfill.birdieInventoryPurchases
+        .map((purchase, index) => ({
+          ...purchase,
+          id: `finalized-${backfill.month}-birdie-inventory-${index + 1}`,
+        }))
+        .concat(
+          backfill.birdiePurchases.map((purchase) => ({
+            ...purchase,
+            id: `finalized-${backfill.month}-birdie-total`,
+          })),
+        ),
       payments: [],
       adjustments: backfill.creditAdjustments.map((adjustment, index) => ({
         id: `local-credit-${index + 1}`,
@@ -1090,6 +1098,19 @@
     );
   }
 
+  function isCreditableBirdiePurchase(purchase) {
+    const recordType = getBirdieRecordType(purchase);
+    return (
+      isActiveBirdiePurchase(purchase) &&
+      isCurrentMonthBirdieRow(purchase) &&
+      recordType !== "usage" &&
+      !(
+        recordType === "inventory_purchase" &&
+        /^finalized-/i.test(String(purchase.id || ""))
+      )
+    );
+  }
+
   function isCurrentMonthBirdieRow(purchase) {
     return String(purchase?.date || "").startsWith(`${monthInput.value}-`);
   }
@@ -1250,13 +1271,13 @@
     });
 
     birdieState.purchases
-      .filter(isBilledBirdiePurchase)
+      .filter(isCreditableBirdiePurchase)
       .forEach((purchase) => {
-      if (purchase.paidBy) {
-        const payer = ensureMember(purchase.paidBy);
-        payer.credits += Number(purchase.amount || 0);
-      }
-    });
+        if (purchase.paidBy) {
+          const payer = ensureMember(purchase.paidBy);
+          payer.credits += Number(purchase.amount || 0);
+        }
+      });
 
     getBillingAdjustments()
       .filter((adjustment) => adjustment.status !== "canceled")
@@ -1667,7 +1688,16 @@
             className: "numeric-cell",
           },
           { text: formatMoney(batch.unitPrice), className: "numeric-cell" },
-          { text: "Inventory" },
+          {
+            text:
+              Array.from(
+                new Set(
+                  batch.inventoryPurchases
+                    .map((purchase) => purchase.paidBy)
+                    .filter(Boolean),
+                ),
+              ).join(" / ") || "Inventory",
+          },
           { text: formatMoney(batch.amount), className: "numeric-cell" },
           makeBadge("Inventory", "review"),
           actions,

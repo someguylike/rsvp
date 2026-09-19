@@ -200,6 +200,10 @@ An HTML/XML reservation audit compares active reservation counts and court label
 
 Transaction groups use stable IDs, so importing the same export again updates or flags existing rows instead of silently duplicating fees.
 
+## Birdie Inventory Credits
+
+The purchaser receives credit for the full inventory purchase in its purchase month. Tube usage is charged to players in the month the tubes are used, without allocating those later usage charges back to individual inventory purchases. Historical finalized imports keep their existing payer adjustments and are not credited a second time.
+
 ## Notes From Tool Research
 
 - Google Forms is append-first. It does not natively upsert by `player + date`.

@@ -62,12 +62,23 @@
         String(purchase.date || "").startsWith(`${month}-`) &&
         getRecordType(purchase) !== "inventory_purchase",
     );
-    billedBirdiePurchases.forEach((purchase) => {
-      const payer = ensureMember(purchase.paidBy);
-      if (payer) {
-        payer.credits += Number(purchase.amount || 0);
-      }
-    });
+    (billing.birdiePurchases || [])
+      .filter(
+        (purchase) =>
+          purchase.status !== "canceled" &&
+          String(purchase.date || "").startsWith(`${month}-`) &&
+          getRecordType(purchase) !== "usage" &&
+          !(
+            getRecordType(purchase) === "inventory_purchase" &&
+            /^finalized-/i.test(String(purchase.id || ""))
+          ),
+      )
+      .forEach((purchase) => {
+        const payer = ensureMember(purchase.paidBy);
+        if (payer) {
+          payer.credits += Number(purchase.amount || 0);
+        }
+      });
 
     (billing.adjustments || [])
       .filter((adjustment) => adjustment.status !== "canceled")
