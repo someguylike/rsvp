@@ -206,7 +206,13 @@ The purchaser receives credit for the full inventory purchase in its purchase mo
 
 ## Payment Page Cache
 
-The Payment page displays previously saved billing months immediately, labels the age of the saved data, and refreshes all open months in the background. Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block. Venmo actions are direct HTTPS payment links rather than custom-scheme redirects, allowing the device to open either the Venmo app or its payment website.
+Finalizing a billing month writes one derived balance row per member to the `Billing Member Balances` sheet. These rows are a rebuildable cache; attendance, court blocks, birdie records, adjustments, and payment statuses remain the source data. Editing an unpaid finalized month automatically rebuilds its snapshot. Changing it back to Draft removes the snapshot. Once every attendee is marked Paid, the retained snapshot is left unchanged unless the month is reopened for payment or the backfill is run explicitly.
+
+After deploying this backend change, run `backfillBillingMemberBalanceSnapshots` once from the Apps Script editor to create snapshots for existing finalized months. A calculation-version change also requires running that function again. Until every finalized month has a current snapshot, the Payment page safely falls back to loading and calculating the original monthly data.
+
+The Payment page loads open finalized balances with one backend request, merges current payment statuses, and displays those precomputed amounts immediately. Past draft months then load from their source records in parallel and appear as each calculation finishes. Globally paid-off months are excluded. Paid snapshots remain in the sheet for audit/history but are not recalculated or returned during normal payment loading. The browser also displays its previously saved result immediately while refreshing.
+
+Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block. In Messenger, Venmo actions use a direct app link with a visible payment-website fallback; other browsers retain the normal HTTPS Venmo payment link.
 
 ## Notes From Tool Research
 

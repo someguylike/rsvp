@@ -7,6 +7,8 @@ const BILLING_BIRDIE_PURCHASE_SHEET_NAME = "Billing Birdie Purchases";
 const BILLING_PAYMENT_SHEET_NAME = "Billing Payments";
 const BILLING_ADJUSTMENT_SHEET_NAME = "Billing Adjustments";
 const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
+const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
+const BILLING_BALANCE_CALCULATION_VERSION = 1;
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
@@ -102,6 +104,18 @@ const BILLING_MONTH_STATUS_HEADERS = [
   "Note",
   "Updated At",
   "Updated By",
+];
+const BILLING_MEMBER_BALANCE_HEADERS = [
+  "Month",
+  "Player Name",
+  "Spots",
+  "Weighted Spots",
+  "Court Fee",
+  "Birdie Fee",
+  "Credits",
+  "Net Balance",
+  "Calculated At",
+  "Calculation Version",
 ];
 const AUDIT_HEADERS = [
   "Logged At",
@@ -348,6 +362,27 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "listBillingBalances") {
+      const result = listBillingBalanceSnapshots_();
+      return jsonp_(callback, {
+        ok: true,
+        action: "listBillingBalances",
+        snapshotReady: result.snapshotReady,
+        missingMonths: result.missingMonths,
+        finalizedMonths: result.finalizedMonths,
+        balances: result.balances,
+        calculationVersion: BILLING_BALANCE_CALCULATION_VERSION,
+      });
+    }
+
+    if (params.action === "listBillingDraftMonths") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "listBillingDraftMonths",
+        months: getDraftBillingMonths_(),
+      });
+    }
+
     if (params.action === "markBillingMonthPaid") {
       requireAdmin_(params);
       return jsonp_(callback, {
@@ -464,7 +499,14 @@ function upsertRsvp_(params) {
   lock.waitLock(10000);
 
   try {
-    return upsertRsvpWithLock_(params);
+    const result = upsertRsvpWithLock_(params);
+    if (["created", "updated", "deleted"].indexOf(result.action) !== -1) {
+      const month = normalizeMonth_(normalizeDate_(params.playDate));
+      if (month) {
+        refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+      }
+    }
+    return result;
   } finally {
     lock.releaseLock();
   }
@@ -547,6 +589,10 @@ function deleteRsvp_(params) {
       sheet.deleteRow(row);
     });
     const audit = appendAuditLog_(params, "deleted", rows[0], existingRsvp);
+    const month = normalizeMonth_(normalizeDate_(playDate));
+    if (month) {
+      refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    }
     return {
       action: "deleted",
       row: rows[0],
@@ -1425,6 +1471,504 @@ function getBillingMonth_(month, includeDiagnostics) {
   return billing;
 }
 
+function calculateBillingMemberBalances_(source) {
+  const billing = source || {};
+  const month = String(billing.month || "");
+  const members = new Map();
+  const courtByDate = new Map();
+
+  function ensureMember(name) {
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) {
+      return null;
+    }
+    if (!members.has(normalizedName)) {
+      members.set(normalizedName, {
+        name: normalizedName,
+        spots: 0,
+        weightedSpots: 0,
+        courtFee: 0,
+        birdieFee: 0,
+        credits: 0,
+        netBalance: 0,
+        paymentStatus: "Not requested",
+      });
+    }
+    return members.get(normalizedName);
+  }
+
+  (billing.courtBlocks || [])
+    .filter((block) => block.status === "active")
+    .forEach((block) => {
+      courtByDate.set(
+        block.date,
+        (courtByDate.get(block.date) || 0) + Number(block.amount || 0),
+      );
+      const payer = ensureMember(block.paidBy);
+      if (payer) {
+        payer.credits += Number(block.amount || 0);
+      }
+    });
+
+  const billedBirdiePurchases = (billing.birdiePurchases || []).filter(
+    (purchase) =>
+      purchase.status !== "canceled" &&
+      String(purchase.date || "").indexOf(`${month}-`) === 0 &&
+      normalizeBirdieRecordType_(purchase.recordType) !== "inventory_purchase",
+  );
+  (billing.birdiePurchases || [])
+    .filter(
+      (purchase) =>
+        purchase.status !== "canceled" &&
+        String(purchase.date || "").indexOf(`${month}-`) === 0 &&
+        normalizeBirdieRecordType_(purchase.recordType) !== "usage" &&
+        !(
+          normalizeBirdieRecordType_(purchase.recordType) === "inventory_purchase" &&
+          /^finalized-/i.test(String(purchase.id || ""))
+        ),
+    )
+    .forEach((purchase) => {
+      const payer = ensureMember(purchase.paidBy);
+      if (payer) {
+        payer.credits += Number(purchase.amount || 0);
+      }
+    });
+
+  (billing.adjustments || [])
+    .filter((adjustment) => adjustment.status !== "canceled")
+    .forEach((adjustment) => {
+      const member = ensureMember(adjustment.playerName);
+      if (member) {
+        member.credits += Number(adjustment.amount || 0);
+      }
+    });
+
+  let totalWeightedSpots = 0;
+  (billing.attendance || []).forEach((day) => {
+    const spots = (day.players || []).reduce(
+      (sum, player) => sum + Number(player.spots || 0),
+      0,
+    );
+    const dateParts = String(day.date || "").split("-").map(Number);
+    const weight =
+      dateParts.length === 3 &&
+      new Date(dateParts[0], dateParts[1] - 1, dateParts[2]).getDay() === 0
+        ? 1.5
+        : 1;
+    const courtPerSpot = spots > 0 ? (courtByDate.get(day.date) || 0) / spots : 0;
+    totalWeightedSpots += spots * weight;
+    (day.players || []).forEach((entry) => {
+      const member = ensureMember(entry.name);
+      if (!member) {
+        return;
+      }
+      const playerSpots = Number(entry.spots || 0);
+      member.spots += playerSpots;
+      member.weightedSpots += playerSpots * weight;
+      member.courtFee += courtPerSpot * playerSpots;
+    });
+  });
+
+  const birdieTotal = billedBirdiePurchases.reduce(
+    (sum, purchase) => sum + Number(purchase.amount || 0),
+    0,
+  );
+  const birdiePerWeightedSpot =
+    totalWeightedSpots > 0 ? birdieTotal / totalWeightedSpots : 0;
+
+  (billing.payments || []).forEach((payment) => {
+    const member = ensureMember(payment.playerName);
+    if (member && payment.status) {
+      member.paymentStatus = payment.status;
+    }
+  });
+
+  members.forEach((member) => {
+    member.birdieFee = member.weightedSpots * birdiePerWeightedSpot;
+    member.netBalance = roundBillingMoney_(
+      member.courtFee + member.birdieFee - member.credits,
+    );
+    member.courtFee = roundBillingMoney_(member.courtFee);
+    member.birdieFee = roundBillingMoney_(member.birdieFee);
+    member.credits = roundBillingMoney_(member.credits);
+  });
+
+  return Array.from(members.values()).sort((first, second) =>
+    first.name.localeCompare(second.name),
+  );
+}
+
+function roundBillingMoney_(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function getBillingMemberBalanceSheet_(formatMonth) {
+  const sheet = getBillingSheet_(
+    BILLING_MEMBER_BALANCE_SHEET_NAME,
+    BILLING_MEMBER_BALANCE_HEADERS,
+  );
+  if (formatMonth !== false) {
+    formatBillingMonthColumn_(sheet, 1);
+  }
+  return sheet;
+}
+
+function getFinalizedBillingMonths_(includeCurrent) {
+  const currentMonth = getCurrentMonth_();
+  const sheet = getBillingSheet_(
+    BILLING_MONTH_STATUS_SHEET_NAME,
+    BILLING_MONTH_STATUS_HEADERS,
+  );
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(2, 1, lastRow - 1, BILLING_MONTH_STATUS_HEADERS.length)
+    .getValues()
+    .filter(
+      (row) =>
+        normalizeBillingMonthStatus_(row[1]) === "finalized" &&
+        normalizeMonth_(row[0]) &&
+        (includeCurrent
+          ? normalizeMonth_(row[0]) <= currentMonth
+          : normalizeMonth_(row[0]) < currentMonth),
+    )
+    .map((row) => normalizeMonth_(row[0]))
+    .filter((month, index, months) => months.indexOf(month) === index)
+    .sort();
+}
+
+function getPastBillingSourceMonths_() {
+  const currentMonth = getCurrentMonth_();
+  const monthSet = {};
+  const birdieSheet = getBillingSheet_(
+    BILLING_BIRDIE_PURCHASE_SHEET_NAME,
+    BILLING_BIRDIE_PURCHASE_HEADERS,
+  );
+  const birdieLastRow = birdieSheet.getLastRow();
+
+  if (birdieLastRow >= 2) {
+    birdieSheet
+      .getRange(2, 1, birdieLastRow - 1, BILLING_BIRDIE_PURCHASE_HEADERS.length)
+      .getValues()
+      .forEach((row) => {
+        const month = normalizeMonth_(row[1]);
+        if (
+          month &&
+          month < currentMonth &&
+          normalizeBirdieRecordType_(row[11] || "purchase") === "usage" &&
+          normalizeBillingStatus_(row[6] || "active") === "active"
+        ) {
+          monthSet[month] = true;
+        }
+      });
+  }
+
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getSheet_(),
+    1,
+    currentMonth,
+    true,
+    false,
+  );
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getBillingSheet_(BILLING_COURT_SHEET_NAME, BILLING_COURT_HEADERS),
+    2,
+    currentMonth,
+    false,
+    false,
+  );
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getBillingSheet_(BILLING_PAYMENT_SHEET_NAME, BILLING_PAYMENT_HEADERS),
+    1,
+    currentMonth,
+    false,
+    false,
+  );
+  addBillingMonthsFromSheet_(
+    monthSet,
+    getBillingSheet_(
+      BILLING_MONTH_STATUS_SHEET_NAME,
+      BILLING_MONTH_STATUS_HEADERS,
+    ),
+    1,
+    currentMonth,
+    false,
+    false,
+  );
+
+  return Object.keys(monthSet).sort();
+}
+
+function getDraftBillingMonths_() {
+  const finalizedMonthSet = getFinalizedBillingMonths_(false).reduce(
+    (months, month) => {
+      months[month] = true;
+      return months;
+    },
+    {},
+  );
+  return getPastBillingSourceMonths_().filter(
+    (month) => !finalizedMonthSet[month],
+  );
+}
+
+function replaceBillingMemberBalanceSnapshot_(month, members) {
+  const sheet = getBillingMemberBalanceSheet_();
+  const lastRow = sheet.getLastRow();
+  const existingRows =
+    lastRow >= 2
+      ? sheet
+          .getRange(2, 1, lastRow - 1, BILLING_MEMBER_BALANCE_HEADERS.length)
+          .getValues()
+      : [];
+  const retainedRows = existingRows.filter(
+    (row) => normalizeMonth_(row[0]) !== month,
+  );
+  const calculatedAt = new Date().toISOString();
+  const snapshotRows = [
+    [
+      month,
+      "",
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      calculatedAt,
+      BILLING_BALANCE_CALCULATION_VERSION,
+    ],
+  ].concat(
+    (members || []).map((member) => [
+      month,
+      member.name,
+      Number(member.spots || 0),
+      Number(member.weightedSpots || 0),
+      Number(member.courtFee || 0),
+      Number(member.birdieFee || 0),
+      Number(member.credits || 0),
+      Number(member.netBalance || 0),
+      calculatedAt,
+      BILLING_BALANCE_CALCULATION_VERSION,
+    ]),
+  );
+  const nextRows = retainedRows
+    .concat(snapshotRows)
+    .sort((first, second) => {
+      const monthOrder = normalizeMonth_(first[0]).localeCompare(
+        normalizeMonth_(second[0]),
+      );
+      return monthOrder || String(first[1] || "").localeCompare(String(second[1] || ""));
+    });
+
+  if (lastRow >= 2) {
+    sheet
+      .getRange(2, 1, lastRow - 1, BILLING_MEMBER_BALANCE_HEADERS.length)
+      .clearContent();
+  }
+  if (nextRows.length) {
+    sheet
+      .getRange(2, 1, nextRows.length, BILLING_MEMBER_BALANCE_HEADERS.length)
+      .setValues(nextRows);
+  }
+
+  return {
+    month,
+    memberCount: (members || []).length,
+    calculatedAt,
+    calculationVersion: BILLING_BALANCE_CALCULATION_VERSION,
+  };
+}
+
+function deleteBillingMemberBalanceSnapshot_(month) {
+  const sheet = getBillingMemberBalanceSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return false;
+  }
+  const rows = sheet
+    .getRange(2, 1, lastRow - 1, BILLING_MEMBER_BALANCE_HEADERS.length)
+    .getValues();
+  const retainedRows = rows.filter((row) => normalizeMonth_(row[0]) !== month);
+  if (retainedRows.length === rows.length) {
+    return false;
+  }
+  sheet
+    .getRange(2, 1, lastRow - 1, BILLING_MEMBER_BALANCE_HEADERS.length)
+    .clearContent();
+  if (retainedRows.length) {
+    sheet
+      .getRange(2, 1, retainedRows.length, BILLING_MEMBER_BALANCE_HEADERS.length)
+      .setValues(retainedRows);
+  }
+  return true;
+}
+
+function rebuildBillingMemberBalanceSnapshot_(month, source) {
+  validateMonth_(month);
+  const billing = source || getBillingMonth_(month);
+  return replaceBillingMemberBalanceSnapshot_(
+    month,
+    calculateBillingMemberBalances_(billing),
+  );
+}
+
+function hasCurrentBillingMemberBalanceSnapshot_(month) {
+  const sheet = getBillingMemberBalanceSheet_(false);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return false;
+  }
+  return sheet
+    .getRange(2, 1, lastRow - 1, BILLING_MEMBER_BALANCE_HEADERS.length)
+    .getValues()
+    .some(
+      (row) =>
+        normalizeMonth_(row[0]) === month &&
+        Number(row[9] || 0) === BILLING_BALANCE_CALCULATION_VERSION,
+    );
+}
+
+function refreshBillingMemberBalanceSnapshotIfFinalized_(month, source) {
+  const status = source?.monthStatus || getBillingMonthStatus_(month);
+  if (normalizeBillingMonthStatus_(status.status) === "finalized") {
+    if (
+      isBillingMonthFullyPaid_(month) &&
+      hasCurrentBillingMemberBalanceSnapshot_(month)
+    ) {
+      return null;
+    }
+    return rebuildBillingMemberBalanceSnapshot_(month, source);
+  }
+  deleteBillingMemberBalanceSnapshot_(month);
+  return null;
+}
+
+function getBillingPaymentStatuses_() {
+  const sheet = getBillingSheet_(BILLING_PAYMENT_SHEET_NAME, BILLING_PAYMENT_HEADERS);
+  const lastRow = sheet.getLastRow();
+  const statuses = {};
+  if (lastRow < 2) {
+    return statuses;
+  }
+  sheet
+    .getRange(2, 1, lastRow - 1, 3)
+    .getValues()
+    .forEach((row) => {
+      const month = normalizeMonth_(row[0]);
+      const playerName = String(row[1] || "").trim();
+      if (month && playerName && row[2]) {
+        statuses[`${month}\n${normalize_(playerName)}`] = String(row[2]);
+      }
+    });
+  return statuses;
+}
+
+function listBillingBalanceSnapshots_() {
+  const expectedMonths = getFinalizedBillingMonths_(false);
+  const expectedMonthSet = expectedMonths.reduce((months, month) => {
+    months[month] = true;
+    return months;
+  }, {});
+  const sheet = getBillingMemberBalanceSheet_(false);
+  const lastRow = sheet.getLastRow();
+  const rows =
+    lastRow >= 2
+      ? sheet
+          .getRange(2, 1, lastRow - 1, BILLING_MEMBER_BALANCE_HEADERS.length)
+          .getValues()
+      : [];
+  const snapshotMonths = {};
+  const membersByMonth = {};
+
+  rows.forEach((row) => {
+    const month = normalizeMonth_(row[0]);
+    const calculationVersion = Number(row[9] || 0);
+    if (
+      !month ||
+      !expectedMonthSet[month] ||
+      calculationVersion !== BILLING_BALANCE_CALCULATION_VERSION
+    ) {
+      return;
+    }
+    snapshotMonths[month] = true;
+    const playerName = String(row[1] || "").trim();
+    if (!playerName) {
+      return;
+    }
+    if (!membersByMonth[month]) {
+      membersByMonth[month] = [];
+    }
+    membersByMonth[month].push({
+      name: playerName,
+      spots: Number(row[2] || 0),
+      weightedSpots: Number(row[3] || 0),
+      courtFee: roundBillingMoney_(row[4]),
+      birdieFee: roundBillingMoney_(row[5]),
+      credits: roundBillingMoney_(row[6]),
+      netBalance: roundBillingMoney_(row[7]),
+      paymentStatus: "Not requested",
+    });
+  });
+
+  const missingMonths = expectedMonths.filter((month) => !snapshotMonths[month]);
+  if (missingMonths.length) {
+    return {
+      snapshotReady: false,
+      missingMonths,
+      finalizedMonths: expectedMonths,
+      balances: [],
+    };
+  }
+
+  const paymentStatuses = getBillingPaymentStatuses_();
+  const balances = expectedMonths.reduce((result, month) => {
+    const members = (membersByMonth[month] || [])
+      .map((member) => ({
+        ...member,
+        paymentStatus:
+          paymentStatuses[`${month}\n${normalize_(member.name)}`] || "Not requested",
+      }))
+      .sort((first, second) => first.name.localeCompare(second.name));
+    const attendanceMembers = members.filter((member) => member.spots > 0);
+    const allPaid =
+      attendanceMembers.length > 0 &&
+      attendanceMembers.every(
+        (member) => normalize_(member.paymentStatus) === "paid",
+      );
+    if (!allPaid) {
+      result.push({ month, members });
+    }
+    return result;
+  }, []);
+
+  return {
+    snapshotReady: true,
+    missingMonths: [],
+    finalizedMonths: expectedMonths,
+    balances,
+  };
+}
+
+function backfillBillingMemberBalanceSnapshots() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    return getFinalizedBillingMonths_(true).map((month) =>
+      rebuildBillingMemberBalanceSnapshot_(month),
+    );
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function getBillingMonths_(includeEditable) {
   const currentMonth = getCurrentMonth_();
   const monthSet = {};
@@ -1561,6 +2105,15 @@ function getPaidBillingPlayers_(month) {
     }
     return paidPlayers;
   }, {});
+}
+
+function isBillingMonthFullyPaid_(month) {
+  const attendancePlayers = getBillingAttendancePlayers_(month);
+  const paidPlayers = getPaidBillingPlayers_(month);
+  return (
+    attendancePlayers.length > 0 &&
+    attendancePlayers.every((playerName) => paidPlayers[normalize_(playerName)])
+  );
 }
 
 function markBillingMonthPaid_(params) {
@@ -1810,7 +2363,9 @@ function saveBillingCourtBlock_(params) {
       sheet.appendRow(values);
     }
 
-    return billingCourtRowToBlock_(values);
+    const courtBlock = billingCourtRowToBlock_(values);
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    return courtBlock;
   } finally {
     lock.releaseLock();
   }
@@ -1841,9 +2396,11 @@ function toggleBillingCourtBlock_(params) {
     sheet.getRange(row, 12).setValue(new Date().toISOString());
     sheet.getRange(row, 14).setValue(getBillingActor_(params));
 
-    return billingCourtRowToBlock_(
+    const courtBlock = billingCourtRowToBlock_(
       sheet.getRange(row, 1, 1, BILLING_COURT_HEADERS.length).getValues()[0],
     );
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    return courtBlock;
   } finally {
     lock.releaseLock();
   }
@@ -1888,7 +2445,9 @@ function saveBillingBirdieInventory_(params) {
       sheet.appendRow(values);
     }
 
-    return getBillingMonth_(month);
+    const billing = getBillingMonth_(month);
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month, billing);
+    return billing;
   } finally {
     lock.releaseLock();
   }
@@ -1949,7 +2508,9 @@ function saveBillingBirdiePurchase_(params) {
       sheet.appendRow(values);
     }
 
-    return getBillingMonth_(month);
+    const billing = getBillingMonth_(month);
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month, billing);
+    return billing;
   } finally {
     lock.releaseLock();
   }
@@ -1976,9 +2537,11 @@ function removeBillingBirdiePurchase_(params) {
       throw new Error("Birdie row was not found");
     }
 
-    return billingBirdiePurchaseRowToPurchase_(
+    const birdiePurchase = billingBirdiePurchaseRowToPurchase_(
       sheet.getRange(row, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length).getValues()[0],
     );
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    return birdiePurchase;
   } finally {
     lock.releaseLock();
   }
@@ -2023,7 +2586,11 @@ function saveBillingPaymentStatus_(params) {
       sheet.appendRow(values);
     }
 
-    return billingPaymentRowToPayment_(values);
+    const payment = billingPaymentRowToPayment_(values);
+    if (normalize_(payment.status) !== "paid") {
+      refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    }
+    return payment;
   } finally {
     lock.releaseLock();
   }
@@ -2055,7 +2622,13 @@ function saveBillingMonthStatus_(params) {
       sheet.appendRow(values);
     }
 
-    return billingMonthStatusRowToStatus_(values);
+    const monthStatus = billingMonthStatusRowToStatus_(values);
+    if (monthStatus.status === "finalized") {
+      rebuildBillingMemberBalanceSnapshot_(month);
+    } else {
+      deleteBillingMemberBalanceSnapshot_(month);
+    }
+    return monthStatus;
   } finally {
     lock.releaseLock();
   }
@@ -2107,7 +2680,9 @@ function saveBillingAdjustment_(params) {
       sheet.appendRow(values);
     }
 
-    return billingPaymentRowToAdjustment_(values);
+    const adjustment = billingPaymentRowToAdjustment_(values);
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    return adjustment;
   } finally {
     lock.releaseLock();
   }
@@ -2134,9 +2709,11 @@ function removeBillingAdjustment_(params) {
       throw new Error("Adjustment was not found");
     }
 
-    return billingPaymentRowToAdjustment_(
+    const adjustment = billingPaymentRowToAdjustment_(
       sheet.getRange(row, 1, 1, BILLING_PAYMENT_HEADERS.length).getValues()[0],
     );
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    return adjustment;
   } finally {
     lock.releaseLock();
   }

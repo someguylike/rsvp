@@ -6,6 +6,7 @@
   const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
   const BILLING_CACHE_PREFIX = "billing:backend:";
   const BILLING_MONTHS_CACHE_KEY = "billing:months:member";
+  const BILLING_BALANCES_CACHE_KEY = "billing:member-balances";
   const VENMO_RECIPIENT_NAME = "Nam Pham";
   const VENMO_RECIPIENT_USERNAME = "nampham2022";
   const REQUEST_TIMEOUT_MS = 12000;
@@ -187,7 +188,28 @@
       .sort((first, second) => first.month.localeCompare(second.month));
   }
 
+  function isMonthlyBalanceFullyPaid(balance) {
+    const attendanceMembers = (balance?.members || []).filter(
+      (member) => Number(member.spots || 0) > 0,
+    );
+    return (
+      attendanceMembers.length > 0 &&
+      attendanceMembers.every(
+        (member) => String(member.paymentStatus || "").toLowerCase() === "paid",
+      )
+    );
+  }
+
   function getCachedMonthlyBalances() {
+    const balanceCache = readCache(BILLING_BALANCES_CACHE_KEY);
+    if (Array.isArray(balanceCache?.balances)) {
+      return {
+        balances: balanceCache.balances,
+        visibleMonthCount: balanceCache.balances.length,
+        savedAt: Number(balanceCache.savedAt || 0),
+      };
+    }
+
     const monthCache = readCache(BILLING_MONTHS_CACHE_KEY);
     if (!Array.isArray(monthCache?.months)) {
       return null;
@@ -399,40 +421,107 @@
       setStatus("Loading monthly balances...", "loading");
     }
     try {
-      let monthResult;
+      let precomputedBalances = null;
+      let snapshotDraftMonths = null;
       try {
-        monthResult = await requestAppsScript({ action: "listBillingMonths" });
-        writeCache(BILLING_MONTHS_CACHE_KEY, {
-          savedAt: Date.now(),
-          months: monthResult.months || [],
+        const snapshotResult = await requestAppsScript({
+          action: "listBillingBalances",
         });
-      } catch (error) {
-        const cached = readCache(BILLING_MONTHS_CACHE_KEY);
-        if (!cached?.months) {
-          throw error;
+        if (snapshotResult.snapshotReady) {
+          precomputedBalances = Array.isArray(snapshotResult.balances)
+            ? snapshotResult.balances
+            : [];
+          const initialBalances = new Map(
+            precomputedBalances.map((entry) => [entry.month, entry]),
+          );
+          showBalances(Array.from(initialBalances.values()));
+          setStatus("Showing precomputed balances. Finding draft months...", "loading");
         }
-        monthResult = { months: cached.months };
+      } catch {
+        // Older deployments and incomplete snapshots use the full-month fallback below.
+      }
+
+      if (precomputedBalances) {
+        try {
+          const draftResult = await requestAppsScript({
+            action: "listBillingDraftMonths",
+          });
+          snapshotDraftMonths = (draftResult.months || []).map((month) => ({
+            month,
+            allPaid: false,
+          }));
+          const initialBalances = new Map(
+            precomputedBalances.map((entry) => [entry.month, entry]),
+          );
+          const draftMonthNames = new Set(
+            snapshotDraftMonths.map((entry) => entry.month),
+          );
+          (cached?.balances || [])
+            .filter((entry) => draftMonthNames.has(entry.month))
+            .forEach((entry) => initialBalances.set(entry.month, entry));
+          showBalances(Array.from(initialBalances.values()));
+          if (!snapshotDraftMonths.length) {
+            writeCache(BILLING_BALANCES_CACHE_KEY, {
+              savedAt: Date.now(),
+              balances: precomputedBalances,
+            });
+            setStatus("Precomputed balances updated.", "success");
+            return;
+          }
+          setStatus(
+            `Showing precomputed balances. Loading ${snapshotDraftMonths.length} draft month${snapshotDraftMonths.length === 1 ? "" : "s"}...`,
+            "loading",
+          );
+        } catch {
+          // Older deployments discover all months through the legacy endpoint below.
+        }
+      }
+
+      let monthResult;
+      if (snapshotDraftMonths) {
+        monthResult = { months: snapshotDraftMonths };
+      } else {
+        try {
+          monthResult = await requestAppsScript({ action: "listBillingMonths" });
+          writeCache(BILLING_MONTHS_CACHE_KEY, {
+            savedAt: Date.now(),
+            months: monthResult.months || [],
+          });
+        } catch (error) {
+          const cachedMonths = readCache(BILLING_MONTHS_CACHE_KEY);
+          if (!cachedMonths?.months) {
+            throw error;
+          }
+          monthResult = { months: cachedMonths.months };
+        }
       }
 
       const months = getVisibleMonths(monthResult.months);
-      const visibleMonthNames = new Set(months.map((entry) => entry.month));
-      const balancesByMonth = new Map(
-        (cached?.balances || [])
-          .filter((entry) => visibleMonthNames.has(entry.month))
-          .map((entry) => [entry.month, entry]),
+      const visibleMonthNames = new Set([
+        ...months.map((entry) => entry.month),
+        ...(precomputedBalances || []).map((entry) => entry.month),
+      ]);
+      const balancesByMonth = new Map();
+      (cached?.balances || [])
+        .filter((entry) => visibleMonthNames.has(entry.month))
+        .forEach((entry) => balancesByMonth.set(entry.month, entry));
+      (precomputedBalances || []).forEach((entry) =>
+        balancesByMonth.set(entry.month, entry),
       );
       let settledCount = 0;
       let refreshedCount = 0;
 
-      if (hasCachedView) {
+      if (hasCachedView || precomputedBalances) {
         showBalances(Array.from(balancesByMonth.values()));
       }
       if (!months.length) {
-        showBalances([]);
+        showBalances(Array.from(balancesByMonth.values()));
       } else {
         setStatus(
-          hasCachedView
-            ? `Showing saved balances. Refreshing 0 of ${months.length} months...`
+          precomputedBalances
+            ? `Showing precomputed balances. Loading 0 of ${months.length} draft month${months.length === 1 ? "" : "s"}...`
+            : hasCachedView
+              ? `Showing saved balances. Refreshing 0 of ${months.length} months...`
             : `Loading 0 of ${months.length} billing months...`,
           "loading",
         );
@@ -443,7 +532,11 @@
           try {
             const billing = await loadMonth(entry.month);
             const balance = window.BalanceCalculator.calculateMonthBalances(billing);
-            balancesByMonth.set(entry.month, balance);
+            if (isMonthlyBalanceFullyPaid(balance)) {
+              balancesByMonth.delete(entry.month);
+            } else {
+              balancesByMonth.set(entry.month, balance);
+            }
             refreshedCount += 1;
             showBalances(Array.from(balancesByMonth.values()));
             return balance;
@@ -451,8 +544,10 @@
             settledCount += 1;
             if (settledCount < months.length) {
               setStatus(
-                hasCachedView
-                  ? `Showing saved balances. Checked ${settledCount} of ${months.length} months...`
+                precomputedBalances
+                  ? `Showing precomputed balances. Loaded ${settledCount} of ${months.length} draft months...`
+                  : hasCachedView
+                    ? `Showing saved balances. Checked ${settledCount} of ${months.length} months...`
                   : `Showing available balances. Checked ${settledCount} of ${months.length} months...`,
                 "loading",
               );
@@ -461,12 +556,19 @@
         }),
       );
       const failedCount = results.length - refreshedCount;
+      const finalBalances = Array.from(balancesByMonth.values());
 
-      showBalances(Array.from(balancesByMonth.values()));
+      showBalances(finalBalances);
+      writeCache(BILLING_BALANCES_CACHE_KEY, {
+        savedAt: Date.now(),
+        balances: finalBalances,
+      });
       setStatus(
         failedCount
           ? `${refreshedCount} months loaded; ${failedCount} could not be refreshed.`
-          : `${refreshedCount} billing month${refreshedCount === 1 ? "" : "s"} updated.`,
+          : precomputedBalances
+            ? "Balances updated."
+            : `${refreshedCount} billing month${refreshedCount === 1 ? "" : "s"} updated.`,
         failedCount ? "error" : "success",
       );
     } catch (error) {
