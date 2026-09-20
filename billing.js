@@ -104,6 +104,13 @@
   const courtPaidByInput = document.querySelector("#court-paid-by");
   const courtFeedback = document.querySelector("#court-feedback");
   const courtBlockTable = document.querySelector("#court-block-table");
+  const showCanceledCourtsControl = document.querySelector(
+    "#show-canceled-courts-control",
+  );
+  const showCanceledCourtsInput = document.querySelector("#show-canceled-courts");
+  const showCanceledCourtsLabel = document.querySelector(
+    "#show-canceled-courts-label",
+  );
   const courtReserveExportBookmarklet = document.querySelector(
     "#courtreserve-export-bookmarklet",
   );
@@ -583,7 +590,16 @@
   }
 
   function getMonthEndDateValue() {
-    const { year, monthIndex } = getMonthParts();
+    return getMonthEndDateForMonth(monthInput.value);
+  }
+
+  function getMonthEndDateForMonth(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      return "";
+    }
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
     return formatDate(new Date(year, monthIndex + 1, 0));
   }
 
@@ -757,6 +773,19 @@
       month: "2-digit",
       day: "2-digit",
       weekday: "short",
+    });
+  }
+
+  function formatAuditDate(value) {
+    const dateText = String(value || "").slice(0, 10);
+    const date = new Date(`${dateText}T00:00:00`);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return date.toLocaleDateString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "2-digit",
     });
   }
 
@@ -1106,13 +1135,71 @@
     const recordType = getBirdieRecordType(purchase);
     return (
       isActiveBirdiePurchase(purchase) &&
-      isCurrentMonthBirdieRow(purchase) &&
+      getBirdieCreditDate(purchase).startsWith(`${monthInput.value}-`) &&
       recordType !== "usage" &&
       !(
         recordType === "inventory_purchase" &&
-        /^finalized-/i.test(String(purchase.id || ""))
+        /^finalized-/i.test(String(purchase.id || "")) &&
+        !Boolean(purchase.reimbursedDate || purchase.reimbursedAt)
       )
     );
+  }
+
+  function getBirdieCreditDate(purchase) {
+    if (getBirdieRecordType(purchase) === "inventory_purchase") {
+      return String(
+        purchase?.reimbursedDate || purchase?.reimbursedAt || purchase?.date || "",
+      ).slice(0, 10);
+    }
+    return String(purchase?.date || "").slice(0, 10);
+  }
+
+  function getFinalizedPurchaseMonth(purchase) {
+    const idMatch = String(purchase?.id || "").match(/^finalized-(\d{4}-\d{2})-/i);
+    return String(purchase?.month || idMatch?.[1] || purchase?.date || "").slice(0, 7);
+  }
+
+  function getExactPurchaseIdsForAmount(purchases, amount) {
+    const target = Math.round(Math.abs(Number(amount || 0)) * 100);
+    const sums = new Map([[0, []]]);
+    purchases.forEach((purchase) => {
+      const cents = Math.round(Math.abs(Number(purchase.amount || 0)) * 100);
+      Array.from(sums.entries())
+        .sort(([first], [second]) => second - first)
+        .forEach(([sum, ids]) => {
+          const next = sum + cents;
+          if (next <= target && !sums.has(next)) {
+            sums.set(next, [...ids, purchase.id]);
+          }
+        });
+    });
+    return new Set(sums.get(target) || []);
+  }
+
+  function getLegacyAdjustmentOffsets(purchases, adjustments, month) {
+    const offsets = new Map();
+    adjustments.forEach((adjustment) => {
+      if (!/^Imported finalized .*credit$/i.test(String(adjustment.note || ""))) {
+        return;
+      }
+      const candidates = purchases.filter(
+        (purchase) =>
+          getBirdieRecordType(purchase) === "inventory_purchase" &&
+          /^finalized-/i.test(String(purchase.id || "")) &&
+          getFinalizedPurchaseMonth(purchase) === month &&
+          String(purchase.paidBy || "") === String(adjustment.playerName || ""),
+      );
+      const coveredIds = getExactPurchaseIdsForAmount(candidates, adjustment.amount);
+      const offset = candidates
+        .filter(
+          (purchase) =>
+            coveredIds.has(purchase.id) &&
+            Boolean(purchase.reimbursedDate || purchase.reimbursedAt),
+        )
+        .reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
+      offsets.set(adjustment, Math.min(Number(adjustment.amount || 0), offset));
+    });
+    return offsets;
   }
 
   function isCurrentMonthBirdieRow(purchase) {
@@ -1289,7 +1376,8 @@
           payer.credits += amount;
           payer.creditDetails.birdiePurchases.push({
             batch: purchase.batch || "Birdie purchase",
-            date: purchase.date,
+            date: getBirdieCreditDate(purchase),
+            purchaseDate: purchase.date,
             tubes: Number(purchase.tubes || 0),
             unitPrice: getBirdieUnitPrice(purchase),
             amount,
@@ -1297,16 +1385,26 @@
         }
       });
 
-    getBillingAdjustments()
+    const billingAdjustments = getBillingAdjustments();
+    const legacyAdjustmentOffsets = getLegacyAdjustmentOffsets(
+      birdieState.purchases,
+      billingAdjustments,
+      monthInput.value,
+    );
+    billingAdjustments
       .filter((adjustment) => adjustment.status !== "canceled")
       .forEach((adjustment) => {
         const member = ensureMember(adjustment.playerName);
-        const amount = Number(adjustment.amount || 0);
+        const amount =
+          Number(adjustment.amount || 0) -
+          Number(legacyAdjustmentOffsets.get(adjustment) || 0);
         member.credits += amount;
-        member.creditDetails.adjustments.push({
-          note: adjustment.note || "Credit adjustment",
-          amount,
-        });
+        if (Math.abs(amount) > 0.005) {
+          member.creditDetails.adjustments.push({
+            note: adjustment.note || "Credit adjustment",
+            amount,
+          });
+        }
       });
 
     attendanceRows.forEach((day) => {
@@ -1500,7 +1598,18 @@
   }
 
   function renderCourtBlocks() {
-    const sortedCourtBlocks = billing.courtBlocks.slice().sort((first, second) => {
+    const canceledCourtBlocks = billing.courtBlocks.filter(
+      (block) => block.status === "canceled",
+    );
+    showCanceledCourtsControl.hidden = canceledCourtBlocks.length === 0;
+    showCanceledCourtsLabel.textContent = `Show canceled (${canceledCourtBlocks.length})`;
+    if (!canceledCourtBlocks.length) {
+      showCanceledCourtsInput.checked = false;
+    }
+    const visibleCourtBlocks = billing.courtBlocks.filter(
+      (block) => block.status === "active" || showCanceledCourtsInput.checked,
+    );
+    const sortedCourtBlocks = visibleCourtBlocks.slice().sort((first, second) => {
       const dateOrder = String(first.date || "").localeCompare(String(second.date || ""));
       if (dateOrder) {
         return dateOrder;
@@ -1567,6 +1676,32 @@
           );
         });
         actions.append(toggle);
+        if (block.status === "canceled") {
+          const remove = document.createElement("button");
+          remove.className = "inline-action remove";
+          remove.type = "button";
+          remove.textContent = "Delete";
+          remove.setAttribute("aria-label", "Permanently delete canceled block");
+          remove.addEventListener("click", () => {
+            if (!window.confirm("Permanently delete this canceled court block from the spreadsheet?")) {
+              return;
+            }
+            saveBillingAction(
+              {
+                action: "removeCourtBlock",
+                id: block.id,
+              },
+              () => {
+                setCourtBlocks(
+                  getCourtBlocks().filter((candidate) => candidate.id !== block.id),
+                );
+              },
+              "Canceled court block deleted.",
+              courtFeedback,
+            );
+          });
+          actions.append(remove);
+        }
 
         return [
           { text: formatDisplayDate(block.date), className: "name-cell" },
@@ -1582,7 +1717,7 @@
       [
         "Active total",
         `${formatNumber(totalCourtHours, 1)} court-hours`,
-        `${activeBookingCount} booking${activeBookingCount === 1 ? "" : "s"}`,
+        `${activeBookingCount} active booking${activeBookingCount === 1 ? "" : "s"}`,
         "",
         formatMoney(totalCost),
         "",
@@ -1598,6 +1733,7 @@
       {
         action: "removeBirdiePurchase",
         id: purchase.id,
+        month: getFinalizedPurchaseMonth(purchase) || monthInput.value,
       },
       () => {
         setBirdieState({
@@ -1630,6 +1766,96 @@
     );
     remove.addEventListener("click", () => removeBirdieEntry(purchase));
     return remove;
+  }
+
+  function makeBirdieReimbursementButton(purchase) {
+    const reimbursementDate = getBirdieReimbursementDate(purchase);
+    const reimbursed = Boolean(reimbursementDate);
+    const dateLabel = String(purchase.date || "").slice(5).replace("-", "/");
+    const defaultDate = reimbursementDate || getMonthEndDateForMonth(
+      String(purchase.date || monthInput.value).slice(0, 7),
+    );
+    const button = document.createElement("button");
+    button.className = "inline-action";
+    button.type = "button";
+    button.textContent = reimbursed
+      ? `Date ${formatAuditDate(reimbursementDate)}`
+      : `Reimburse ${String(defaultDate).slice(5).replace("-", "/") || dateLabel}`;
+    button.title = reimbursed
+      ? "Change the recorded reimbursement date"
+      : `Record reimbursement of ${formatMoney(purchase.amount)} to ${purchase.paidBy}`;
+    button.addEventListener("click", () => {
+      const enteredDate = window.prompt(
+        "Reimbursement date (YYYY-MM-DD)",
+        defaultDate,
+      );
+      if (enteredDate === null) {
+        return;
+      }
+      if (!isValidIsoDate(enteredDate)) {
+        setSectionStatus(
+          birdieFeedback,
+          "Enter a valid reimbursement date using YYYY-MM-DD.",
+          "error",
+        );
+        return;
+      }
+      saveBirdieReimbursement(purchase, true, enteredDate);
+    });
+    return button;
+  }
+
+  function getBirdieReimbursementDate(purchase) {
+    return String(purchase.reimbursedDate || purchase.reimbursedAt || "").slice(0, 10);
+  }
+
+  function isValidIsoDate(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      return false;
+    }
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return formatDate(date) === value;
+  }
+
+  function saveBirdieReimbursement(purchase, reimbursed, reimbursedDate) {
+    saveBillingAction(
+      {
+        action: "saveBirdiePurchaseReimbursement",
+        id: purchase.id,
+        month: getFinalizedPurchaseMonth(purchase) || monthInput.value,
+        reimbursed: String(reimbursed),
+        reimbursedDate: reimbursed ? reimbursedDate : "",
+      },
+      () => {
+        setBirdieState({
+          ...getBirdieState(),
+          purchases: getBirdieState().purchases.map((candidate) =>
+            candidate.id === purchase.id
+              ? {
+                  ...candidate,
+                  reimbursedDate: reimbursed ? reimbursedDate : "",
+                  reimbursedAt: "",
+                  reimbursedAmount: reimbursed ? Number(candidate.amount || 0) : 0,
+                  reimbursedBy: reimbursed ? getRememberedPlayer() : "",
+                }
+              : candidate,
+          ),
+        });
+      },
+      reimbursed ? "Birdie reimbursement recorded." : "Birdie reimbursement cleared.",
+      birdieFeedback,
+    );
+  }
+
+  function makeBirdieReimbursementUndoButton(purchase) {
+    const button = document.createElement("button");
+    button.className = "inline-action remove";
+    button.type = "button";
+    button.textContent = "Undo";
+    button.title = "Clear the reimbursement record";
+    button.addEventListener("click", () => saveBirdieReimbursement(purchase, false, ""));
+    return button;
   }
 
   function renderBirdies() {
@@ -1682,7 +1908,7 @@
 
     renderTable(
       birdiePurchaseTable,
-      ["Batch", "Purchase Date", "Tubes", "Unit", "Paid/Source", "Amount", "Status", "Actions"],
+      ["Batch", "Purchase Date", "Tubes", "Unit", "Paid/Source", "Amount", "Reimbursed", "Status", "Actions"],
       visibleInventoryBatches.map((batch) => {
         const actions = document.createElement("td");
         batch.inventoryPurchases
@@ -1690,10 +1916,25 @@
           .sort((first, second) => String(first.date).localeCompare(String(second.date)))
           .forEach((purchase) => {
             const dateLabel = String(purchase.date || "").slice(5).replace("-", "/");
+            actions.append(makeBirdieReimbursementButton(purchase));
+            if (getBirdieReimbursementDate(purchase)) {
+              actions.append(makeBirdieReimbursementUndoButton(purchase));
+            }
             actions.append(
               makeBirdieRemoveButton(purchase, `x ${dateLabel || "entry"}`),
             );
           });
+        const reimbursedPurchases = batch.inventoryPurchases.filter(
+          (purchase) => getBirdieReimbursementDate(purchase),
+        );
+        const reimbursementText = reimbursedPurchases.length === 0
+          ? "Pending"
+          : reimbursedPurchases.length === batch.inventoryPurchases.length
+            ? reimbursedPurchases
+                .map((purchase) => formatAuditDate(getBirdieReimbursementDate(purchase)))
+                .filter(Boolean)
+                .join(", ")
+            : `${reimbursedPurchases.length}/${batch.inventoryPurchases.length} reimbursed`;
         return [
           { text: batch.batch, className: "name-cell" },
           {
@@ -1722,6 +1963,7 @@
               ).join(" / ") || "Inventory",
           },
           { text: formatMoney(batch.amount), className: "numeric-cell" },
+          { text: reimbursementText },
           makeBadge("Inventory", "review"),
           actions,
         ];
@@ -1739,6 +1981,7 @@
           { text: getBirdieUnitPrice(purchase) ? formatMoney(getBirdieUnitPrice(purchase)) : "", className: "numeric-cell" },
           { text: purchase.paidBy },
           { text: formatMoney(purchase.amount), className: "numeric-cell" },
+          { text: "—" },
           makeBadge(
             purchase.status === "canceled"
               ? "Canceled"
@@ -1759,6 +2002,7 @@
         `Used: ${formatNumber(currentMonthUsedTubes, 1)}`,
         "",
         formatMoney(currentMonthUsageCost),
+        "",
         "",
         "",
       ],
@@ -1930,7 +2174,11 @@
         appendCreditBreakdownItem(
           items,
           purchase.batch,
-          `${formatDisplayDate(purchase.date)} · ${tubeLabel}${unitLabel}`,
+          `${
+            purchase.purchaseDate && purchase.purchaseDate !== purchase.date
+              ? `Purchased ${formatDisplayDate(purchase.purchaseDate)} · reimbursed ${formatDisplayDate(purchase.date)}`
+              : formatDisplayDate(purchase.date)
+          } · ${tubeLabel}${unitLabel}`,
           purchase.amount,
         );
       });
@@ -2057,6 +2305,10 @@
     const activeCourtBlocks = (backendBilling?.courtBlocks || []).filter(
       (block) => block.status === "active",
     );
+    const activeBookingCount = activeCourtBlocks.reduce(
+      (sum, block) => sum + Number(block.courts || 0),
+      0,
+    );
     const courtTotal = activeCourtBlocks.reduce(
       (sum, block) => sum + Number(block.amount || 0),
       0,
@@ -2072,7 +2324,7 @@
     return [
       `${attendanceRows.length} play dates`,
       `${billing.totalSpots} spots`,
-      `${activeCourtBlocks.length} court blocks (${formatMoney(courtTotal)})`,
+      `${activeBookingCount} active court booking${activeBookingCount === 1 ? "" : "s"} (${formatMoney(courtTotal)})`,
       `${billedBirdies.length} billed birdie rows (${formatMoney(birdieTotal)})`,
     ].join(" / ");
   }
@@ -2156,7 +2408,24 @@
       return true;
     }
 
-    if (action === "saveBirdiePurchase" || action === "removeBirdiePurchase") {
+    if (action === "removeCourtBlock") {
+      if (!result.removedCourtBlockId) {
+        return false;
+      }
+      backendBilling = {
+        ...backendBilling,
+        courtBlocks: (backendBilling.courtBlocks || []).filter(
+          (block) => block.id !== result.removedCourtBlockId,
+        ),
+      };
+      return true;
+    }
+
+    if (
+      action === "saveBirdiePurchase" ||
+      action === "removeBirdiePurchase" ||
+      action === "saveBirdiePurchaseReimbursement"
+    ) {
       if (!result.birdiePurchase?.id) {
         return false;
       }
@@ -2319,7 +2588,7 @@
     try {
       const result = await requestAppsScript({
         ...payload,
-        month: monthInput.value,
+        month: payload.month || monthInput.value,
         adminToken,
         actor: getRememberedPlayer(),
       });
@@ -2678,7 +2947,7 @@
         "",
         "",
         "",
-        `${bookingCount} booking${bookingCount === 1 ? "" : "s"}`,
+        `${bookingCount} active booking${bookingCount === 1 ? "" : "s"}`,
         "",
         "",
         formatMoney(totalAmount),
@@ -2876,7 +3145,7 @@
         (booking) => booking.reviewReasons.length > 0,
       ).length;
       const notes = [
-        `${courtCount} booking${courtCount === 1 ? "" : "s"}`,
+        `${courtCount} active booking${courtCount === 1 ? "" : "s"}`,
         `${formatMoney(activeAmount)} net for ${formatMonthLabel(monthInput.value)}`,
         `${feeRowCount} fee row${feeRowCount === 1 ? "" : "s"} reconciled`,
       ];
@@ -3281,6 +3550,7 @@
 
   monthInput.addEventListener("change", () => {
     clearCourtImportPreview();
+    showCanceledCourtsInput.checked = false;
     initializeInputs();
     loadBillingMonth("Month changed. Billing data loaded.");
   });
@@ -3295,6 +3565,7 @@
   courtHourlyRateInput.addEventListener("input", updateCourtAmount);
   courtImportForm.addEventListener("submit", handleCourtImportReview);
   courtImportSaveButton.addEventListener("click", handleCourtImportSave);
+  showCanceledCourtsInput.addEventListener("change", renderCourtBlocks);
   courtImportFileInput.addEventListener("change", () => {
     if (courtImportFileInput.files?.[0]) {
       setSectionStatus(

@@ -1195,6 +1195,10 @@ button:disabled {
   font-size: 0.84rem;
 }
 
+.court-canceled-toggle {
+  margin-bottom: 12px;
+}
+
 .billing-band-summary {
   display: flex;
   min-height: 54px;

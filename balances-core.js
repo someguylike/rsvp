@@ -9,6 +9,63 @@
     return String(purchase?.recordType || "purchase").replace(/-/g, "_");
   }
 
+  function getBirdieCreditDate(purchase) {
+    if (getRecordType(purchase) === "inventory_purchase") {
+      return String(
+        purchase?.reimbursedDate || purchase?.reimbursedAt || purchase?.date || "",
+      ).slice(0, 10);
+    }
+    return String(purchase?.date || "").slice(0, 10);
+  }
+
+  function getFinalizedPurchaseMonth(purchase) {
+    const idMatch = String(purchase?.id || "").match(/^finalized-(\d{4}-\d{2})-/i);
+    return String(purchase?.month || idMatch?.[1] || purchase?.date || "").slice(0, 7);
+  }
+
+  function getExactPurchaseIdsForAmount(purchases, amount) {
+    const target = Math.round(Math.abs(Number(amount || 0)) * 100);
+    const sums = new Map([[0, []]]);
+    purchases.forEach((purchase) => {
+      const cents = Math.round(Math.abs(Number(purchase.amount || 0)) * 100);
+      Array.from(sums.entries())
+        .sort(([first], [second]) => second - first)
+        .forEach(([sum, ids]) => {
+          const next = sum + cents;
+          if (next <= target && !sums.has(next)) {
+            sums.set(next, [...ids, purchase.id]);
+          }
+        });
+    });
+    return new Set(sums.get(target) || []);
+  }
+
+  function getLegacyAdjustmentOffsets(billing, month) {
+    const offsets = new Map();
+    (billing.adjustments || []).forEach((adjustment) => {
+      if (!/^Imported finalized .*credit$/i.test(String(adjustment.note || ""))) {
+        return;
+      }
+      const candidates = (billing.birdiePurchases || []).filter(
+        (purchase) =>
+          getRecordType(purchase) === "inventory_purchase" &&
+          /^finalized-/i.test(String(purchase.id || "")) &&
+          getFinalizedPurchaseMonth(purchase) === month &&
+          String(purchase.paidBy || "") === String(adjustment.playerName || ""),
+      );
+      const coveredIds = getExactPurchaseIdsForAmount(candidates, adjustment.amount);
+      const offset = candidates
+        .filter(
+          (purchase) =>
+            coveredIds.has(purchase.id) &&
+            Boolean(purchase.reimbursedDate || purchase.reimbursedAt),
+        )
+        .reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
+      offsets.set(adjustment, Math.min(Number(adjustment.amount || 0), offset));
+    });
+    return offsets;
+  }
+
   function getDateWeight(value) {
     const [year, month, day] = String(value || "").split("-").map(Number);
     if (!year || !month || !day) {
@@ -66,11 +123,12 @@
       .filter(
         (purchase) =>
           purchase.status !== "canceled" &&
-          String(purchase.date || "").startsWith(`${month}-`) &&
+          getBirdieCreditDate(purchase).startsWith(`${month}-`) &&
           getRecordType(purchase) !== "usage" &&
           !(
             getRecordType(purchase) === "inventory_purchase" &&
-            /^finalized-/i.test(String(purchase.id || ""))
+            /^finalized-/i.test(String(purchase.id || "")) &&
+            !Boolean(purchase.reimbursedDate || purchase.reimbursedAt)
           ),
       )
       .forEach((purchase) => {
@@ -80,12 +138,15 @@
         }
       });
 
+    const legacyAdjustmentOffsets = getLegacyAdjustmentOffsets(billing, month);
     (billing.adjustments || [])
       .filter((adjustment) => adjustment.status !== "canceled")
       .forEach((adjustment) => {
         const member = ensureMember(adjustment.playerName);
         if (member) {
-          member.credits += Number(adjustment.amount || 0);
+          member.credits +=
+            Number(adjustment.amount || 0) -
+            Number(legacyAdjustmentOffsets.get(adjustment) || 0);
         }
       });
 

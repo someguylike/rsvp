@@ -8,7 +8,7 @@ const BILLING_PAYMENT_SHEET_NAME = "Billing Payments";
 const BILLING_ADJUSTMENT_SHEET_NAME = "Billing Adjustments";
 const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
-const BILLING_BALANCE_CALCULATION_VERSION = 1;
+const BILLING_BALANCE_CALCULATION_VERSION = 2;
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
@@ -70,6 +70,9 @@ const BILLING_BIRDIE_PURCHASE_HEADERS = [
   "Inventory Updated By",
   "Unit Price",
   "Batch",
+  "Reimbursed Date",
+  "Reimbursed Amount",
+  "Reimbursed By",
 ];
 const BILLING_PAYMENT_HEADERS = [
   "Month",
@@ -410,6 +413,15 @@ function doGet(event) {
       });
     }
 
+    if (params.action === "removeCourtBlock") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "removeCourtBlock",
+        removedCourtBlockId: removeBillingCourtBlock_(params),
+      });
+    }
+
     if (params.action === "saveBirdieInventory") {
       requireAdmin_(params);
       return jsonp_(callback, {
@@ -434,6 +446,15 @@ function doGet(event) {
         ok: true,
         action: "removeBirdiePurchase",
         birdiePurchase: removeBillingBirdiePurchase_(params),
+      });
+    }
+
+    if (params.action === "saveBirdiePurchaseReimbursement") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "saveBirdiePurchaseReimbursement",
+        birdiePurchase: saveBillingBirdiePurchaseReimbursement_(params),
       });
     }
 
@@ -1520,11 +1541,12 @@ function calculateBillingMemberBalances_(source) {
     .filter(
       (purchase) =>
         purchase.status !== "canceled" &&
-        String(purchase.date || "").indexOf(`${month}-`) === 0 &&
+        getBillingBirdieCreditDate_(purchase).indexOf(`${month}-`) === 0 &&
         normalizeBirdieRecordType_(purchase.recordType) !== "usage" &&
         !(
           normalizeBirdieRecordType_(purchase.recordType) === "inventory_purchase" &&
-          /^finalized-/i.test(String(purchase.id || ""))
+          /^finalized-/i.test(String(purchase.id || "")) &&
+          !Boolean(purchase.reimbursedDate || purchase.reimbursedAt)
         ),
     )
     .forEach((purchase) => {
@@ -1534,12 +1556,18 @@ function calculateBillingMemberBalances_(source) {
       }
     });
 
+  const legacyAdjustmentOffsets = getBillingLegacyAdjustmentOffsets_(
+    billing,
+    month,
+  );
   (billing.adjustments || [])
     .filter((adjustment) => adjustment.status !== "canceled")
     .forEach((adjustment) => {
       const member = ensureMember(adjustment.playerName);
       if (member) {
-        member.credits += Number(adjustment.amount || 0);
+        member.credits +=
+          Number(adjustment.amount || 0) -
+          Number(legacyAdjustmentOffsets.get(adjustment) || 0);
       }
     });
 
@@ -1655,13 +1683,25 @@ function getPastBillingSourceMonths_() {
       .getValues()
       .forEach((row) => {
         const month = normalizeMonth_(row[1]);
+        const recordType = normalizeBirdieRecordType_(row[11] || "purchase");
+        const active = normalizeBillingStatus_(row[6] || "active") === "active";
         if (
           month &&
           month < currentMonth &&
-          normalizeBirdieRecordType_(row[11] || "purchase") === "usage" &&
-          normalizeBillingStatus_(row[6] || "active") === "active"
+          recordType === "usage" &&
+          active
         ) {
           monthSet[month] = true;
+        }
+        const creditMonth = normalizeMonth_(row[18] || row[2] || row[1]);
+        if (
+          creditMonth &&
+          creditMonth < currentMonth &&
+          active &&
+          recordType === "inventory_purchase" &&
+          (!/^finalized-/i.test(String(row[0] || "")) || Boolean(row[18]))
+        ) {
+          monthSet[creditMonth] = true;
         }
       });
   }
@@ -1835,10 +1875,11 @@ function hasCurrentBillingMemberBalanceSnapshot_(month) {
     );
 }
 
-function refreshBillingMemberBalanceSnapshotIfFinalized_(month, source) {
+function refreshBillingMemberBalanceSnapshotIfFinalized_(month, source, force) {
   const status = source?.monthStatus || getBillingMonthStatus_(month);
   if (normalizeBillingMonthStatus_(status.status) === "finalized") {
     if (
+      force !== true &&
       isBillingMonthFullyPaid_(month) &&
       hasCurrentBillingMemberBalanceSnapshot_(month)
     ) {
@@ -1983,16 +2024,28 @@ function getBillingMonths_(includeEditable) {
       .forEach((row) => {
         const month = normalizeMonth_(row[1]);
         const recordType = normalizeBirdieRecordType_(row[11] || "purchase");
+        const active = normalizeBillingStatus_(row[6] || "active") === "active";
         if (
           month &&
           month < currentMonth &&
           recordType === "usage" &&
-          normalizeBillingStatus_(row[6] || "active") === "active"
+          active
         ) {
           monthSet[month] = true;
           billableMonthSet[month] = true;
         } else if (includeEditable && month && month <= currentMonth) {
           monthSet[month] = true;
+        }
+        const creditMonth = normalizeMonth_(row[18] || row[2] || row[1]);
+        if (
+          creditMonth &&
+          creditMonth <= currentMonth &&
+          active &&
+          recordType === "inventory_purchase" &&
+          (!/^finalized-/i.test(String(row[0] || "")) || Boolean(row[18]))
+        ) {
+          monthSet[creditMonth] = true;
+          billableMonthSet[creditMonth] = true;
         }
       });
   }
@@ -2406,6 +2459,39 @@ function toggleBillingCourtBlock_(params) {
   }
 }
 
+function removeBillingCourtBlock_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const id = required_(params.id, "Missing court block id");
+    const sheet = getBillingCourtSheet_();
+    const row = findBillingRowById_(sheet, id);
+
+    if (!row) {
+      throw new Error("Court block was not found");
+    }
+
+    const values = sheet
+      .getRange(row, 1, 1, BILLING_COURT_HEADERS.length)
+      .getValues()[0];
+    if (normalizeMonth_(values[1]) !== month) {
+      throw new Error("Court block does not belong to this billing month");
+    }
+    if (normalizeBillingStatus_(values[8]) !== "canceled") {
+      throw new Error("Cancel the court block before deleting it");
+    }
+
+    sheet.deleteRow(row);
+    refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    return String(id);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function saveBillingBirdieInventory_(params) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -2541,6 +2627,71 @@ function removeBillingBirdiePurchase_(params) {
       sheet.getRange(row, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length).getValues()[0],
     );
     refreshBillingMemberBalanceSnapshotIfFinalized_(month);
+    return birdiePurchase;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveBillingBirdiePurchaseReimbursement_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const id = required_(params.id, "Missing birdie purchase id");
+    const sheet = getBillingBirdiePurchaseSheet_();
+    const row = findBillingRowById_(sheet, id);
+
+    if (!row) {
+      throw new Error("Birdie purchase was not found");
+    }
+
+    const values = sheet
+      .getRange(row, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length)
+      .getValues()[0];
+    if (normalizeMonth_(values[1]) !== month) {
+      throw new Error("Birdie purchase does not belong to this billing month");
+    }
+    if (normalizeBirdieRecordType_(values[11]) !== "inventory_purchase") {
+      throw new Error("Only inventory purchases can be marked reimbursed");
+    }
+
+    const previousCreditMonth = getBillingBirdieCreditDate_(
+      billingBirdiePurchaseRowToPurchase_(values),
+    ).slice(0, 7);
+
+    const reimbursed = String(params.reimbursed || "").toLowerCase() === "true";
+    const purchaseMonth = normalizeMonth_(values[2]) || month;
+    const reimbursedDate = reimbursed
+      ? normalizeBillingReimbursementDate_(
+          params.reimbursedDate || getBillingMonthEndDate_(purchaseMonth),
+        )
+      : "";
+    const now = new Date().toISOString();
+    values[8] = now;
+    values[10] = getBillingActor_(params);
+    values[18] = reimbursedDate;
+    values[19] = reimbursed ? parseStoredNumber_(values[4]) : "";
+    values[20] = reimbursed ? getBillingActor_(params) : "";
+    sheet
+      .getRange(row, 1, 1, BILLING_BIRDIE_PURCHASE_HEADERS.length)
+      .setValues([values]);
+
+    const birdiePurchase = billingBirdiePurchaseRowToPurchase_(values);
+    const nextCreditMonth = getBillingBirdieCreditDate_(birdiePurchase).slice(0, 7);
+    [month, previousCreditMonth, nextCreditMonth]
+      .filter((affectedMonth, index, months) =>
+        affectedMonth && months.indexOf(affectedMonth) === index,
+      )
+      .forEach((affectedMonth) =>
+        refreshBillingMemberBalanceSnapshotIfFinalized_(
+          affectedMonth,
+          null,
+          true,
+        ),
+      );
     return birdiePurchase;
   } finally {
     lock.releaseLock();
@@ -2828,7 +2979,8 @@ function getBillingBirdiePurchases_(month) {
     .getValues()
     .filter((row) => {
       const rowMonth = normalizeMonth_(row[1]);
-      return rowMonth && rowMonth <= month;
+      const creditMonth = normalizeMonth_(row[18] || row[2] || row[1]);
+      return rowMonth && (rowMonth <= month || (creditMonth && creditMonth <= month));
     })
     .filter((row) => normalizeBirdieRecordType_(row[11] || "purchase") !== "inventory")
     .map(billingBirdiePurchaseRowToPurchase_);
@@ -2931,6 +3083,7 @@ function billingCourtRowToBlock_(row) {
 function billingBirdiePurchaseRowToPurchase_(row) {
   return {
     id: String(row[0] || ""),
+    month: normalizeMonth_(row[1]),
     date: normalizeDate_(row[2]),
     tubes: parseStoredNumber_(row[3]),
     amount: parseStoredNumber_(row[4]),
@@ -2939,6 +3092,9 @@ function billingBirdiePurchaseRowToPurchase_(row) {
     recordType: normalizeBirdieRecordType_(row[11] || "purchase"),
     unitPrice: parseStoredNumber_(row[16]),
     batch: String(row[17] || ""),
+    reimbursedDate: normalizeDate_(row[18]).slice(0, 10),
+    reimbursedAmount: parseStoredNumber_(row[19]),
+    reimbursedBy: String(row[20] || ""),
   };
 }
 
@@ -3162,8 +3318,95 @@ function normalizeBirdieRecordType_(value) {
   return "purchase";
 }
 
+function getBillingBirdieCreditDate_(purchase) {
+  if (normalizeBirdieRecordType_(purchase?.recordType) === "inventory_purchase") {
+    return String(
+      purchase?.reimbursedDate || purchase?.reimbursedAt || purchase?.date || "",
+    ).slice(0, 10);
+  }
+  return String(purchase?.date || "").slice(0, 10);
+}
+
+function getBillingFinalizedPurchaseMonth_(purchase) {
+  const idMatch = String(purchase?.id || "").match(/^finalized-(\d{4}-\d{2})-/i);
+  return String(purchase?.month || idMatch?.[1] || purchase?.date || "").slice(0, 7);
+}
+
+function getBillingExactPurchaseIdsForAmount_(purchases, amount) {
+  const target = Math.round(Math.abs(Number(amount || 0)) * 100);
+  const sums = new Map([[0, []]]);
+  purchases.forEach((purchase) => {
+    const cents = Math.round(Math.abs(Number(purchase.amount || 0)) * 100);
+    Array.from(sums.entries())
+      .sort(([first], [second]) => second - first)
+      .forEach(([sum, ids]) => {
+        const next = sum + cents;
+        if (next <= target && !sums.has(next)) {
+          sums.set(next, ids.concat([purchase.id]));
+        }
+      });
+  });
+  return new Set(sums.get(target) || []);
+}
+
+function getBillingLegacyAdjustmentOffsets_(billing, month) {
+  const offsets = new Map();
+  (billing.adjustments || []).forEach((adjustment) => {
+    if (!/^Imported finalized .*credit$/i.test(String(adjustment.note || ""))) {
+      return;
+    }
+    const candidates = (billing.birdiePurchases || []).filter(
+      (purchase) =>
+        normalizeBirdieRecordType_(purchase.recordType) === "inventory_purchase" &&
+        /^finalized-/i.test(String(purchase.id || "")) &&
+        getBillingFinalizedPurchaseMonth_(purchase) === month &&
+        String(purchase.paidBy || "") === String(adjustment.playerName || ""),
+    );
+    const coveredIds = getBillingExactPurchaseIdsForAmount_(
+      candidates,
+      adjustment.amount,
+    );
+    const offset = candidates
+      .filter(
+        (purchase) =>
+          coveredIds.has(purchase.id) &&
+          Boolean(purchase.reimbursedDate || purchase.reimbursedAt),
+      )
+      .reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
+    offsets.set(adjustment, Math.min(Number(adjustment.amount || 0), offset));
+  });
+  return offsets;
+}
+
 function normalizeBillingMonthStatus_(value) {
   return normalize_(value) === "finalized" ? "finalized" : "draft";
+}
+
+function getBillingMonthEndDate_(month) {
+  const match = String(month || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) {
+    throw new Error("Invalid billing month");
+  }
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]), 0))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function normalizeBillingReimbursementDate_(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw new Error("Reimbursement date must use YYYY-MM-DD");
+  }
+  const normalized = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  )
+    .toISOString()
+    .slice(0, 10);
+  if (normalized !== text) {
+    throw new Error("Reimbursement date is invalid");
+  }
+  return text;
 }
 
 function parsePositiveNumber_(value, message) {

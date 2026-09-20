@@ -60,6 +60,7 @@ const billing = {
     {
       id: "purchase-june",
       date: "2026-06-01",
+      reimbursedDate: "2026-07-31",
       amount: 120,
       paidBy: "Cara",
       status: "active",
@@ -102,12 +103,53 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(browserResult.members)),
   "Apps Script snapshots must match the browser billing calculation",
 );
+assert.equal(
+  snapshotMembers.find((member) => member.name === "Cara").credits,
+  0,
+  "Apps Script snapshots move inventory credit to the reimbursement month",
+);
+
+const movedFinalizedPurchase = {
+  month: "2026-06",
+  id: "finalized-2026-06-birdie-inventory-1",
+  date: "2026-06-01",
+  reimbursedDate: "2026-07-31",
+  amount: 300,
+  paidBy: "Cara",
+  status: "active",
+  recordType: "inventory_purchase",
+};
+const legacyCredit = {
+  id: "finalized-2026-06-credit-cara",
+  playerName: "Cara",
+  amount: 300,
+  note: "Imported finalized shuttle purchase credit",
+  status: "active",
+};
+const juneLegacy = appsScriptContext.calculateBillingMemberBalances_({
+  month: "2026-06",
+  attendance: [],
+  courtBlocks: [],
+  birdiePurchases: [movedFinalizedPurchase],
+  payments: [],
+  adjustments: [legacyCredit],
+});
+const julyMoved = appsScriptContext.calculateBillingMemberBalances_({
+  month: "2026-07",
+  attendance: [],
+  courtBlocks: [],
+  birdiePurchases: [movedFinalizedPurchase],
+  payments: [],
+  adjustments: [],
+});
+assert.equal(juneLegacy.find((member) => member.name === "Cara").credits, 0);
+assert.equal(julyMoved.find((member) => member.name === "Cara").credits, 300);
 
 const snapshotRows = [
-  ["2026-06", "", 0, 0, 0, 0, 0, 0, "2026-07-01T00:00:00Z", 1],
-  ["2026-06", "Alice", 1, 1, 20, 5, 0, 25, "2026-07-01T00:00:00Z", 1],
-  ["2026-07", "", 0, 0, 0, 0, 0, 0, "2026-08-01T00:00:00Z", 1],
-  ["2026-07", "Bob", 2, 2, 30, 10, 5, 35, "2026-08-01T00:00:00Z", 1],
+  ["2026-06", "", 0, 0, 0, 0, 0, 0, "2026-07-01T00:00:00Z", 2],
+  ["2026-06", "Alice", 1, 1, 20, 5, 0, 25, "2026-07-01T00:00:00Z", 2],
+  ["2026-07", "", 0, 0, 0, 0, 0, 0, "2026-08-01T00:00:00Z", 2],
+  ["2026-07", "Bob", 2, 2, 30, 10, 5, 35, "2026-08-01T00:00:00Z", 2],
 ];
 appsScriptContext.getFinalizedBillingMonths_ = () => ["2026-06", "2026-07"];
 appsScriptContext.getBillingMemberBalanceSheet_ = () => ({

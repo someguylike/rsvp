@@ -200,13 +200,19 @@ An HTML/XML reservation audit compares active reservation counts and court label
 
 Transaction groups use stable IDs, so importing the same export again updates or flags existing rows instead of silently duplicating fees.
 
+Canceled court blocks never contribute to the active court total or member balances and are hidden from the court table by default. **Show canceled** exposes them when an admin needs to restore or permanently delete one; permanent deletion also removes its row from `Billing Court Blocks` and refreshes any open finalized-month snapshot.
+
 ## Birdie Inventory Credits
 
-The purchaser receives credit for the full inventory purchase in its purchase month. Tube usage is charged to players in the month the tubes are used, without allocating those later usage charges back to individual inventory purchases. Historical finalized imports keep their existing payer adjustments and are not credited a second time.
+The purchaser receives credit for the full inventory purchase in its reimbursement month, defaulting to the purchase month when no reimbursement date is recorded. Tube usage is charged to players in the month the tubes are used, without allocating those later usage charges back to individual inventory purchases. Historical finalized imports retain their existing aggregate credit until an individual purchase receives an explicit reimbursement date; the calculation then replaces that purchase's matching legacy credit instead of counting it twice.
+
+Each inventory purchase has a **Reimburse** action. The reimbursement date defaults to the final day of the purchase month; the admin can replace it with the actual date before saving or change it later. The date, purchase amount, and admin are recorded in `Billing Birdie Purchases` (`Reimbursed Date`, `Reimbursed Amount`, and `Reimbursed By`). The purchaser credit follows the reimbursement month, so moving an April purchase's reimbursement into May removes that credit from April and adds it to May. Purchases without a recorded reimbursement date retain the purchase-month default. **Undo** clears the reimbursement record and returns the credit to the purchase month.
 
 ## Payment Page Cache
 
 Finalizing a billing month writes one derived balance row per member to the `Billing Member Balances` sheet. These rows are a rebuildable cache; attendance, court blocks, birdie records, adjustments, and payment statuses remain the source data. Editing an unpaid finalized month automatically rebuilds its snapshot. Changing it back to Draft removes the snapshot. Once every attendee is marked Paid, the retained snapshot is left unchanged unless the month is reopened for payment or the backfill is run explicitly.
+
+The status lifecycle is deterministic: **Finalized → Draft** deletes that month's rows from `Billing Member Balances`, so the Payment page calculates the draft from source data; **Draft → Finalized** recreates all member snapshot rows from the current source data.
 
 After deploying this backend change, run `backfillBillingMemberBalanceSnapshots` once from the Apps Script editor to create snapshots for existing finalized months. A calculation-version change also requires running that function again. Until every finalized month has a current snapshot, the Payment page safely falls back to loading and calculating the original monthly data.
 
