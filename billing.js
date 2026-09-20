@@ -65,6 +65,10 @@
   const JSONP_TIMEOUT_MS = 30000;
   const VENMO_RECIPIENT_NAME = "Nam Pham";
   const VENMO_RECIPIENT_USERNAME = "nampham2022";
+  const IS_META_IN_APP_BROWSER = /FBAN|FBAV|FB_IAB|Messenger/i.test(
+    navigator.userAgent || "",
+  );
+  const IS_ANDROID_DEVICE = /Android/i.test(navigator.userAgent || "");
   const BILLING_QUERY = new URLSearchParams(window.location.search);
   const LOCAL_BILLING_FIXTURE = BILLING_QUERY.get("localBillingFixture");
   const REQUESTED_BILLING_MONTH = BILLING_QUERY.get("month") || "";
@@ -1951,10 +1955,14 @@
     const amount = roundMoney(member.netBalance).toFixed(2);
     const encodedNote = encodeURIComponent(getVenmoPaymentNote(member));
     const encodedRecipient = encodeURIComponent(VENMO_RECIPIENT_USERNAME);
+    const appUrl = `venmo://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${amount}&note=${encodedNote}`;
+    const webUrl = `https://venmo.com/${encodedRecipient}?txn=pay&amount=${amount}&note=${encodedNote}`;
 
     return {
       amount,
-      webUrl: `https://venmo.com/${encodedRecipient}?txn=pay&amount=${amount}&note=${encodedNote}`,
+      appUrl,
+      webUrl,
+      androidIntentUrl: `intent://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${amount}&note=${encodedNote}#Intent;scheme=venmo;package=com.venmo;S.browser_fallback_url=${encodeURIComponent(webUrl)};end`,
     };
   }
 
@@ -1971,15 +1979,29 @@
     section.className = "billing-payment-action";
     const link = document.createElement("a");
     link.className = "billing-payment-button venmo-payment-link";
-    link.href = urls.webUrl;
+    link.href = IS_META_IN_APP_BROWSER
+      ? IS_ANDROID_DEVICE
+        ? urls.androidIntentUrl
+        : urls.appUrl
+      : urls.webUrl;
     link.textContent = `Pay ${formatMoney(urls.amount)} with Venmo`;
     const note = document.createElement("p");
     note.textContent = `To ${VENMO_RECIPIENT_NAME}: ${getVenmoPaymentNote(member)}`;
     const help = document.createElement("p");
     help.className = "billing-payment-help";
-    help.textContent = "Opens the Venmo app or payment website.";
+    help.textContent = IS_META_IN_APP_BROWSER
+      ? "If Messenger blocks the app, use the website link."
+      : "Opens the Venmo app or payment website.";
 
-    section.append(link, note, help);
+    section.append(link, note);
+    if (IS_META_IN_APP_BROWSER) {
+      const fallback = document.createElement("a");
+      fallback.className = "venmo-web-fallback";
+      fallback.href = urls.webUrl;
+      fallback.textContent = "Use Venmo website";
+      section.append(fallback);
+    }
+    section.append(help);
     memberDetail.append(section);
   }
 

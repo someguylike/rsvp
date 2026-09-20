@@ -13,6 +13,7 @@
   const IS_META_IN_APP_BROWSER = /FBAN|FBAV|FB_IAB|Messenger/i.test(
     navigator.userAgent || "",
   );
+  const IS_ANDROID_DEVICE = /Android/i.test(navigator.userAgent || "");
 
   const memberSelect = document.querySelector("#balance-member");
   const refreshButton = document.querySelector("#refresh-balances");
@@ -238,11 +239,16 @@
   function buildVenmoUrls(memberName, month, amount) {
     const paymentAmount = Number(amount || 0).toFixed(2);
     const note = `${memberName} - Badminton ${formatMonthLabel(month)}`;
+    const encodedRecipient = encodeURIComponent(VENMO_RECIPIENT_USERNAME);
+    const encodedNote = encodeURIComponent(note);
+    const appUrl = `venmo://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${paymentAmount}&note=${encodedNote}`;
+    const webUrl = `https://venmo.com/${encodedRecipient}?txn=pay&amount=${paymentAmount}&note=${encodedNote}`;
+    const androidIntentUrl = `intent://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${paymentAmount}&note=${encodedNote}#Intent;scheme=venmo;package=com.venmo;S.browser_fallback_url=${encodeURIComponent(webUrl)};end`;
     return {
       note,
-      webUrl: `https://venmo.com/${encodeURIComponent(
-        VENMO_RECIPIENT_USERNAME,
-      )}?txn=pay&amount=${paymentAmount}&note=${encodeURIComponent(note)}`,
+      appUrl,
+      webUrl,
+      androidIntentUrl,
     };
   }
 
@@ -250,12 +256,24 @@
     const urls = buildVenmoUrls(memberName, entry.month, entry.balance);
     const link = document.createElement("a");
     link.className = "balance-pay-button venmo-payment-link";
-    link.href = urls.webUrl;
+    link.href = IS_META_IN_APP_BROWSER
+      ? IS_ANDROID_DEVICE
+        ? urls.androidIntentUrl
+        : urls.appUrl
+      : urls.webUrl;
     link.textContent = `Pay ${formatMoney(entry.balance)} with Venmo`;
     link.setAttribute(
       "aria-label",
       `Pay ${formatMoney(entry.balance)} for ${formatMonthLabel(entry.month)} with Venmo`,
     );
+    return link;
+  }
+
+  function makeVenmoWebFallback(memberName, entry) {
+    const link = document.createElement("a");
+    link.className = "venmo-web-fallback";
+    link.href = buildVenmoUrls(memberName, entry.month, entry.balance).webUrl;
+    link.textContent = "Use Venmo website";
     return link;
   }
 
@@ -314,10 +332,16 @@
       const help = document.createElement("p");
       help.className = "balance-payment-help";
       if (entry.balance > 0.005) {
-        help.textContent = `To ${VENMO_RECIPIENT_NAME} · opens Venmo for ${formatMonthLabel(
-          entry.month,
-        )}`;
-        payment.append(makeVenmoLink(memberName, entry), help);
+        help.textContent = IS_META_IN_APP_BROWSER
+          ? `To ${VENMO_RECIPIENT_NAME} · if Messenger blocks the app, use the website link.`
+          : `To ${VENMO_RECIPIENT_NAME} · opens Venmo for ${formatMonthLabel(
+              entry.month,
+            )}`;
+        payment.append(makeVenmoLink(memberName, entry));
+        if (IS_META_IN_APP_BROWSER) {
+          payment.append(makeVenmoWebFallback(memberName, entry));
+        }
+        payment.append(help);
       } else {
         const state = document.createElement("span");
         state.className = "balance-paid-state";
@@ -391,20 +415,58 @@
       }
 
       const months = getVisibleMonths(monthResult.months);
-      const results = await Promise.allSettled(
-        months.map((entry) => loadMonth(entry.month)),
+      const visibleMonthNames = new Set(months.map((entry) => entry.month));
+      const balancesByMonth = new Map(
+        (cached?.balances || [])
+          .filter((entry) => visibleMonthNames.has(entry.month))
+          .map((entry) => [entry.month, entry]),
       );
-      const refreshedBalances = results
-        .filter((result) => result.status === "fulfilled")
-        .map((result) => window.BalanceCalculator.calculateMonthBalances(result.value))
-        .sort((first, second) => first.month.localeCompare(second.month));
-      const failedCount = results.length - refreshedBalances.length;
+      let settledCount = 0;
+      let refreshedCount = 0;
 
-      showBalances(refreshedBalances);
+      if (hasCachedView) {
+        showBalances(Array.from(balancesByMonth.values()));
+      }
+      if (!months.length) {
+        showBalances([]);
+      } else {
+        setStatus(
+          hasCachedView
+            ? `Showing saved balances. Refreshing 0 of ${months.length} months...`
+            : `Loading 0 of ${months.length} billing months...`,
+          "loading",
+        );
+      }
+
+      const results = await Promise.allSettled(
+        months.map(async (entry) => {
+          try {
+            const billing = await loadMonth(entry.month);
+            const balance = window.BalanceCalculator.calculateMonthBalances(billing);
+            balancesByMonth.set(entry.month, balance);
+            refreshedCount += 1;
+            showBalances(Array.from(balancesByMonth.values()));
+            return balance;
+          } finally {
+            settledCount += 1;
+            if (settledCount < months.length) {
+              setStatus(
+                hasCachedView
+                  ? `Showing saved balances. Checked ${settledCount} of ${months.length} months...`
+                  : `Showing available balances. Checked ${settledCount} of ${months.length} months...`,
+                "loading",
+              );
+            }
+          }
+        }),
+      );
+      const failedCount = results.length - refreshedCount;
+
+      showBalances(Array.from(balancesByMonth.values()));
       setStatus(
         failedCount
-          ? `${refreshedBalances.length} months loaded; ${failedCount} could not be refreshed.`
-          : `${refreshedBalances.length} billing month${refreshedBalances.length === 1 ? "" : "s"} updated.`,
+          ? `${refreshedCount} months loaded; ${failedCount} could not be refreshed.`
+          : `${refreshedCount} billing month${refreshedCount === 1 ? "" : "s"} updated.`,
         failedCount ? "error" : "success",
       );
     } catch (error) {

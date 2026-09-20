@@ -957,6 +957,14 @@ button:disabled {
   transform: translateY(-1px);
 }
 
+.venmo-web-fallback {
+  width: fit-content;
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-underline-offset: 2px;
+}
+
 .balance-paid-state {
   width: fit-content;
   border-radius: 999px;
