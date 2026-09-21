@@ -55,7 +55,7 @@
           (response) => response.text(),
         );
         const backend = new Function(
-          `${backendSource}; return { calculateBillingMemberBalances_, getIneligibleActiveCourtBlocks_ };`,
+          `${backendSource}; return { calculateBillingMemberBalances_, getIneligibleActiveCourtBlocks_, getRsvpSpreadsheet_ };`,
         )();
         const tests = [];
         const test = (name, fn) => tests.push({ name, fn });
@@ -83,6 +83,19 @@
         test("backend identifies active court blocks below the minimum", () => {
           const blocks = backend.getIneligibleActiveCourtBlocks_(source);
           assert(blocks.length === 1 && blocks[0].date === "2026-08-20");
+        });
+
+        test("backend opens the configured spreadsheet instead of active sheet state", () => {
+          let openedId = "";
+          const spreadsheet = {};
+          window.SpreadsheetApp = {
+            openById(id) {
+              openedId = id;
+              return spreadsheet;
+            },
+          };
+          assert(backend.getRsvpSpreadsheet_() === spreadsheet);
+          assert(openedId === "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w");
         });
 
         const results = document.querySelector("#results");

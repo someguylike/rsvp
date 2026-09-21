@@ -8,10 +8,11 @@ const BILLING_PAYMENT_SHEET_NAME = "Billing Payments";
 const BILLING_ADJUSTMENT_SHEET_NAME = "Billing Adjustments";
 const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
+const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-09-20.2";
+const ADMIN_BACKEND_VERSION = "2026-09-20.3";
 const BILLING_BALANCE_CALCULATION_VERSION = 3;
-const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
+const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
 const MIN_BILLABLE_PARTICIPANTS = 4;
@@ -727,8 +728,12 @@ function upsertRsvpWithLock_(params) {
   };
 }
 
+function getRsvpSpreadsheet_() {
+  return SpreadsheetApp.openById(RSVP_SPREADSHEET_ID);
+}
+
 function getSheet_() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getRsvpSpreadsheet_();
   let sheet = spreadsheet.getSheetByName(SHEET_NAME);
 
   if (!sheet) {
@@ -748,7 +753,7 @@ function getSheet_() {
 }
 
 function getAuditSheet_() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getRsvpSpreadsheet_();
   let sheet = spreadsheet.getSheetByName(AUDIT_SHEET_NAME);
 
   if (!sheet) {
@@ -877,7 +882,7 @@ function getAuditDiagnosticsFromSheet_(sheet, params) {
   const playerName = sanitizeText_(params.playerName || "");
   const lastRow = sheet.getLastRow();
   const lastColumn = Math.max(sheet.getLastColumn(), AUDIT_HEADERS.length);
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getRsvpSpreadsheet_();
   const recentCount = Math.max(0, Math.min(5, lastRow - 1));
   const recentRows =
     recentCount > 0
@@ -977,7 +982,7 @@ function formatAuditValue_(value) {
 }
 
 function getRosterSheet_() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getRsvpSpreadsheet_();
   let sheet = spreadsheet.getSheetByName(ROSTER_SHEET_NAME);
   let shouldSeedRoster = false;
 
@@ -2262,7 +2267,7 @@ function markBillingMonthPaid_(params) {
 }
 
 function getBillingDiagnostics_(month) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getRsvpSpreadsheet_();
   return {
     spreadsheetId: spreadsheet.getId(),
     spreadsheetUrl: spreadsheet.getUrl(),
@@ -3027,9 +3032,9 @@ function getBillingBirdieInventory_(month) {
     };
   }
 
-  const legacySheet = SpreadsheetApp
-    .getActiveSpreadsheet()
-    .getSheetByName(BILLING_BIRDIE_INVENTORY_SHEET_NAME);
+  const legacySheet = getRsvpSpreadsheet_().getSheetByName(
+    BILLING_BIRDIE_INVENTORY_SHEET_NAME,
+  );
   if (!legacySheet) {
     return {
       startTubes: 0,
@@ -3102,9 +3107,9 @@ function getBillingAdjustments_(month) {
       });
   }
 
-  const legacySheet = SpreadsheetApp
-    .getActiveSpreadsheet()
-    .getSheetByName(BILLING_ADJUSTMENT_SHEET_NAME);
+  const legacySheet = getRsvpSpreadsheet_().getSheetByName(
+    BILLING_ADJUSTMENT_SHEET_NAME,
+  );
   if (!legacySheet) {
     return adjustments;
   }
@@ -3245,7 +3250,7 @@ function formatBillingMonthColumn_(sheet, column) {
 }
 
 function getBillingSheet_(name, headers) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = getRsvpSpreadsheet_();
   let sheet = spreadsheet.getSheetByName(name);
 
   if (!sheet) {
