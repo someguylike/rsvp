@@ -1,4 +1,6 @@
 (function (global) {
+  const MIN_BILLABLE_PARTICIPANTS = 4;
+
   function parseCsv(text) {
     const rows = [];
     let row = [];
@@ -1324,9 +1326,29 @@
     return { blocks, allocated };
   }
 
-  function allocateCourtBlocks(model, paymentRules) {
+  function getBillableDateSet(model) {
+    const spotsByDate = new Map();
+    (model.members || []).forEach((member) => {
+      (member.attendance || []).forEach((entry) => {
+        spotsByDate.set(
+          entry.date,
+          (spotsByDate.get(entry.date) || 0) + Number(entry.spots || 0),
+        );
+      });
+    });
+    return new Set(
+      Array.from(spotsByDate.entries())
+        .filter(([, spots]) => spots >= MIN_BILLABLE_PARTICIPANTS)
+        .map(([date]) => date),
+    );
+  }
+
+  function allocateCourtBlocks(model, paymentRules, billableDates) {
     const amountsByDate = model.dailyCosts
-      .filter((day) => Number(day.courtFee || 0) > 0)
+      .filter(
+        (day) =>
+          billableDates.has(day.date) && Number(day.courtFee || 0) > 0,
+      )
       .map((day) => ({
         day,
         remaining: roundMoney(day.courtFee),
@@ -1408,6 +1430,7 @@
   function buildFinalizedBillingBackfill(model) {
     const month = `${model.period.year}-${String(model.period.month).padStart(2, "0")}`;
     const paymentRules = getFinalizedPaymentRules(model, month);
+    const billableDates = getBillableDateSet(model);
     const monthStart = `${month}-01`;
     const usageBatch = (model.birdieInventory?.entries || []).find(
       (entry) => entry.date === monthStart && Number(entry.unitCost || 0) > 0,
@@ -1423,10 +1446,7 @@
     const inventoryPurchases = model.birdieInventory?.purchases || [];
     const endTubes = roundMoney(
       Number(model.birdieInventory?.startTubes || 0) +
-        inventoryPurchases.reduce(
-          (sum, purchase) => sum + Number(purchase.tubes || 0),
-          0,
-        ) -
+        Number(model.birdieInventory?.purchasedTubes || 0) -
         usedBirdieTubes,
     );
     return {
@@ -1438,13 +1458,15 @@
         note: model.birdieInventory?.note || "",
       },
       attendanceRsvps: model.members.flatMap((member) =>
-        member.attendance.map((entry) => ({
-          playDate: entry.date,
-          playerName: member.name,
-          participantCount: entry.spots,
-        })),
+        member.attendance
+          .filter((entry) => billableDates.has(entry.date))
+          .map((entry) => ({
+            playDate: entry.date,
+            playerName: member.name,
+            participantCount: entry.spots,
+          })),
       ),
-      courtBlocks: allocateCourtBlocks(model, paymentRules),
+      courtBlocks: allocateCourtBlocks(model, paymentRules, billableDates),
       birdiePurchases: Number(model.totals.birdieFee || 0)
         ? [
             {

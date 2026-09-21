@@ -163,6 +163,7 @@ context.LockService = {
   };
   context.getBillingMonthStatusSheet_ = () => sheet;
   context.findBillingMonthRow_ = () => (statusRow ? 2 : null);
+  context.getBillingMonth_ = () => ({ attendance: [], courtBlocks: [] });
   context.rebuildBillingMemberBalanceSnapshot_ = (month) => {
     lifecycle.push(`rebuild:${month}`);
   };

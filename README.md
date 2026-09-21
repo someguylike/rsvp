@@ -136,6 +136,12 @@ Full admin backend deployment is manual:
 7. Select **New version**.
 8. Deploy.
 
+The Admin page checks both Apps Script deployments against the versions expected
+by the website. When deployment-relevant backend code changes, bump
+`ADMIN_BACKEND_VERSION` or `RSVP_BACKEND_VERSION` in the corresponding
+`Code.gs`, then update the matching expected version in `deployment-health.js`.
+The warning clears only after the new Apps Script versions are deployed.
+
 The full admin backend Web App URL must stay in:
 
 - `admin-auth.js`
@@ -144,6 +150,9 @@ The full admin backend Web App URL must stay in:
 - `billing.js`
 - `export.js`
 - `roster.js`
+
+The dedicated RSVP backend Web App URL must stay in `app.js` and in
+`roster.js` as `RSVP_PUBLIC_APPS_SCRIPT_URL`.
 
 RSVP backend deployment is also manual:
 
@@ -181,7 +190,7 @@ Each export recreates the selected month tab as a clean attendance table. It doe
 Output format:
 
 - Tab name: `Month YYYY`, for example `March 2026`.
-- Row 1: `Name` plus play dates with at least 2 participants.
+- Row 1: `Name` plus play dates with at least 4 participants.
 - Rows: one row per player.
 - Cell value: blank when not joining, otherwise the total reserved spots for that player.
 
@@ -201,6 +210,11 @@ An HTML/XML reservation audit compares active reservation counts and court label
 Transaction groups use stable IDs, so importing the same export again updates or flags existing rows instead of silently duplicating fees.
 
 Canceled court blocks never contribute to the active court total or member balances and are hidden from the court table by default. **Show canceled** exposes them when an admin needs to restore or permanently delete one; permanent deletion also removes its row from `Billing Court Blocks` and refreshes any open finalized-month snapshot.
+
+Billing includes only play dates with at least four total RSVP spots. Dates
+below that threshold remain visible as excluded audit rows, contribute no court
+or birdie charge, and cannot receive or restore an active court block. A month
+cannot be finalized while it contains an active court block on an excluded date.
 
 ## Birdie Inventory Credits
 

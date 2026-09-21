@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Billing minimum tests</title>
+    <style>
+      body { font-family: sans-serif; padding: 24px; }
+      .pass { color: #087a42; }
+      .fail { color: #b42318; }
+    </style>
+  </head>
+  <body>
+    <h1>Billing minimum tests</h1>
+    <p id="summary">Running...</p>
+    <ol id="results"></ol>
+    <script src="../balances-core.js"></script>
+    <script>
+      (async () => {
+        const source = {
+          month: "2026-08",
+          attendance: [
+            {
+              date: "2026-08-20",
+              players: [
+                { name: "Son", spots: 1 },
+                { name: "Tuan", spots: 1 },
+              ],
+            },
+            {
+              date: "2026-08-21",
+              players: [
+                { name: "Alice", spots: 1 },
+                { name: "Bob", spots: 1 },
+                { name: "Cara", spots: 1 },
+                { name: "Dan", spots: 1 },
+              ],
+            },
+          ],
+          courtBlocks: [
+            { date: "2026-08-20", amount: 20, paidBy: "Son", status: "active" },
+            { date: "2026-08-21", amount: 40, paidBy: "Alice", status: "active" },
+          ],
+          birdiePurchases: [
+            {
+              date: "2026-08-31",
+              amount: 20,
+              status: "active",
+              recordType: "usage",
+            },
+          ],
+          payments: [],
+          adjustments: [],
+        };
+        const backendSource = await fetch("../google-apps-script/Code.gs").then(
+          (response) => response.text(),
+        );
+        const backend = new Function(
+          `${backendSource}; return { calculateBillingMemberBalances_, getIneligibleActiveCourtBlocks_ };`,
+        )();
+        const tests = [];
+        const test = (name, fn) => tests.push({ name, fn });
+        const assert = (condition, message) => {
+          if (!condition) throw new Error(message || "Assertion failed");
+        };
+
+        test("shared calculator excludes attendance below four spots", () => {
+          const result = window.BalanceCalculator.calculateMonthBalances(source);
+          assert(!result.members.some((member) => member.name === "Son"));
+          assert(!result.members.some((member) => member.name === "Tuan"));
+        });
+
+        test("exactly four spots remain billable", () => {
+          const result = window.BalanceCalculator.calculateMonthBalances(source);
+          assert(result.members.find((member) => member.name === "Bob").netBalance === 15);
+        });
+
+        test("backend snapshot matches the shared browser calculation", () => {
+          const browserMembers = window.BalanceCalculator.calculateMonthBalances(source).members;
+          const backendMembers = backend.calculateBillingMemberBalances_(source);
+          assert(JSON.stringify(browserMembers) === JSON.stringify(backendMembers));
+        });
+
+        test("backend identifies active court blocks below the minimum", () => {
+          const blocks = backend.getIneligibleActiveCourtBlocks_(source);
+          assert(blocks.length === 1 && blocks[0].date === "2026-08-20");
+        });
+
+        const results = document.querySelector("#results");
+        let passed = 0;
+        tests.forEach(({ name, fn }) => {
+          const item = document.createElement("li");
+          try {
+            fn();
+            passed += 1;
+            item.className = "pass";
+            item.textContent = `PASS ${name}`;
+          } catch (error) {
+            item.className = "fail";
+            item.textContent = `FAIL ${name}: ${error.message}`;
+          }
+          results.append(item);
+        });
+        const summary = document.querySelector("#summary");
+        summary.className = passed === tests.length ? "pass" : "fail";
+        summary.textContent = `${passed} of ${tests.length} tests passed.`;
+      })().catch((error) => {
+        const summary = document.querySelector("#summary");
+        summary.className = "fail";
+        summary.textContent = error.message;
+      });
+    </script>
+  </body>
+</html>

@@ -633,6 +633,70 @@ button:disabled {
   padding: 9px 10px;
 }
 
+.deployment-health {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.deployment-health[hidden] {
+  display: none;
+}
+
+.deployment-health.loading {
+  background: var(--surface);
+}
+
+.deployment-health.warning {
+  border-color: #e2a43d;
+  background: #fff8e6;
+}
+
+.deployment-health.success {
+  border-color: #8dc9a8;
+  background: #effaf3;
+}
+
+.deployment-health-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.deployment-health-heading h2,
+.deployment-health-heading p {
+  margin: 0;
+}
+
+.deployment-health-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.deployment-health-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.deployment-health-list li {
+  line-height: 1.4;
+}
+
+.deployment-health-list li.warning {
+  color: #7a4b00;
+}
+
+.deployment-health-list li.success {
+  color: var(--success);
+}
+
 .report-progress {
   display: grid;
   gap: 7px;

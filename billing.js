@@ -54,6 +54,7 @@
   const PLAY_DAYS = [2, 4, 5, 0];
   const LAST_PLAYER_KEY = "play-rsvp.lastPlayerName";
   const DEFAULT_COURT_PAYER = "Hoan Nguyen";
+  const MIN_BILLABLE_PARTICIPANTS = 4;
   const STATUS_OPTIONS = ["Not requested", "Requested", "Paid", "Credit carryover"];
   const BILLING_CACHE_PREFIX = "billing:backend:";
   const BILLING_MONTHS_CACHE_PREFIX = "billing:months:";
@@ -794,6 +795,18 @@
     return date.getDay() === 0 ? 1.5 : 1;
   }
 
+  function getAttendanceSpotCount(day) {
+    return (day?.players || []).reduce(
+      (sum, player) => sum + Number(player.spots || 0),
+      0,
+    );
+  }
+
+  function getAttendanceSpotCountForDate(date) {
+    const day = attendanceRows.find((entry) => entry.date === date);
+    return day ? getAttendanceSpotCount(day) : 0;
+  }
+
   function parseAmount(value) {
     const amount = Number(value);
     return Number.isFinite(amount) ? Math.max(0, amount) : 0;
@@ -1330,7 +1343,19 @@
   function calculateBilling() {
     const courtBlocks = getCourtBlocks();
     const birdieState = getBirdieState();
-    const activeCourtBlocks = courtBlocks.filter((block) => block.status === "active");
+    const billableAttendanceRows = attendanceRows.filter(
+      (day) => getAttendanceSpotCount(day) >= MIN_BILLABLE_PARTICIPANTS,
+    );
+    const billableDates = new Set(billableAttendanceRows.map((day) => day.date));
+    const allActiveCourtBlocks = courtBlocks.filter(
+      (block) => block.status === "active",
+    );
+    const activeCourtBlocks = allActiveCourtBlocks.filter((block) =>
+      billableDates.has(block.date),
+    );
+    const ineligibleCourtBlocks = allActiveCourtBlocks.filter(
+      (block) => !billableDates.has(block.date),
+    );
     const courtByDate = new Map();
     const members = new Map();
     let totalWeightedSpots = 0;
@@ -1407,7 +1432,7 @@
         }
       });
 
-    attendanceRows.forEach((day) => {
+    billableAttendanceRows.forEach((day) => {
       const weight = getDateWeight(day.date);
       const daySpots = day.players.reduce((sum, player) => sum + player.spots, 0);
       const dayWeightedSpots = daySpots * weight;
@@ -1447,21 +1472,27 @@
 
     return {
       courtBlocks,
+      activeCourtBlocks,
+      ineligibleCourtBlocks,
       birdieState,
       birdiePerWeightedSpot,
       totalWeightedSpots,
       totalSpots,
+      billableDateCount: billableAttendanceRows.length,
+      excludedDateCount: attendanceRows.length - billableAttendanceRows.length,
       members: Array.from(members.values()).sort((first, second) =>
         first.name.localeCompare(second.name),
       ),
       daily: attendanceRows.map((day) => {
-        const spots = day.players.reduce((sum, player) => sum + player.spots, 0);
+        const spots = getAttendanceSpotCount(day);
+        const eligible = spots >= MIN_BILLABLE_PARTICIPANTS;
         const weight = getDateWeight(day.date);
-        const courtFee = courtByDate.get(day.date) || 0;
+        const courtFee = eligible ? courtByDate.get(day.date) || 0 : 0;
         const courtPerSpot = spots > 0 ? courtFee / spots : 0;
-        const birdiePerSpot = birdiePerWeightedSpot * weight;
+        const birdiePerSpot = eligible ? birdiePerWeightedSpot * weight : 0;
         return {
           date: day.date,
+          eligible,
           weight,
           spots,
           courtFee,
@@ -1475,8 +1506,7 @@
   }
 
   function renderSummary() {
-    const courtTotal = billing.courtBlocks
-      .filter((block) => block.status === "active")
+    const courtTotal = billing.activeCourtBlocks
       .reduce((sum, block) => sum + Number(block.amount || 0), 0);
     const birdieTotal = billing.birdieState.purchases
       .filter(isBilledBirdiePurchase)
@@ -1588,12 +1618,18 @@
         { text: formatMoney(day.courtPerSpot), className: "numeric-cell" },
         { text: formatMoney(day.birdiePerSpot), className: "numeric-cell" },
         { text: formatMoney(day.totalPerSpot), className: "numeric-cell" },
-        makeBadge(day.activeBlocks ? "Clean" : "No court", day.activeBlocks ? "paid" : "review"),
+        day.eligible
+          ? makeBadge(day.activeBlocks ? "Clean" : "No court", day.activeBlocks ? "paid" : "review")
+          : makeBadge(`Excluded (<${MIN_BILLABLE_PARTICIPANTS})`, "review"),
       ]),
       ["Total", "", String(billing.totalSpots), formatMoney(courtTotal), "", formatMoney(birdieTotal), formatMoney(courtTotal + birdieTotal), ""],
     );
     dailyNote.textContent = backendBilling
-      ? `${billing.daily.length} play dates from Apps Script RSVP data.`
+      ? `${billing.billableDateCount} billable play dates from Apps Script RSVP data${
+          billing.excludedDateCount
+            ? `; ${billing.excludedDateCount} date${billing.excludedDateCount === 1 ? "" : "s"} excluded below ${MIN_BILLABLE_PARTICIPANTS} spots.`
+            : "."
+        }`
       : `${billing.daily.length} play dates from demo attendance. Replace this with Apps Script RSVP data next.`;
   }
 
@@ -1622,9 +1658,7 @@
       }
       return String(first.id || "").localeCompare(String(second.id || ""));
     });
-    const activeCourtBlocks = billing.courtBlocks.filter(
-      (block) => block.status === "active",
-    );
+    const activeCourtBlocks = billing.activeCourtBlocks;
     const activeBookingCount = activeCourtBlocks.reduce(
       (sum, block) => sum + Number(block.courts || 0),
       0,
@@ -1643,9 +1677,16 @@
       courtBlockTable,
       ["Date", "Block", "Courts", "Paid By", "Amount", "Source", "Status", "Actions"],
       sortedCourtBlocks.map((block) => {
+        const isIneligibleActiveBlock =
+          block.status === "active" &&
+          getAttendanceSpotCountForDate(block.date) < MIN_BILLABLE_PARTICIPANTS;
         const statusCell = makeBadge(
-          block.status === "active" ? "Active" : "Canceled",
-          block.status === "active" ? "paid" : "review",
+          isIneligibleActiveBlock
+            ? `Cancel (<${MIN_BILLABLE_PARTICIPANTS})`
+            : block.status === "active"
+              ? "Active"
+              : "Canceled",
+          block.status === "active" && !isIneligibleActiveBlock ? "paid" : "review",
         );
         const actions = document.createElement("td");
         const toggle = document.createElement("button");
@@ -1715,7 +1756,7 @@
         ];
       }),
       [
-        "Active total",
+        "Billable total",
         `${formatNumber(totalCourtHours, 1)} court-hours`,
         `${activeBookingCount} active booking${activeBookingCount === 1 ? "" : "s"}`,
         "",
@@ -2302,8 +2343,15 @@
   }
 
   function getBillingLoadSummary() {
+    const billableDates = new Set(
+      attendanceRows
+        .filter(
+          (day) => getAttendanceSpotCount(day) >= MIN_BILLABLE_PARTICIPANTS,
+        )
+        .map((day) => day.date),
+    );
     const activeCourtBlocks = (backendBilling?.courtBlocks || []).filter(
-      (block) => block.status === "active",
+      (block) => block.status === "active" && billableDates.has(block.date),
     );
     const activeBookingCount = activeCourtBlocks.reduce(
       (sum, block) => sum + Number(block.courts || 0),
@@ -2346,7 +2394,7 @@
     backendBilling = nextBilling;
     backendAvailable = true;
     attendanceRows =
-      Array.isArray(backendBilling.attendance) && backendBilling.attendance.length > 0
+      Array.isArray(backendBilling.attendance)
         ? backendBilling.attendance
         : createSampleAttendance();
     render();
@@ -2602,7 +2650,7 @@
       } else if (applyBillingSaveResult(payload.action, result)) {
         writeBillingCache(monthInput.value, backendBilling);
         attendanceRows =
-          backendBilling?.attendance?.length > 0
+          Array.isArray(backendBilling?.attendance)
             ? backendBilling.attendance
             : createSampleAttendance();
         render();
@@ -2628,7 +2676,7 @@
 
   function recalculate(message) {
     attendanceRows =
-      backendBilling?.attendance?.length > 0
+      Array.isArray(backendBilling?.attendance)
         ? backendBilling.attendance
         : createSampleAttendance();
     render();
@@ -3301,6 +3349,15 @@
 
   function handleCourtSubmit(event) {
     event.preventDefault();
+    const attendanceSpots = getAttendanceSpotCountForDate(courtDateInput.value);
+    if (attendanceSpots < MIN_BILLABLE_PARTICIPANTS) {
+      setSectionStatus(
+        courtFeedback,
+        `Court blocks require at least ${MIN_BILLABLE_PARTICIPANTS} RSVP spots; ${courtDateInput.value} currently has ${attendanceSpots}.`,
+        "error",
+      );
+      return;
+    }
     const block = {
       id: makeId("court"),
       date: courtDateInput.value,

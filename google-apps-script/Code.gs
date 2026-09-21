@@ -8,11 +8,13 @@ const BILLING_PAYMENT_SHEET_NAME = "Billing Payments";
 const BILLING_ADJUSTMENT_SHEET_NAME = "Billing Adjustments";
 const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
-const BILLING_BALANCE_CALCULATION_VERSION = 2;
+// Bump these whenever deployment or billing-calculation behavior changes.
+const ADMIN_BACKEND_VERSION = "2026-09-20.2";
+const BILLING_BALANCE_CALCULATION_VERSION = 3;
 const EXPORT_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
-const EXPORT_MIN_PARTICIPANTS = 2;
+const MIN_BILLABLE_PARTICIPANTS = 4;
 const ADMIN_TOKEN_TTL_SECONDS = 21600;
 const PLAY_DAYS = [2, 4, 5, 0];
 const PLAY_START_HOUR = 6;
@@ -200,6 +202,16 @@ function doGet(event) {
   const callback = params.callback || "callback";
 
   try {
+    if (params.action === "deploymentInfo") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "deploymentInfo",
+        service: "admin-billing",
+        deploymentVersion: ADMIN_BACKEND_VERSION,
+        billingCalculationVersion: BILLING_BALANCE_CALCULATION_VERSION,
+      });
+    }
+
     if (params.action === "adminLogin") {
       const result = adminLogin_(params);
       return jsonp_(callback, {
@@ -1497,6 +1509,13 @@ function calculateBillingMemberBalances_(source) {
   const month = String(billing.month || "");
   const members = new Map();
   const courtByDate = new Map();
+  const billableAttendance = getBillableBillingAttendance_(
+    billing.attendance || [],
+  );
+  const billableDateSet = billableAttendance.reduce((dates, day) => {
+    dates[day.date] = true;
+    return dates;
+  }, {});
 
   function ensureMember(name) {
     const normalizedName = String(name || "").trim();
@@ -1519,7 +1538,9 @@ function calculateBillingMemberBalances_(source) {
   }
 
   (billing.courtBlocks || [])
-    .filter((block) => block.status === "active")
+    .filter(
+      (block) => block.status === "active" && billableDateSet[block.date],
+    )
     .forEach((block) => {
       courtByDate.set(
         block.date,
@@ -1572,7 +1593,7 @@ function calculateBillingMemberBalances_(source) {
     });
 
   let totalWeightedSpots = 0;
-  (billing.attendance || []).forEach((day) => {
+  billableAttendance.forEach((day) => {
     const spots = (day.players || []).reduce(
       (sum, player) => sum + Number(player.spots || 0),
       0,
@@ -1623,6 +1644,31 @@ function calculateBillingMemberBalances_(source) {
 
   return Array.from(members.values()).sort((first, second) =>
     first.name.localeCompare(second.name),
+  );
+}
+
+function getBillingAttendanceSpotCount_(day) {
+  return (day?.players || []).reduce(
+    (sum, player) => sum + Number(player.spots || 0),
+    0,
+  );
+}
+
+function getBillableBillingAttendance_(attendance) {
+  return (attendance || []).filter(
+    (day) => getBillingAttendanceSpotCount_(day) >= MIN_BILLABLE_PARTICIPANTS,
+  );
+}
+
+function getIneligibleActiveCourtBlocks_(billing) {
+  const spotsByDate = (billing.attendance || []).reduce((dates, day) => {
+    dates[day.date] = getBillingAttendanceSpotCount_(day);
+    return dates;
+  }, {});
+  return (billing.courtBlocks || []).filter(
+    (block) =>
+      block.status === "active" &&
+      Number(spotsByDate[block.date] || 0) < MIN_BILLABLE_PARTICIPANTS,
   );
 }
 
@@ -2143,7 +2189,7 @@ function addBillingMonthsFromSheet_(
 }
 
 function getBillingAttendancePlayers_(month) {
-  return getBillingAttendance_(month)
+  return getBillableBillingAttendance_(getBillingAttendance_(month))
     .reduce((players, day) => players.concat(day.players.map((player) => player.name)), [])
     .filter((playerName, index, players) => {
       const normalizedName = normalize_(playerName);
@@ -2383,6 +2429,15 @@ function saveBillingCourtBlock_(params) {
     if (paidBy) {
       validatePlayerName_(paidBy);
     }
+    if (
+      normalizeBillingStatus_(params.status || "active") === "active" &&
+      getBillingAttendanceSpotCountForDate_(month, date) <
+        MIN_BILLABLE_PARTICIPANTS
+    ) {
+      throw new Error(
+        `Court blocks require at least ${MIN_BILLABLE_PARTICIPANTS} RSVP spots`,
+      );
+    }
 
     const sheet = getBillingCourtSheet_();
     const id = sanitizeText_(params.id || Utilities.getUuid());
@@ -2445,6 +2500,18 @@ function toggleBillingCourtBlock_(params) {
           ? "canceled"
           : "active"),
     );
+    const values = sheet
+      .getRange(row, 1, 1, BILLING_COURT_HEADERS.length)
+      .getValues()[0];
+    if (
+      status === "active" &&
+      getBillingAttendanceSpotCountForDate_(month, normalizeDate_(values[2])) <
+        MIN_BILLABLE_PARTICIPANTS
+    ) {
+      throw new Error(
+        `Court blocks require at least ${MIN_BILLABLE_PARTICIPANTS} RSVP spots`,
+      );
+    }
     sheet.getRange(row, 9).setValue(status);
     sheet.getRange(row, 12).setValue(new Date().toISOString());
     sheet.getRange(row, 14).setValue(getBillingActor_(params));
@@ -2757,6 +2824,18 @@ function saveBillingMonthStatus_(params) {
     const status = normalizeBillingMonthStatus_(
       required_(params.status, "Missing billing status"),
     );
+    if (status === "finalized") {
+      const ineligibleCourtBlocks = getIneligibleActiveCourtBlocks_(
+        getBillingMonth_(month),
+      );
+      if (ineligibleCourtBlocks.length) {
+        throw new Error(
+          `Cancel ${ineligibleCourtBlocks.length} active court block${
+            ineligibleCourtBlocks.length === 1 ? "" : "s"
+          } on dates with fewer than ${MIN_BILLABLE_PARTICIPANTS} RSVP spots before finalizing`,
+        );
+      }
+    }
     const sheet = getBillingMonthStatusSheet_();
     const row = findBillingMonthRow_(sheet, month);
     const values = [
@@ -2912,6 +2991,13 @@ function getBillingAttendance_(month) {
         .map((key) => byDate[date][key])
         .sort((first, second) => first.name.localeCompare(second.name)),
     }));
+}
+
+function getBillingAttendanceSpotCountForDate_(month, date) {
+  const day = getBillingAttendance_(month).find(
+    (attendanceDay) => attendanceDay.date === date,
+  );
+  return day ? getBillingAttendanceSpotCount_(day) : 0;
 }
 
 function getBillingCourtBlocks_(month) {
@@ -3510,7 +3596,7 @@ function buildMonthRosterMatrix_(sourceSheet, month) {
   const totalsByDate = {};
   const monthDates = getExportDatesForMonth_(sourceSheet, month).filter((date) => {
     totalsByDate[date] = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
-    return getTotalParticipants_(totalsByDate[date]) >= EXPORT_MIN_PARTICIPANTS;
+    return getTotalParticipants_(totalsByDate[date]) >= MIN_BILLABLE_PARTICIPANTS;
   });
   const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
 
@@ -3683,7 +3769,7 @@ function getCurrentExportDatesForMonth_(sheet, month) {
   }
 
   return Object.keys(totalsByDate)
-    .filter((date) => totalsByDate[date] >= EXPORT_MIN_PARTICIPANTS)
+    .filter((date) => totalsByDate[date] >= MIN_BILLABLE_PARTICIPANTS)
     .sort();
 }
 

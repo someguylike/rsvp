@@ -5,6 +5,8 @@ const SPREADSHEET_ID_PROPERTY = "RSVP_SPREADSHEET_ID";
 const ROSTER_CACHE_KEY = "rsvp-public-roster-v1";
 const ROSTER_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const TALLY_CACHE_KEY_PREFIX = "rsvp-tally-v1:";
+// Bump this whenever deployment-relevant code in this file changes.
+const RSVP_BACKEND_VERSION = "2026-09-20.1";
 // The admin tool writes through a separate Apps Script project and cannot
 // invalidate this cache. Keep this below one minute while spanning the
 // frontend's 30-second refresh interval so every other poll can be a cache hit.
@@ -53,6 +55,15 @@ function doGet(event) {
   const callback = params.callback || "callback";
 
   try {
+    if (params.action === "deploymentInfo") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "deploymentInfo",
+        service: "rsvp",
+        deploymentVersion: RSVP_BACKEND_VERSION,
+      });
+    }
+
     if (params.action === "listRoster") {
       return jsonp_(callback, {
         ok: true,

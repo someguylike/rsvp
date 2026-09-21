@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Deployment health tests</title>
+    <style>
+      body { font-family: sans-serif; padding: 24px; }
+      .pass { color: #087a42; }
+      .fail { color: #b42318; }
+    </style>
+  </head>
+  <body>
+    <h1>Deployment health tests</h1>
+    <p id="summary">Running...</p>
+    <ol id="results"></ol>
+    <script src="../deployment-health.js"></script>
+    <script>
+      (() => {
+        const tests = [];
+        const test = (name, fn) => tests.push({ name, fn });
+        const assert = (condition, message) => {
+          if (!condition) throw new Error(message || "Assertion failed");
+        };
+        const service = {
+          id: "admin-billing",
+          label: "Admin / Billing",
+          deploymentVersion: "2026-09-20.2",
+          billingCalculationVersion: 3,
+        };
+
+        test("accepts matching deployment and calculation versions", () => {
+          const result = window.RsvpDeploymentHealth.evaluateDeployment(
+            service,
+            {
+              service: "admin-billing",
+              deploymentVersion: "2026-09-20.2",
+              billingCalculationVersion: 3,
+            },
+          );
+          assert(result.ok, result.message);
+        });
+
+        test("rejects a stale deployment version", () => {
+          const result = window.RsvpDeploymentHealth.evaluateDeployment(
+            service,
+            {
+              service: "admin-billing",
+              deploymentVersion: "2026-09-19.1",
+              billingCalculationVersion: 3,
+            },
+          );
+          assert(!result.ok && result.message.includes("live is 2026-09-19.1"));
+        });
+
+        test("rejects a stale billing calculation", () => {
+          const result = window.RsvpDeploymentHealth.evaluateDeployment(
+            service,
+            {
+              service: "admin-billing",
+              deploymentVersion: "2026-09-20.2",
+              billingCalculationVersion: 1,
+            },
+          );
+          assert(!result.ok && result.message.includes("live is 1"));
+        });
+
+        test("recognizes a deployment without the version endpoint", () => {
+          const result = window.RsvpDeploymentHealth.evaluateDeployment(
+            service,
+            null,
+            new Error("Unsupported action: deploymentInfo"),
+          );
+          assert(!result.ok && result.message.includes("older than expected"));
+        });
+
+        const results = document.querySelector("#results");
+        let passed = 0;
+        tests.forEach(({ name, fn }) => {
+          const item = document.createElement("li");
+          try {
+            fn();
+            passed += 1;
+            item.className = "pass";
+            item.textContent = `PASS ${name}`;
+          } catch (error) {
+            item.className = "fail";
+            item.textContent = `FAIL ${name}: ${error.message}`;
+          }
+          results.append(item);
+        });
+        const summary = document.querySelector("#summary");
+        summary.className = passed === tests.length ? "pass" : "fail";
+        summary.textContent = `${passed} of ${tests.length} tests passed.`;
+      })();
+    </script>
+  </body>
+</html>

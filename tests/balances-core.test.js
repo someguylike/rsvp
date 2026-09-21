@@ -9,7 +9,7 @@ function calculate(month, birdiePurchases, adjustments = []) {
   return BalanceCalculator.calculateMonthBalances({
     month,
     attendance: [
-      { date: `${month}-10`, players: [{ name: "Player", spots: 1 }] },
+      { date: `${month}-10`, players: [{ name: "Player", spots: 4 }] },
     ],
     courtBlocks: [],
     birdiePurchases,
@@ -118,8 +118,8 @@ const juneUsage = {
   const result = BalanceCalculator.calculateMonthBalances({
     month: "2026-06",
     attendance: [
-      { date: "2026-06-05", players: [{ name: "Friday Player", spots: 1 }] },
-      { date: "2026-06-07", players: [{ name: "Sunday Player", spots: 1 }] },
+      { date: "2026-06-05", players: [{ name: "Friday Player", spots: 4 }] },
+      { date: "2026-06-07", players: [{ name: "Sunday Player", spots: 4 }] },
     ],
     courtBlocks: [
       { date: "2026-06-05", amount: 20, status: "active" },
@@ -143,6 +143,48 @@ const juneUsage = {
   assert.equal(sunday.courtFee, 20, "Sunday weight must not change court fees");
   assert.equal(friday.birdieFee, 10);
   assert.equal(sunday.birdieFee, 15, "Sunday weight applies only to birdie fees");
+}
+
+{
+  const result = BalanceCalculator.calculateMonthBalances({
+    month: "2026-08",
+    attendance: [
+      {
+        date: "2026-08-20",
+        players: [
+          { name: "Son", spots: 1 },
+          { name: "Tuan", spots: 1 },
+        ],
+      },
+      {
+        date: "2026-08-21",
+        players: [
+          { name: "Alice", spots: 1 },
+          { name: "Bob", spots: 1 },
+          { name: "Cara", spots: 1 },
+          { name: "Dan", spots: 1 },
+        ],
+      },
+    ],
+    courtBlocks: [
+      { date: "2026-08-20", amount: 20, paidBy: "Son", status: "active" },
+      { date: "2026-08-21", amount: 40, paidBy: "Alice", status: "active" },
+    ],
+    birdiePurchases: [
+      {
+        date: "2026-08-31",
+        amount: 20,
+        status: "active",
+        recordType: "usage",
+      },
+    ],
+    payments: [],
+    adjustments: [],
+  });
+  assert.equal(result.members.some((member) => member.name === "Son"), false);
+  assert.equal(result.members.some((member) => member.name === "Tuan"), false);
+  assert.equal(result.members.find((member) => member.name === "Alice").netBalance, -25);
+  assert.equal(result.members.find((member) => member.name === "Bob").netBalance, 15);
 }
 
 {

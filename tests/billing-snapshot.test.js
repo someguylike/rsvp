@@ -25,14 +25,14 @@ const billing = {
       date: "2026-06-05",
       players: [
         { name: "Alice", spots: 1 },
-        { name: "Bob", spots: 2 },
+        { name: "Bob", spots: 3 },
       ],
     },
     {
       date: "2026-06-07",
       players: [
         { name: "Alice", spots: 1 },
-        { name: "Cara", spots: 1 },
+        { name: "Cara", spots: 3 },
       ],
     },
   ],
@@ -146,10 +146,10 @@ assert.equal(juneLegacy.find((member) => member.name === "Cara").credits, 0);
 assert.equal(julyMoved.find((member) => member.name === "Cara").credits, 300);
 
 const snapshotRows = [
-  ["2026-06", "", 0, 0, 0, 0, 0, 0, "2026-07-01T00:00:00Z", 2],
-  ["2026-06", "Alice", 1, 1, 20, 5, 0, 25, "2026-07-01T00:00:00Z", 2],
-  ["2026-07", "", 0, 0, 0, 0, 0, 0, "2026-08-01T00:00:00Z", 2],
-  ["2026-07", "Bob", 2, 2, 30, 10, 5, 35, "2026-08-01T00:00:00Z", 2],
+  ["2026-06", "", 0, 0, 0, 0, 0, 0, "2026-07-01T00:00:00Z", 3],
+  ["2026-06", "Alice", 1, 1, 20, 5, 0, 25, "2026-07-01T00:00:00Z", 3],
+  ["2026-07", "", 0, 0, 0, 0, 0, 0, "2026-08-01T00:00:00Z", 3],
+  ["2026-07", "Bob", 2, 2, 30, 10, 5, 35, "2026-08-01T00:00:00Z", 3],
 ];
 appsScriptContext.getFinalizedBillingMonths_ = () => ["2026-06", "2026-07"];
 appsScriptContext.getBillingMemberBalanceSheet_ = () => ({

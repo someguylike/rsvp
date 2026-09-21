@@ -1,6 +1,8 @@
 (function (global) {
   "use strict";
 
+  const MIN_BILLABLE_PARTICIPANTS = 4;
+
   function roundMoney(value) {
     return Math.round(Number(value || 0) * 100) / 100;
   }
@@ -74,11 +76,26 @@
     return new Date(year, month - 1, day).getDay() === 0 ? 1.5 : 1;
   }
 
+  function getAttendanceSpotCount(day) {
+    return (day?.players || []).reduce(
+      (sum, player) => sum + Number(player.spots || 0),
+      0,
+    );
+  }
+
+  function getBillableAttendance(attendance) {
+    return (attendance || []).filter(
+      (day) => getAttendanceSpotCount(day) >= MIN_BILLABLE_PARTICIPANTS,
+    );
+  }
+
   function calculateMonthBalances(source) {
     const billing = source || {};
     const month = String(billing.month || "");
     const members = new Map();
     const courtByDate = new Map();
+    const billableAttendance = getBillableAttendance(billing.attendance);
+    const billableDates = new Set(billableAttendance.map((day) => day.date));
 
     function ensureMember(name) {
       const normalizedName = String(name || "").trim();
@@ -101,7 +118,9 @@
     }
 
     (billing.courtBlocks || [])
-      .filter((block) => block.status === "active")
+      .filter(
+        (block) => block.status === "active" && billableDates.has(block.date),
+      )
       .forEach((block) => {
         courtByDate.set(
           block.date,
@@ -151,7 +170,7 @@
       });
 
     let totalWeightedSpots = 0;
-    (billing.attendance || []).forEach((day) => {
+    billableAttendance.forEach((day) => {
       const spots = (day.players || []).reduce(
         (sum, player) => sum + Number(player.spots || 0),
         0,
@@ -212,6 +231,7 @@
   }
 
   global.BalanceCalculator = {
+    MIN_BILLABLE_PARTICIPANTS,
     calculateMonthBalances,
     getAmountDue,
   };
