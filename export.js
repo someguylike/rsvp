@@ -1,6 +1,7 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
+  const FIRST_REPORT_MONTH = "2026-04";
 
   const form = document.querySelector("#export-form");
   const adminAuth = window.RsvpAdminAuth;
@@ -43,6 +44,42 @@
 
   function isMonthValue(value) {
     return /^\d{4}-(0[1-9]|1[0-2])$/.test(value || "");
+  }
+
+  function getReportMonths(firstMonth, currentMonth) {
+    if (!isMonthValue(firstMonth) || !isMonthValue(currentMonth)) {
+      return [];
+    }
+
+    const [firstYear, firstMonthNumber] = firstMonth.split("-").map(Number);
+    const [currentYear, currentMonthNumber] = currentMonth.split("-").map(Number);
+    const firstIndex = firstYear * 12 + firstMonthNumber - 1;
+    const currentIndex = currentYear * 12 + currentMonthNumber - 1;
+    const months = [];
+
+    for (let index = currentIndex; index >= firstIndex; index -= 1) {
+      const year = Math.floor(index / 12);
+      const month = String((index % 12) + 1).padStart(2, "0");
+      months.push(`${year}-${month}`);
+    }
+
+    return months;
+  }
+
+  function populateMonthOptions(firstMonth, currentMonth) {
+    const months = getReportMonths(firstMonth, currentMonth);
+    const options = months.map((month) => {
+      const [year, monthNumber] = month.split("-").map(Number);
+      const option = document.createElement("option");
+      option.value = month;
+      option.textContent = new Date(year, monthNumber - 1, 1).toLocaleDateString(
+        "en-US",
+        { month: "long", year: "numeric" },
+      );
+      return option;
+    });
+    monthInput.replaceChildren(...options);
+    return months;
   }
 
   function setStatus(message, type) {
@@ -668,7 +705,7 @@
   const monthFromUrl = new URLSearchParams(window.location.search).get("month");
   const hasValidMonthFromUrl = isMonthValue(monthFromUrl);
   const currentMonth = formatMonth(new Date());
-  const availableMonths = Array.from(monthInput.options).map((option) => option.value);
+  const availableMonths = populateMonthOptions(FIRST_REPORT_MONTH, currentMonth);
   monthInput.value =
     hasValidMonthFromUrl && availableMonths.includes(monthFromUrl)
       ? monthFromUrl
