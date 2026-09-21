@@ -816,6 +816,61 @@
     return Math.round(Number(value || 0) * 100) / 100;
   }
 
+  function toMoneyCents(value) {
+    const amount = Number(value || 0);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  }
+
+  function compareAllocationRows(first, second) {
+    if (first.remainder !== second.remainder) {
+      return second.remainder - first.remainder;
+    }
+    if (first.name < second.name) {
+      return -1;
+    }
+    if (first.name > second.name) {
+      return 1;
+    }
+    return first.index - second.index;
+  }
+
+  function allocateCentsByWeight(totalCents, entries) {
+    const roundedTotal = Math.round(Number(totalCents || 0));
+    const sign = roundedTotal < 0 ? -1 : 1;
+    const absoluteTotal = Math.abs(roundedTotal);
+    const rows = (entries || []).map((entry, index) => ({
+      index,
+      name: String(entry?.name || ""),
+      weight: Math.max(0, Math.round(Number(entry?.weight || 0))),
+      cents: 0,
+      remainder: 0,
+    }));
+    const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
+
+    if (!absoluteTotal || !totalWeight) {
+      return rows.map(() => 0);
+    }
+
+    rows.forEach((row) => {
+      const numerator = absoluteTotal * row.weight;
+      row.cents = Math.floor(numerator / totalWeight);
+      row.remainder = numerator % totalWeight;
+    });
+
+    const centsRemaining =
+      absoluteTotal - rows.reduce((sum, row) => sum + row.cents, 0);
+    const rankedRows = rows
+      .filter((row) => row.weight > 0)
+      .sort(compareAllocationRows);
+    for (let index = 0; index < centsRemaining; index += 1) {
+      rankedRows[index % rankedRows.length].cents += 1;
+    }
+
+    return rows
+      .sort((first, second) => first.index - second.index)
+      .map((row) => row.cents * sign);
+  }
+
   function parseDurationHours(value) {
     const text = String(value || "").trim();
     const match = text.match(/^(\d{1,2})(?::([0-5]\d))?$/);
@@ -1318,6 +1373,45 @@
     });
   }
 
+  function isBillingSourceEditable() {
+    return getMonthStatus().status !== "finalized";
+  }
+
+  function renderBillingSourceEditability() {
+    const editable = isBillingSourceEditable();
+    [courtForm, courtImportForm, birdiePurchaseForm, birdieUsageForm].forEach(
+      (form) => {
+        form.querySelectorAll("input, select, button").forEach((control) => {
+          if (!editable && !control.disabled) {
+            control.dataset.disabledByFinalization = "true";
+            control.disabled = true;
+          } else if (editable && control.dataset.disabledByFinalization === "true") {
+            control.disabled = false;
+            delete control.dataset.disabledByFinalization;
+          }
+        });
+      },
+    );
+    if (!editable && !courtImportSaveButton.disabled) {
+      courtImportSaveButton.dataset.disabledByFinalization = "true";
+      courtImportSaveButton.disabled = true;
+    } else if (
+      editable &&
+      courtImportSaveButton.dataset.disabledByFinalization === "true"
+    ) {
+      courtImportSaveButton.disabled = false;
+      delete courtImportSaveButton.dataset.disabledByFinalization;
+    }
+    [courtBlockTable, birdiePurchaseTable].forEach((table) => {
+      table.querySelectorAll("button").forEach((button) => {
+        button.disabled = !editable;
+        if (!editable) {
+          button.title = "Reopen this billing month to Draft before editing source data.";
+        }
+      });
+    });
+  }
+
   function setMonthStatus(status) {
     writeJson(storageKey("monthStatus"), {
       status,
@@ -1356,7 +1450,7 @@
     const ineligibleCourtBlocks = allActiveCourtBlocks.filter(
       (block) => !billableDates.has(block.date),
     );
-    const courtByDate = new Map();
+    const courtCentsByDate = new Map();
     const members = new Map();
     let totalWeightedSpots = 0;
     let totalSpots = 0;
@@ -1383,10 +1477,14 @@
     }
 
     activeCourtBlocks.forEach((block) => {
-      courtByDate.set(block.date, (courtByDate.get(block.date) || 0) + Number(block.amount || 0));
+      const amountCents = toMoneyCents(block.amount);
+      courtCentsByDate.set(
+        block.date,
+        (courtCentsByDate.get(block.date) || 0) + amountCents,
+      );
       if (block.paidBy) {
         const payer = ensureMember(block.paidBy);
-        const amount = Number(block.amount || 0);
+        const amount = amountCents / 100;
         payer.credits += amount;
         payer.creditDetails.court += amount;
       }
@@ -1434,40 +1532,70 @@
 
     billableAttendanceRows.forEach((day) => {
       const weight = getDateWeight(day.date);
-      const daySpots = day.players.reduce((sum, player) => sum + player.spots, 0);
+      const players = day.players || [];
+      const daySpots = players.reduce(
+        (sum, player) => sum + Number(player.spots || 0),
+        0,
+      );
       const dayWeightedSpots = daySpots * weight;
-      const dayCourtTotal = courtByDate.get(day.date) || 0;
-      const courtPerSpot = daySpots > 0 ? dayCourtTotal / daySpots : 0;
       totalSpots += daySpots;
       totalWeightedSpots += dayWeightedSpots;
 
-      day.players.forEach((entry) => {
+      const courtAllocations = allocateCentsByWeight(
+        courtCentsByDate.get(day.date) || 0,
+        players.map((entry) => ({
+          name: entry.name,
+          weight: Number(entry.spots || 0),
+        })),
+      );
+      players.forEach((entry, index) => {
         const member = ensureMember(entry.name);
-        const weightedSpots = entry.spots * weight;
-        member.spots += entry.spots;
+        const playerSpots = Number(entry.spots || 0);
+        const weightedSpots = playerSpots * weight;
+        const courtFee = courtAllocations[index] / 100;
+        member.spots += playerSpots;
         member.weightedSpots += weightedSpots;
-        member.courtFee += courtPerSpot * entry.spots;
+        member.courtFee += courtFee;
         member.attendance.push({
           date: day.date,
-          spots: entry.spots,
+          spots: playerSpots,
           weight,
-          courtFee: courtPerSpot * entry.spots,
+          courtFee,
         });
       });
     });
 
-    const birdieTotal = birdieState.purchases
+    const birdieTotalCents = birdieState.purchases
       .filter(isBilledBirdiePurchase)
       .reduce(
-      (sum, purchase) => sum + Number(purchase.amount || 0),
+      (sum, purchase) => sum + toMoneyCents(purchase.amount),
       0,
     );
+    const birdieTotal = birdieTotalCents / 100;
     const birdiePerWeightedSpot =
       totalWeightedSpots > 0 ? birdieTotal / totalWeightedSpots : 0;
 
+    const birdieMembers = Array.from(members.values()).filter(
+      (member) => member.weightedSpots > 0,
+    );
+    const birdieAllocations = allocateCentsByWeight(
+      birdieTotalCents,
+      birdieMembers.map((member) => ({
+        name: member.name,
+        weight: member.weightedSpots * 2,
+      })),
+    );
+    birdieMembers.forEach((member, index) => {
+      member.birdieFee = birdieAllocations[index] / 100;
+    });
+
     members.forEach((member) => {
-      member.birdieFee = member.weightedSpots * birdiePerWeightedSpot;
-      member.netBalance = member.courtFee + member.birdieFee - member.credits;
+      member.courtFee = roundMoney(member.courtFee);
+      member.birdieFee = roundMoney(member.birdieFee);
+      member.credits = roundMoney(member.credits);
+      member.netBalance = roundMoney(
+        member.courtFee + member.birdieFee - member.credits,
+      );
     });
 
     return {
@@ -1487,7 +1615,7 @@
         const spots = getAttendanceSpotCount(day);
         const eligible = spots >= MIN_BILLABLE_PARTICIPANTS;
         const weight = getDateWeight(day.date);
-        const courtFee = eligible ? courtByDate.get(day.date) || 0 : 0;
+        const courtFee = eligible ? (courtCentsByDate.get(day.date) || 0) / 100 : 0;
         const courtPerSpot = spots > 0 ? courtFee / spots : 0;
         const birdiePerSpot = eligible ? birdiePerWeightedSpot * weight : 0;
         return {
@@ -1552,8 +1680,8 @@
     finalizationTitle.textContent = isFinalized ? "Bills are finalized" : "Bills are not finalized";
     finalizationNote.textContent = isFinalized
       ? monthStatus.updatedBy
-        ? `Finalized by ${monthStatus.updatedBy}.`
-        : "Ready for payments."
+        ? `Finalized by ${monthStatus.updatedBy}. Reopen to Draft before editing source data.`
+        : "Ready for payments. Reopen to Draft before editing source data."
       : "Amounts may still change.";
     finalizationSelect.value = isFinalized ? "finalized" : "draft";
   }
@@ -2340,6 +2468,7 @@
     renderMembers();
     renderMemberSelect();
     renderMemberDetail(memberSelect.value);
+    renderBillingSourceEditability();
   }
 
   function getBillingLoadSummary() {
@@ -2930,7 +3059,10 @@
     const ready = selected.filter(
       (booking) => booking.paidBy && Number(booking.amount) >= 0,
     );
-    courtImportSaveButton.disabled = selected.length === 0 || ready.length !== selected.length;
+    courtImportSaveButton.disabled =
+      !isBillingSourceEditable() ||
+      selected.length === 0 ||
+      ready.length !== selected.length;
     courtImportSaveButton.textContent = selected.length
       ? `Import ${selected.length} Selected`
       : "Import Selected";

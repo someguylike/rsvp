@@ -85,6 +85,52 @@
           assert(blocks.length === 1 && blocks[0].date === "2026-08-20");
         });
 
+        test("browser and backend conserve the same remainder cents", () => {
+          const roundingSource = {
+            month: "2026-08",
+            attendance: [
+              {
+                date: "2026-08-21",
+                players: ["Frank", "Erin", "Dan", "Cara", "Bob", "Alice"].map(
+                  (name) => ({ name, spots: 1 }),
+                ),
+              },
+            ],
+            courtBlocks: [
+              { date: "2026-08-21", amount: 1, status: "active" },
+            ],
+            birdiePurchases: [
+              {
+                date: "2026-08-31",
+                amount: 1,
+                status: "active",
+                recordType: "usage",
+              },
+            ],
+            payments: [],
+            adjustments: [],
+          };
+          const browserMembers = window.BalanceCalculator.calculateMonthBalances(
+            roundingSource,
+          ).members;
+          const backendMembers = backend.calculateBillingMemberBalances_(
+            roundingSource,
+          );
+          assert(JSON.stringify(browserMembers) === JSON.stringify(backendMembers));
+          assert(
+            Math.round(
+              browserMembers.reduce((sum, member) => sum + member.courtFee, 0) *
+                100,
+            ) === 100,
+          );
+          assert(
+            Math.round(
+              browserMembers.reduce((sum, member) => sum + member.birdieFee, 0) *
+                100,
+            ) === 100,
+          );
+        });
+
         test("backend opens the configured spreadsheet instead of active sheet state", () => {
           let openedId = "";
           const spreadsheet = {};
@@ -96,6 +142,21 @@
           };
           assert(backend.getRsvpSpreadsheet_() === spreadsheet);
           assert(openedId === "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w");
+        });
+
+        test("credit-only members must be settled before a month closes", () => {
+          assert(
+            !window.BalanceCalculator.areMembersSettled([
+              { spots: 1, netBalance: 20, paymentStatus: "Paid" },
+              { spots: 0, netBalance: -20, paymentStatus: "Not requested" },
+            ]),
+          );
+          assert(
+            window.BalanceCalculator.areMembersSettled([
+              { spots: 1, netBalance: 20, paymentStatus: "Paid" },
+              { spots: 0, netBalance: -20, paymentStatus: "Credit carryover" },
+            ]),
+          );
         });
 
         const results = document.querySelector("#results");

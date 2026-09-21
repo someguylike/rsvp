@@ -216,6 +216,19 @@ below that threshold remain visible as excluded audit rows, contribute no court
 or birdie charge, and cannot receive or restore an active court block. A month
 cannot be finalized while it contains an active court block on an excluded date.
 
+Finalized months are read-only for attendance, court, birdie, inventory, and
+adjustment source data. Reopen the month as Draft before correcting those
+records. The backend verifies that record IDs and dates belong to the requested
+month, and refreshes every affected snapshot when a cross-month reimbursement
+changes. Public RSVP edits close at the normal booking cutoff and cannot change
+a finalized month; an authenticated Admin correction still requires Draft.
+
+Court and birdie charges are allocated in integer cents with a deterministic
+largest-remainder rule. The sum of member charges therefore matches each source
+expense exactly, including amounts that do not divide evenly. Roster members
+referenced by RSVP or billing history cannot be renamed or removed; their
+profile fields can still be updated.
+
 ## Birdie Inventory Credits
 
 The purchaser receives credit for the full inventory purchase in its reimbursement month, defaulting to the purchase month when no reimbursement date is recorded. Tube usage is charged to players in the month the tubes are used, without allocating those later usage charges back to individual inventory purchases. Historical finalized imports retain their existing aggregate credit until an individual purchase receives an explicit reimbursement date; the calculation then replaces that purchase's matching legacy credit instead of counting it twice.
@@ -224,7 +237,7 @@ Each inventory purchase has a **Reimburse** action. The reimbursement date defau
 
 ## Payment Page Cache
 
-Finalizing a billing month writes one derived balance row per member to the `Billing Member Balances` sheet. These rows are a rebuildable cache; attendance, court blocks, birdie records, adjustments, and payment statuses remain the source data. Editing an unpaid finalized month automatically rebuilds its snapshot. Changing it back to Draft removes the snapshot. Once every attendee is marked Paid, the retained snapshot is left unchanged unless the month is reopened for payment or the backfill is run explicitly.
+Finalizing a billing month writes one derived balance row per member to the `Billing Member Balances` sheet. These rows are a rebuildable cache; attendance, court blocks, birdie records, adjustments, and payment statuses remain the source data. Source edits require reopening the month as Draft, which removes its snapshot; finalizing it again rebuilds the snapshot. Once every balance and credit is settled, the retained snapshot is left unchanged unless the month is reopened or the backfill is run explicitly.
 
 The status lifecycle is deterministic: **Finalized → Draft** deletes that month's rows from `Billing Member Balances`, so the Payment page calculates the draft from source data; **Draft → Finalized** recreates all member snapshot rows from the current source data.
 

@@ -189,15 +189,7 @@
   }
 
   function isMonthlyBalanceFullyPaid(balance) {
-    const attendanceMembers = (balance?.members || []).filter(
-      (member) => Number(member.spots || 0) > 0,
-    );
-    return (
-      attendanceMembers.length > 0 &&
-      attendanceMembers.every(
-        (member) => String(member.paymentStatus || "").toLowerCase() === "paid",
-      )
-    );
+    return window.BalanceCalculator.areMembersSettled(balance?.members || []);
   }
 
   function getCachedMonthlyBalances() {

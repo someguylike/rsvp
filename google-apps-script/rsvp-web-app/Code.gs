@@ -1,20 +1,24 @@
 const SHEET_NAME = "RSVPs";
 const ROSTER_SHEET_NAME = "Roster";
 const AUDIT_SHEET_NAME = "RSVP Audit Log";
+const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const SPREADSHEET_ID_PROPERTY = "RSVP_SPREADSHEET_ID";
 const ROSTER_CACHE_KEY = "rsvp-public-roster-v1";
 const ROSTER_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const TALLY_CACHE_KEY_PREFIX = "rsvp-tally-v1:";
 // Bump this whenever deployment-relevant code in this file changes.
-const RSVP_BACKEND_VERSION = "2026-09-20.1";
+const RSVP_BACKEND_VERSION = "2026-09-20.2";
 // The admin tool writes through a separate Apps Script project and cannot
 // invalidate this cache. Keep this below one minute while spanning the
 // frontend's 30-second refresh interval so every other poll can be a cache hit.
 const TALLY_CACHE_TTL_SECONDS = 45;
+const PLAY_DAYS = [2, 4, 5, 0];
 const PLAY_START_HOUR = 6;
 const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
 const UNVOTE_LOCK_MESSAGE =
   "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.";
+const RSVP_CHANGE_LOCK_MESSAGE =
+  "RSVP changes close at 12AM before the play date. Contact an admin for corrections.";
 
 const HEADERS = [
   "Play Date",
@@ -134,8 +138,11 @@ function deleteRsvp_(params) {
   lock.waitLock(10000);
 
   try {
-    const playDate = required_(params.playDate, "Missing play date");
+    const playDate = validatePlayDate_(
+      required_(params.playDate, "Missing play date"),
+    );
     const playerName = required_(params.playerName, "Missing player name").trim();
+    requirePublicRsvpMutationAllowed_(playDate);
     const sheet = getSheet_();
     const rosterNameSet = getRosterNameSet_();
     validatePlayerName_(playerName, rosterNameSet);
@@ -183,7 +190,9 @@ function deleteRsvp_(params) {
 }
 
 function upsertRsvpWithLock_(params) {
-  const playDate = required_(params.playDate, "Missing play date");
+  const playDate = validatePlayDate_(
+    required_(params.playDate, "Missing play date"),
+  );
   const playerName = sanitizeText_(
     required_(params.playerName, "Missing player name").trim(),
   );
@@ -196,6 +205,7 @@ function upsertRsvpWithLock_(params) {
     participantCount > 0 && normalize_(params.vote || "Yes") !== "no"
       ? "Yes"
       : "No";
+  requirePublicRsvpMutationAllowed_(playDate);
   const submittedAt = params.submittedAt || new Date().toISOString();
   const updatedAt = new Date().toISOString();
 
@@ -251,16 +261,8 @@ function upsertRsvpWithLock_(params) {
   ];
 
   if (row) {
-    deleteDuplicateRows_(sheet, matchingRows, row);
     if (normalize_(existingRsvp.vote) !== "no" && params.confirmOverride !== "true") {
-      const tally = buildAndCacheTally_(
-        removeRowsFromSnapshot_(
-          snapshot,
-          matchingRows.filter((rowNumber) => rowNumber !== row),
-        ),
-        playDate,
-        rosterNameSet,
-      );
+      const tally = buildAndCacheTally_(snapshot, playDate, rosterNameSet);
       audit = appendAuditLog_(params, "needs_confirmation", row, existingRsvp);
       return {
         action: "needs_confirmation",
@@ -271,6 +273,7 @@ function upsertRsvpWithLock_(params) {
       };
     }
 
+    deleteDuplicateRows_(sheet, matchingRows, row);
     const originalSubmittedAt = sheet.getRange(row, 5).getValue() || submittedAt;
     values[4] = originalSubmittedAt;
     sheet.getRange(row, 1, 1, values.length).setValues([values]);
@@ -747,6 +750,66 @@ function clampSubmittedParticipantCount_(value) {
 function clampStoredParticipantCount_(value) {
   const count = Math.trunc(Number(value || 1));
   return Number.isFinite(count) ? Math.min(5, Math.max(1, count)) : 1;
+}
+
+function validateIsoDate_(value, label) {
+  const text = normalizeDate_(value);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw new Error(`${label || "Date"} must use YYYY-MM-DD format`);
+  }
+  const normalized = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  )
+    .toISOString()
+    .slice(0, 10);
+  if (normalized !== text) {
+    throw new Error(`${label || "Date"} is invalid`);
+  }
+  return text;
+}
+
+function validatePlayDate_(value) {
+  const playDate = validateIsoDate_(value, "Play date");
+  const parts = playDate.split("-").map(Number);
+  const dayOfWeek = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getUTCDay();
+  if (PLAY_DAYS.indexOf(dayOfWeek) === -1) {
+    throw new Error("Play date must be Tuesday, Thursday, Friday, or Sunday");
+  }
+  return playDate;
+}
+
+function normalizeMonth_(value) {
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value)) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), "yyyy-MM");
+  }
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  return match ? `${match[1]}-${match[2]}` : text;
+}
+
+function isBillingMonthFinalized_(month) {
+  const sheet = getSpreadsheet_().getSheetByName(BILLING_MONTH_STATUS_SHEET_NAME);
+  const lastRow = sheet ? sheet.getLastRow() : 0;
+  if (lastRow < 2) {
+    return false;
+  }
+  return sheet
+    .getRange(2, 1, lastRow - 1, 2)
+    .getValues()
+    .some(
+      (row) =>
+        normalizeMonth_(row[0]) === month && normalize_(row[1]) === "finalized",
+    );
+}
+
+function requirePublicRsvpMutationAllowed_(playDate) {
+  if (isBillingMonthFinalized_(normalizeMonth_(playDate))) {
+    throw new Error("This billing month is finalized; contact an admin for corrections");
+  }
+  if (isUnvoteLocked_(playDate)) {
+    throw new Error(RSVP_CHANGE_LOCK_MESSAGE);
+  }
 }
 
 function isUnvoteLocked_(playDate) {

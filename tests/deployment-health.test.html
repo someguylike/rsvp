@@ -24,8 +24,8 @@
         const service = {
           id: "admin-billing",
           label: "Admin / Billing",
-          deploymentVersion: "2026-09-20.3",
-          billingCalculationVersion: 3,
+          deploymentVersion: "2026-09-20.4",
+          billingCalculationVersion: 4,
         };
 
         test("accepts matching deployment and calculation versions", () => {
@@ -33,8 +33,8 @@
             service,
             {
               service: "admin-billing",
-              deploymentVersion: "2026-09-20.3",
-              billingCalculationVersion: 3,
+              deploymentVersion: "2026-09-20.4",
+              billingCalculationVersion: 4,
             },
           );
           assert(result.ok, result.message);
@@ -46,7 +46,7 @@
             {
               service: "admin-billing",
               deploymentVersion: "2026-09-19.1",
-              billingCalculationVersion: 3,
+              billingCalculationVersion: 4,
             },
           );
           assert(!result.ok && result.message.includes("live is 2026-09-19.1"));
@@ -57,7 +57,7 @@
             service,
             {
               service: "admin-billing",
-              deploymentVersion: "2026-09-20.3",
+              deploymentVersion: "2026-09-20.4",
               billingCalculationVersion: 1,
             },
           );

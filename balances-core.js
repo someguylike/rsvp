@@ -7,6 +7,61 @@
     return Math.round(Number(value || 0) * 100) / 100;
   }
 
+  function toMoneyCents(value) {
+    const amount = Number(value || 0);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  }
+
+  function compareAllocationRows(first, second) {
+    if (first.remainder !== second.remainder) {
+      return second.remainder - first.remainder;
+    }
+    if (first.name < second.name) {
+      return -1;
+    }
+    if (first.name > second.name) {
+      return 1;
+    }
+    return first.index - second.index;
+  }
+
+  function allocateCentsByWeight(totalCents, entries) {
+    const roundedTotal = Math.round(Number(totalCents || 0));
+    const sign = roundedTotal < 0 ? -1 : 1;
+    const absoluteTotal = Math.abs(roundedTotal);
+    const rows = (entries || []).map((entry, index) => ({
+      index,
+      name: String(entry?.name || ""),
+      weight: Math.max(0, Math.round(Number(entry?.weight || 0))),
+      cents: 0,
+      remainder: 0,
+    }));
+    const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
+
+    if (!absoluteTotal || !totalWeight) {
+      return rows.map(() => 0);
+    }
+
+    rows.forEach((row) => {
+      const numerator = absoluteTotal * row.weight;
+      row.cents = Math.floor(numerator / totalWeight);
+      row.remainder = numerator % totalWeight;
+    });
+
+    const centsRemaining =
+      absoluteTotal - rows.reduce((sum, row) => sum + row.cents, 0);
+    const rankedRows = rows
+      .filter((row) => row.weight > 0)
+      .sort(compareAllocationRows);
+    for (let index = 0; index < centsRemaining; index += 1) {
+      rankedRows[index % rankedRows.length].cents += 1;
+    }
+
+    return rows
+      .sort((first, second) => first.index - second.index)
+      .map((row) => row.cents * sign);
+  }
+
   function getRecordType(purchase) {
     return String(purchase?.recordType || "purchase").replace(/-/g, "_");
   }
@@ -93,7 +148,7 @@
     const billing = source || {};
     const month = String(billing.month || "");
     const members = new Map();
-    const courtByDate = new Map();
+    const courtCentsByDate = new Map();
     const billableAttendance = getBillableAttendance(billing.attendance);
     const billableDates = new Set(billableAttendance.map((day) => day.date));
 
@@ -122,13 +177,14 @@
         (block) => block.status === "active" && billableDates.has(block.date),
       )
       .forEach((block) => {
-        courtByDate.set(
+        const amountCents = toMoneyCents(block.amount);
+        courtCentsByDate.set(
           block.date,
-          (courtByDate.get(block.date) || 0) + Number(block.amount || 0),
+          (courtCentsByDate.get(block.date) || 0) + amountCents,
         );
         const payer = ensureMember(block.paidBy);
         if (payer) {
-          payer.credits += Number(block.amount || 0);
+          payer.credits += amountCents / 100;
         }
       });
 
@@ -171,14 +227,21 @@
 
     let totalWeightedSpots = 0;
     billableAttendance.forEach((day) => {
-      const spots = (day.players || []).reduce(
+      const players = day.players || [];
+      const spots = players.reduce(
         (sum, player) => sum + Number(player.spots || 0),
         0,
       );
       const weight = getDateWeight(day.date);
-      const courtPerSpot = spots > 0 ? (courtByDate.get(day.date) || 0) / spots : 0;
       totalWeightedSpots += spots * weight;
-      (day.players || []).forEach((entry) => {
+      const courtAllocations = allocateCentsByWeight(
+        courtCentsByDate.get(day.date) || 0,
+        players.map((entry) => ({
+          name: entry.name,
+          weight: Number(entry.spots || 0),
+        })),
+      );
+      players.forEach((entry, index) => {
         const member = ensureMember(entry.name);
         if (!member) {
           return;
@@ -186,17 +249,27 @@
         const playerSpots = Number(entry.spots || 0);
         member.spots += playerSpots;
         member.weightedSpots += playerSpots * weight;
-        member.courtFee += courtPerSpot * playerSpots;
+        member.courtFee += courtAllocations[index] / 100;
       });
     });
 
-    const birdieTotal = billedBirdiePurchases.reduce(
-      (sum, purchase) => sum + Number(purchase.amount || 0),
+    const birdieTotalCents = billedBirdiePurchases.reduce(
+      (sum, purchase) => sum + toMoneyCents(purchase.amount),
       0,
     );
-    const birdiePerWeightedSpot = totalWeightedSpots > 0
-      ? birdieTotal / totalWeightedSpots
-      : 0;
+    const birdieMembers = Array.from(members.values()).filter(
+      (member) => member.weightedSpots > 0,
+    );
+    const birdieAllocations = allocateCentsByWeight(
+      birdieTotalCents,
+      birdieMembers.map((member) => ({
+        name: member.name,
+        weight: member.weightedSpots * 2,
+      })),
+    );
+    birdieMembers.forEach((member, index) => {
+      member.birdieFee = birdieAllocations[index] / 100;
+    });
 
     (billing.payments || []).forEach((payment) => {
       const member = ensureMember(payment.playerName);
@@ -206,13 +279,12 @@
     });
 
     members.forEach((member) => {
-      member.birdieFee = member.weightedSpots * birdiePerWeightedSpot;
-      member.netBalance = roundMoney(
-        member.courtFee + member.birdieFee - member.credits,
-      );
       member.courtFee = roundMoney(member.courtFee);
       member.birdieFee = roundMoney(member.birdieFee);
       member.credits = roundMoney(member.credits);
+      member.netBalance = roundMoney(
+        member.courtFee + member.birdieFee - member.credits,
+      );
     });
 
     return {
@@ -230,9 +302,31 @@
     return roundMoney(Math.max(0, Number(member.netBalance || 0)));
   }
 
+  function isMemberSettled(member) {
+    const balance = roundMoney(member?.netBalance);
+    if (Math.abs(balance) < 0.005) {
+      return true;
+    }
+    const status = String(member?.paymentStatus || "").trim().toLowerCase();
+    return status === "paid" || (balance < 0 && status === "credit carryover");
+  }
+
+  function areMembersSettled(members) {
+    const billingMembers = members || [];
+    const hasActivity = billingMembers.some(
+      (member) =>
+        Number(member.spots || 0) > 0 ||
+        Math.abs(roundMoney(member.netBalance)) >= 0.005,
+    );
+    return hasActivity && billingMembers.every(isMemberSettled);
+  }
+
   global.BalanceCalculator = {
     MIN_BILLABLE_PARTICIPANTS,
+    allocateCentsByWeight,
+    areMembersSettled,
     calculateMonthBalances,
     getAmountDue,
+    isMemberSettled,
   };
 })(window);

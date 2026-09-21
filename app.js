@@ -1405,9 +1405,9 @@
 
     if (
       payload.vote === "Yes" &&
-      !rsvpRules.isDateInCurrentMonthOrLater(payload.playDate)
+      rsvpRules.isUnvoteLocked(payload.playDate)
     ) {
-      setStatus("Choose a date from this month or later.", "error");
+      setStatus("RSVP changes are closed for this date.", "error");
       return;
     }
 

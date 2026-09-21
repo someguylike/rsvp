@@ -6,14 +6,14 @@
       id: "admin-billing",
       label: "Admin / Billing",
       url: "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec",
-      deploymentVersion: "2026-09-20.3",
-      billingCalculationVersion: 3,
+      deploymentVersion: "2026-09-20.4",
+      billingCalculationVersion: 4,
     },
     {
       id: "rsvp",
       label: "RSVP",
       url: "https://script.google.com/macros/s/AKfycbwkQT5n28qD0wVpRCA3qgJs5fZy_YG_TmNIXAyqQ-AZFTYJVyMOCjGKfsE-D9_R4x64VQ/exec",
-      deploymentVersion: "2026-09-20.1",
+      deploymentVersion: "2026-09-20.2",
     },
   ];
   const REQUEST_TIMEOUT_MS = 15000;

@@ -146,6 +146,35 @@ const juneUsage = {
 }
 
 {
+  assert.deepEqual(
+    BalanceCalculator.allocateCentsByWeight(1, [
+      { name: "Same", weight: 1 },
+      { name: "Same", weight: 1 },
+    ]),
+    [1, 0],
+    "the original index breaks ties between identical names",
+  );
+}
+
+{
+  assert.equal(
+    BalanceCalculator.areMembersSettled([
+      { spots: 1, netBalance: 20, paymentStatus: "Paid" },
+      { spots: 0, netBalance: -20, paymentStatus: "Credit carryover" },
+    ]),
+    true,
+  );
+  assert.equal(
+    BalanceCalculator.areMembersSettled([
+      { spots: 1, netBalance: 20, paymentStatus: "Paid" },
+      { spots: 0, netBalance: -20, paymentStatus: "Not requested" },
+    ]),
+    false,
+    "an unsettled credit-only member keeps a fallback month visible",
+  );
+}
+
+{
   const result = BalanceCalculator.calculateMonthBalances({
     month: "2026-08",
     attendance: [
@@ -185,6 +214,63 @@ const juneUsage = {
   assert.equal(result.members.some((member) => member.name === "Tuan"), false);
   assert.equal(result.members.find((member) => member.name === "Alice").netBalance, -25);
   assert.equal(result.members.find((member) => member.name === "Bob").netBalance, 15);
+}
+
+{
+  const result = BalanceCalculator.calculateMonthBalances({
+    month: "2026-08",
+    attendance: [
+      {
+        date: "2026-08-21",
+        players: ["Frank", "Erin", "Dan", "Cara", "Bob", "Alice"].map(
+          (name) => ({ name, spots: 1 }),
+        ),
+      },
+    ],
+    courtBlocks: [
+      { date: "2026-08-21", amount: 1, paidBy: "", status: "active" },
+    ],
+    birdiePurchases: [
+      {
+        date: "2026-08-31",
+        amount: 1,
+        status: "active",
+        recordType: "usage",
+      },
+    ],
+    payments: [],
+    adjustments: [],
+  });
+  const byName = Object.fromEntries(
+    result.members.map((member) => [member.name, member]),
+  );
+
+  assert.equal(
+    Math.round(result.members.reduce((sum, member) => sum + member.courtFee, 0) * 100),
+    100,
+    "court allocation conserves every source cent",
+  );
+  assert.equal(
+    Math.round(result.members.reduce((sum, member) => sum + member.birdieFee, 0) * 100),
+    100,
+    "birdie allocation conserves every source cent",
+  );
+  assert.deepEqual(
+    Object.fromEntries(
+      result.members.map((member) => [member.name, member.courtFee]),
+    ),
+    { Alice: 0.17, Bob: 0.17, Cara: 0.17, Dan: 0.17, Erin: 0.16, Frank: 0.16 },
+    "equal court remainders go to names in deterministic lexical order",
+  );
+  assert.deepEqual(
+    Object.fromEntries(
+      result.members.map((member) => [member.name, member.birdieFee]),
+    ),
+    { Alice: 0.17, Bob: 0.17, Cara: 0.17, Dan: 0.17, Erin: 0.16, Frank: 0.16 },
+    "equal birdie remainders use the same deterministic tie-break",
+  );
+  assert.equal(byName.Alice.netBalance, 0.34);
+  assert.equal(byName.Frank.netBalance, 0.32);
 }
 
 {

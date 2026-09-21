@@ -75,31 +75,21 @@
           );
         });
 
-        test("positive RSVP backfill allows dates earlier this month", () => {
+        test("positive RSVP is allowed before the booking cutoff", () => {
           assertEqual(
-            window.RsvpRules.isDateInCurrentMonthOrLater(
-              "2026-06-01",
-              new Date(2026, 5, 26, 19, 30),
-            ),
-            true,
-          );
-        });
-
-        test("positive RSVP backfill blocks dates before this month", () => {
-          assertEqual(
-            window.RsvpRules.isDateInCurrentMonthOrLater(
-              "2026-05-31",
-              new Date(2026, 5, 26, 19, 30),
+            window.RsvpRules.isUnvoteLocked(
+              "2026-06-28",
+              new Date(2026, 5, 27, 23, 59, 59),
             ),
             false,
           );
         });
 
-        test("positive RSVP backfill allows future months", () => {
+        test("positive RSVP is blocked at the booking cutoff", () => {
           assertEqual(
-            window.RsvpRules.isDateInCurrentMonthOrLater(
-              "2026-07-01",
-              new Date(2026, 5, 26, 19, 30),
+            window.RsvpRules.isUnvoteLocked(
+              "2026-06-28",
+              new Date(2026, 5, 28, 0, 0, 0),
             ),
             true,
           );
