@@ -61,6 +61,7 @@
   const loginForm = document.querySelector("#admin-login-form");
   const passwordInput = document.querySelector("#admin-password");
   const loginStatus = document.querySelector("#admin-login-status");
+  const loginState = document.querySelector("#admin-login-state");
   const adminContent = document.querySelector("#admin-content");
   const logoutButton = document.querySelector("#admin-logout-button");
   const monthInput = document.querySelector("#roster-month");
@@ -194,6 +195,8 @@
   }
 
   function setAdminLocked(message) {
+    loginState.textContent = "Not logged in";
+    loginState.className = "admin-login-state logged-out";
     adminContent.hidden = true;
     lockedPanel.hidden = false;
     setLoginStatus(
@@ -203,6 +206,8 @@
   }
 
   function setAdminUnlocked() {
+    loginState.textContent = "Logged in as Admin";
+    loginState.className = "admin-login-state logged-in";
     lockedPanel.hidden = true;
     adminContent.hidden = false;
   }

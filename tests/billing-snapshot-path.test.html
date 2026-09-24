@@ -68,9 +68,9 @@
           getLastRow: () => snapshotRows.length + 1,
           getRange: () => ({ getValues: () => snapshotRows }),
         });
-        window.getBillingPaymentStatuses_ = () => ({
-          "2026-06\nalice": "Paid",
-          "2026-07\nbob": "Requested",
+        window.getBillingPaymentSummaries_ = () => ({
+          "2026-06\nalice": { status: "Paid", source: "Admin" },
+          "2026-07\nbob": { status: "Requested", source: "" },
         });
         window.formatMonthLabel_ = (month) =>
           ({ "2026-06": "June 2026", "2026-07": "July 2026" })[month] || month;
@@ -100,6 +100,38 @@
             courtTotal: 30,
             birdieTotal: 10,
           }, "snapshot totals changed");
+        });
+
+        test("public snapshots preserve self-reported payment source", () => {
+          const members = window.getBillingSnapshotMembers_(
+            {
+              membersByMonth: {
+                "2026-07": [
+                  {
+                    name: "Bob",
+                    spots: 2,
+                    weightedSpots: 2,
+                    courtFee: 30,
+                    birdieFee: 10,
+                    credits: 5,
+                    netBalance: 35,
+                  },
+                ],
+              },
+            },
+            "2026-07",
+            {
+              "2026-07\nbob": {
+                status: "Paid",
+                source: "Member self-report",
+              },
+            },
+          );
+          assert(members[0].paymentStatus === "Paid", "paid status changed");
+          assert(
+            members[0].paymentSource === "Member self-report",
+            "self-reported source was not preserved",
+          );
         });
 
         const results = document.querySelector("#results");

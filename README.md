@@ -14,7 +14,7 @@ Static RSVP page for weekly play sessions.
 - After submit and when the date changes, the page shows the reserved participant tally for that date.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
 - `billing.html` renders finalized member billing from persisted balance snapshots; authenticated admins can load source details and explicitly recalculate a month.
-- `admin.html` lets an admin edit the current month attendance in a player-by-date table.
+- `admin.html` shows the current login state, provides Log Out when authenticated, and lets an admin edit the current month attendance in a player-by-date table. Backend deployment health is visible and queried only while logged in.
 - `roster.html` lets an admin add, remove, and update roster Venmo and Messenger details.
 
 ## Recommended Hosting
@@ -245,7 +245,7 @@ After deploying this backend change, run `backfillBillingMemberBalanceSnapshots`
 
 The Billing and Payment pages show May 2026 forward, load open finalized balances with one backend request, merge current payment statuses, and display those precomputed amounts immediately. Older snapshots remain stored for audit and carryover history but are not shown. Draft months and raw source records are admin-only. On Billing, the authenticated **Recalculate** action reloads the selected month from source data and refreshes its finalized snapshot; the member **Reload saved bill** action only rereads snapshots. Globally paid-off months are excluded unless directly requested. Paid snapshots remain in the sheet for audit/history and are not recalculated during normal member loading. The browser also displays its previously saved result while a stale snapshot is refreshed.
 
-For an amount due, Billing offers optional $1, $2, and $5 admin tips that are added only to the Venmo payment amount, never to the stored bill. A non-admin member can self-report the selected member's bill as Paid and save an optional comment. The backend verifies the submitted bill amount against the finalized snapshot and stores the comment, base amount, tip, timestamp, and `Member self-report` source in `Billing Payments`. Because the public site does not authenticate individual members, the page explicitly asks people to use this action only for their own selected name; admins can correct an incorrect report.
+For an amount due, Billing offers optional $1, $2, and $5 tips or donations that are added only to the Venmo payment amount, never to the stored bill. A non-admin member can self-report the selected member's bill as Paid and save an optional comment. The backend verifies the submitted bill amount against the finalized snapshot and stores the comment, base amount, tip, timestamp, and `Member self-report` source in `Billing Payments`. Member-facing status text uses `Payment due` instead of the internal `Not requested` state and distinguishes `Paid - Member self-reported` from `Paid - Admin verified`. Because the public site does not authenticate individual members, the page explicitly asks people to use this action only for their own selected name; admins can correct an incorrect report.
 
 Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block. In Messenger, Venmo actions use a direct app link with a visible payment-website fallback; other browsers retain the normal HTTPS Venmo payment link.
 

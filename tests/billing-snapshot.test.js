@@ -160,9 +160,9 @@ appsScriptContext.getBillingMemberBalanceSheet_ = () => ({
   getLastRow: () => snapshotRows.length + 1,
   getRange: () => ({ getValues: () => snapshotRows }),
 });
-appsScriptContext.getBillingPaymentStatuses_ = () => ({
-  "2026-06\nalice": "Paid",
-  "2026-07\nbob": "Requested",
+appsScriptContext.getBillingPaymentSummaries_ = () => ({
+  "2026-06\nalice": { status: "Paid", source: "Admin" },
+  "2026-07\nbob": { status: "Requested", source: "" },
 });
 appsScriptContext.formatMonthLabel_ = (month) => ({
   "2026-06": "June 2026",
@@ -205,6 +205,30 @@ assert.deepEqual(
   ],
   "globally paid months stay stored but are excluded from payment loading",
 );
+
+const selfReportedMembers = appsScriptContext.getBillingSnapshotMembers_(
+  {
+    membersByMonth: {
+      "2026-07": [
+        {
+          name: "Bob",
+          spots: 2,
+          weightedSpots: 2,
+          courtFee: 30,
+          birdieFee: 10,
+          credits: 5,
+          netBalance: 35,
+        },
+      ],
+    },
+  },
+  "2026-07",
+  {
+    "2026-07\nbob": { status: "Paid", source: "Member self-report" },
+  },
+);
+assert.equal(selfReportedMembers[0].paymentStatus, "Paid");
+assert.equal(selfReportedMembers[0].paymentSource, "Member self-report");
 
 const snapshotMonths = appsScriptContext.listBillingMonthSnapshots_();
 assert.equal(snapshotMonths.snapshotReady, true);

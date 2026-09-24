@@ -5,13 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Admin</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260920-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260924-2" />
   </head>
   <body>
     <main class="shell">
       <section class="panel admin-panel" aria-labelledby="page-title">
-        <div class="heading">
+        <div class="heading admin-heading">
           <h1 id="page-title">Admin</h1>
+          <span
+            id="admin-login-state"
+            class="admin-login-state checking"
+            role="status"
+            aria-live="polite"
+          >
+            Checking login…
+          </span>
         </div>
 
         <nav class="page-nav" aria-label="Page navigation">
@@ -156,8 +164,8 @@
       </section>
     </main>
 
-    <script src="./deployment-health.js?v=20260924-2"></script>
     <script src="./admin-auth.js?v=20260811-1"></script>
-    <script src="./admin.js?v=20260920-1"></script>
+    <script src="./deployment-health.js?v=20260924-3"></script>
+    <script src="./admin.js?v=20260924-1"></script>
   </body>
 </html>

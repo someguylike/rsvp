@@ -733,6 +733,7 @@
       payments: members.map((member) => ({
         playerName: member.name,
         status: member.paymentStatus,
+        ...(member.paymentSource ? { source: member.paymentSource } : {}),
       })),
       adjustments: [],
       monthStatus: {
@@ -1465,6 +1466,17 @@
     }
 
     return localStorage.getItem(storageKey(`payment:${memberName}`)) || "Not requested";
+  }
+
+  function getPaymentStatusLabel(member) {
+    const status = getPaymentStatus(member.name);
+    const payment = getPaymentRecord(member.name);
+    return window.BalanceCalculator.getPaymentStatusLabel(
+      status,
+      payment?.source,
+      member.netBalance,
+      isAdmin,
+    );
   }
 
   function setPaymentStatus(memberName, value) {
@@ -2306,6 +2318,12 @@
   }
 
   function renderMembers() {
+    if (!isAdmin) {
+      clearElement(memberTable);
+      memberNote.textContent = "";
+      return;
+    }
+
     renderTable(
       memberTable,
       ["Player", "Spots", "Birdie Fee", "Court Fee", "Paid Credits", "Net Balance", "Payment Status", "Action"],
@@ -2668,7 +2686,7 @@
     appendDetailRow("Court fee", formatMoney(member.courtFee));
     appendDetailRow("Paid credits", formatMoney(member.credits), member.credits ? "money-credit" : "");
     appendDetailRow("Net balance", formatMoney(member.netBalance), getMoneyClass(member.netBalance));
-    appendDetailRow("Payment", getPaymentStatus(member.name));
+    appendDetailRow("Payment", getPaymentStatusLabel(member));
     const payment = getPaymentRecord(member.name);
     if (payment?.comment) {
       appendDetailRow("Payment comment", payment.comment);

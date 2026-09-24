@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-09-24.2";
+const ADMIN_BACKEND_VERSION = "2026-09-24.3";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -2176,16 +2176,16 @@ function refreshBillingMemberBalanceSnapshotIfFinalized_(month, source, force) {
   return null;
 }
 
-function getBillingPaymentStatuses_() {
+function getBillingPaymentSummaries_() {
   const sheet = getBillingSheet_(BILLING_PAYMENT_SHEET_NAME, BILLING_PAYMENT_HEADERS);
   const lastRow = sheet.getLastRow();
-  const statuses = {};
+  const summaries = {};
   const canonicalRows = {};
   if (lastRow < 2) {
-    return statuses;
+    return summaries;
   }
   sheet
-    .getRange(2, 1, lastRow - 1, 6)
+    .getRange(2, 1, lastRow - 1, BILLING_PAYMENT_HEADERS.length)
     .getValues()
     .forEach((row) => {
       const month = normalizeMonth_(row[0]);
@@ -2194,17 +2194,31 @@ function getBillingPaymentStatuses_() {
         const key = `${month}\n${normalize_(playerName)}`;
         const isCanonical = !String(row[5] || "");
         if (isCanonical && !canonicalRows[key]) {
-          statuses[key] = String(row[2]);
+          summaries[key] = {
+            status: String(row[2]),
+            source: String(row[16] || ""),
+          };
           canonicalRows[key] = true;
         } else if (
           !canonicalRows[key] &&
-          !Object.prototype.hasOwnProperty.call(statuses, key)
+          !Object.prototype.hasOwnProperty.call(summaries, key)
         ) {
-          statuses[key] = String(row[2]);
+          summaries[key] = {
+            status: String(row[2]),
+            source: String(row[16] || ""),
+          };
         }
       }
     });
-  return statuses;
+  return summaries;
+}
+
+function getBillingPaymentStatuses_() {
+  const summaries = getBillingPaymentSummaries_();
+  return Object.keys(summaries).reduce((statuses, key) => {
+    statuses[key] = summaries[key].status;
+    return statuses;
+  }, {});
 }
 
 function readBillingMemberBalanceSnapshotState_() {
@@ -2266,13 +2280,21 @@ function readBillingMemberBalanceSnapshotState_() {
   };
 }
 
-function getBillingSnapshotMembers_(state, month, paymentStatuses) {
+function getBillingSnapshotMembers_(state, month, paymentSummaries) {
   return (state.membersByMonth[month] || [])
-    .map((member) => ({
-      ...member,
-      paymentStatus:
-        paymentStatuses[`${month}\n${normalize_(member.name)}`] || "Not requested",
-    }))
+    .map((member) => {
+      const storedPayment =
+        paymentSummaries[`${month}\n${normalize_(member.name)}`] || null;
+      const payment =
+        typeof storedPayment === "string"
+          ? { status: storedPayment, source: "" }
+          : storedPayment || {};
+      return {
+        ...member,
+        paymentStatus: payment.status || "Not requested",
+        ...(payment.source ? { paymentSource: payment.source } : {}),
+      };
+    })
     .sort((first, second) => first.name.localeCompare(second.name));
 }
 
@@ -2291,9 +2313,9 @@ function listBillingBalanceSnapshots_() {
     };
   }
 
-  const paymentStatuses = getBillingPaymentStatuses_();
+  const paymentSummaries = getBillingPaymentSummaries_();
   const balances = expectedMonths.reduce((result, month) => {
-    const members = getBillingSnapshotMembers_(state, month, paymentStatuses);
+    const members = getBillingSnapshotMembers_(state, month, paymentSummaries);
     const allPaid = areBillingMembersSettled_(members);
     if (!allPaid) {
       result.push({
@@ -2315,14 +2337,14 @@ function listBillingBalanceSnapshots_() {
 
 function listBillingMonthSnapshots_() {
   const state = readBillingMemberBalanceSnapshotState_();
-  const paymentStatuses = getBillingPaymentStatuses_();
+  const paymentSummaries = getBillingPaymentSummaries_();
   const missingMonths = state.expectedMonths.filter(
     (month) => !state.snapshotMonths[month],
   );
   const months = state.expectedMonths
     .filter((month) => state.snapshotMonths[month])
     .map((month) => {
-      const members = getBillingSnapshotMembers_(state, month, paymentStatuses);
+      const members = getBillingSnapshotMembers_(state, month, paymentSummaries);
       return {
         month,
         label: formatMonthLabel_(month),
@@ -2353,8 +2375,8 @@ function getBillingMonthSnapshot_(month) {
     throw new Error(`Billing snapshot for ${month} is not ready`);
   }
 
-  const paymentStatuses = getBillingPaymentStatuses_();
-  const members = getBillingSnapshotMembers_(state, month, paymentStatuses);
+  const paymentSummaries = getBillingPaymentSummaries_();
+  const members = getBillingSnapshotMembers_(state, month, paymentSummaries);
   const summary = members.reduce(
     (totals, member) => {
       totals.totalSpots += Number(member.spots || 0);
@@ -2391,6 +2413,7 @@ function getBillingMonthSnapshot_(month) {
     payments: members.map((member) => ({
       playerName: member.name,
       status: member.paymentStatus,
+      ...(member.paymentSource ? { source: member.paymentSource } : {}),
     })),
     adjustments: [],
     monthStatus: {

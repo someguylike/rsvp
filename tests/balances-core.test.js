@@ -47,6 +47,27 @@ function calculate(month, birdiePurchases, adjustments = []) {
     "a tip is added to the payment without changing the bill",
   );
   assert.equal(may.members[0].netBalance, 56.78, "the bill remains unchanged");
+  assert.equal(
+    BalanceCalculator.getPaymentStatusLabel(
+      "Paid",
+      "Member self-report",
+      56.78,
+      false,
+    ),
+    "Paid - Member self-reported",
+  );
+  assert.equal(
+    BalanceCalculator.getPaymentStatusLabel("Paid", "Admin", 56.78, false),
+    "Paid - Admin verified",
+  );
+  assert.equal(
+    BalanceCalculator.getPaymentStatusLabel("Not requested", "", 56.78, false),
+    "Payment due",
+  );
+  assert.equal(
+    BalanceCalculator.getPaymentStatusLabel("Not requested", "", 56.78, true),
+    "Not requested",
+  );
 }
 
 const inventoryPurchase = {

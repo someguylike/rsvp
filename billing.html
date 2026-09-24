@@ -86,7 +86,7 @@
 
           <nav class="billing-tabs" aria-label="Billing sections">
             <a href="#member-detail-section">My Bill</a>
-            <a href="#member-section">Members</a>
+            <a class="admin-only" href="#member-section" hidden>Members</a>
             <a class="admin-only" href="#court-section">Court Fees</a>
             <a class="admin-only" href="#birdie-section">Birdies</a>
           </nav>
@@ -109,7 +109,11 @@
                 <div id="member-detail" class="billing-detail-list"></div>
               </section>
 
-              <details id="member-section" class="billing-band billing-details-band">
+              <details
+                id="member-section"
+                class="billing-band billing-details-band admin-only"
+                hidden
+              >
                 <summary class="billing-band-summary">
                   <span>
                     <strong>Member Billing</strong>
@@ -292,7 +296,7 @@
     <script src="./admin-auth.js?v=20260811-1"></script>
     <script src="./vendor/jszip.min.js?v=3.10.1"></script>
     <script src="./billing-parser.js?v=20260920-1"></script>
-    <script src="./balances-core.js?v=20260924-2"></script>
-    <script src="./billing.js?v=20260924-3"></script>
+    <script src="./balances-core.js?v=20260924-3"></script>
+    <script src="./billing.js?v=20260924-4"></script>
   </body>
 </html>

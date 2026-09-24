@@ -30,6 +30,28 @@
     );
   }
 
+  function getPaymentStatusLabel(status, source, netBalance, isAdmin) {
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    const normalizedSource = String(source || "").trim().toLowerCase();
+    if (normalizedStatus === "paid") {
+      return normalizedSource === "member self-report"
+        ? "Paid - Member self-reported"
+        : "Paid - Admin verified";
+    }
+    if (isAdmin) {
+      return status;
+    }
+    if (normalizedStatus === "not requested") {
+      return Number(netBalance || 0) > 0.005
+        ? "Payment due"
+        : "No payment due";
+    }
+    if (normalizedStatus === "requested") {
+      return "Payment requested";
+    }
+    return status;
+  }
+
   function compareAllocationRows(first, second) {
     if (first.remainder !== second.remainder) {
       return second.remainder - first.remainder;
@@ -417,6 +439,7 @@
     createBillingViewFromSnapshot,
     filterBillingHistory,
     getAmountDue,
+    getPaymentStatusLabel,
     getPaymentTotal,
     isBillingMonthInHistory,
     isMemberSettled,

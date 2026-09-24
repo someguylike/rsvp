@@ -6,7 +6,7 @@
       id: "admin-billing",
       label: "Admin / Billing",
       url: "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec",
-      deploymentVersion: "2026-09-24.2",
+      deploymentVersion: "2026-09-24.3",
       billingCalculationVersion: 4,
     },
     {
@@ -68,6 +68,7 @@
       );
       return {
         ok: false,
+        kind: "unreachable",
         label: service.label,
         message: oldDeployment
           ? `Live code is older than expected ${service.deploymentVersion}.`
@@ -78,6 +79,7 @@
     if (response?.service !== service.id) {
       return {
         ok: false,
+        kind: "mismatch",
         label: service.label,
         message: `Wrong backend responded (${response?.service || "unknown"}).`,
       };
@@ -86,6 +88,7 @@
     if (String(response.deploymentVersion || "") !== service.deploymentVersion) {
       return {
         ok: false,
+        kind: "mismatch",
         label: service.label,
         message: `Expected ${service.deploymentVersion}; live is ${
           response.deploymentVersion || "unversioned"
@@ -100,6 +103,7 @@
     ) {
       return {
         ok: false,
+        kind: "mismatch",
         label: service.label,
         message: `Expected billing calculation ${service.billingCalculationVersion}; live is ${
           response.billingCalculationVersion ?? "unversioned"
@@ -113,6 +117,7 @@
         : ` · billing calculation ${service.billingCalculationVersion}`;
     return {
       ok: true,
+      kind: "current",
       label: service.label,
       message: `Current (${service.deploymentVersion}${calculation}).`,
     };
@@ -141,7 +146,13 @@
       return;
     }
 
+    let checkedForCurrentSession = false;
+
     async function refresh() {
+      if (!global.RsvpAdminAuth?.getState().isLoggedIn) {
+        panel.hidden = true;
+        return;
+      }
       panel.hidden = false;
       panel.className = "deployment-health loading";
       title.textContent = "Apps Script deployments";
@@ -154,12 +165,15 @@
         requestDeploymentInfo,
       );
       const failures = results.filter((result) => !result.ok);
+      const hasMismatch = failures.some((result) => result.kind === "mismatch");
       panel.className = `deployment-health ${failures.length ? "warning" : "success"}`;
       title.textContent = failures.length
         ? "Deployment warning"
         : "Apps Script deployments are current";
       summary.textContent = failures.length
-        ? `${failures.length} backend deployment${failures.length === 1 ? "" : "s"} must be updated before relying on Admin, Billing, or RSVP data.`
+        ? hasMismatch
+          ? `${failures.length} backend deployment${failures.length === 1 ? "" : "s"} do not match this website version.`
+          : `Could not verify ${failures.length} backend deployment${failures.length === 1 ? "" : "s"}. Select Check Again.`
         : "The Admin / Billing and RSVP backends match this website version.";
       list.replaceChildren(
         ...results.map((result) => {
@@ -175,7 +189,19 @@
     }
 
     refreshButton.addEventListener("click", refresh);
-    refresh();
+    if (global.RsvpAdminAuth) {
+      global.RsvpAdminAuth.onChange((state) => {
+        if (!state.isLoggedIn) {
+          checkedForCurrentSession = false;
+          panel.hidden = true;
+          return;
+        }
+        if (!checkedForCurrentSession) {
+          checkedForCurrentSession = true;
+          refresh();
+        }
+      });
+    }
   }
 
   global.RsvpDeploymentHealth = {

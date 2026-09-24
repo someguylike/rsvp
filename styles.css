@@ -79,6 +79,39 @@ body {
   margin-bottom: 26px;
 }
 
+.admin-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.admin-login-state {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.admin-login-state.logged-in {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+}
+
+.admin-login-state.logged-out {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
 .page-nav {
   margin: -10px 0 22px;
 }
