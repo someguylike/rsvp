@@ -18,6 +18,37 @@ function calculate(month, birdiePurchases, adjustments = []) {
   });
 }
 
+{
+  const april = { month: "2026-04", members: [{ netBalance: 12.34 }] };
+  const may = { month: "2026-05", members: [{ netBalance: 56.78 }] };
+  const august = { month: "2026-08", members: [{ netBalance: 90.12 }] };
+  const visible = BalanceCalculator.filterBillingHistory([
+    { month: "2025-09", members: [] },
+    april,
+    may,
+    august,
+  ]);
+
+  assert.equal(BalanceCalculator.BILLING_HISTORY_START_MONTH, "2026-05");
+  assert.deepEqual(
+    visible.map((entry) => entry.month),
+    ["2026-05", "2026-08"],
+    "billing history starts in May 2026",
+  );
+  assert.equal(visible[0], may, "filtering must preserve the stored billing row");
+  assert.equal(
+    visible[0].members[0].netBalance,
+    56.78,
+    "filtering must not change member amounts",
+  );
+  assert.equal(
+    BalanceCalculator.getPaymentTotal(56.78, 2),
+    58.78,
+    "a tip is added to the payment without changing the bill",
+  );
+  assert.equal(may.members[0].netBalance, 56.78, "the bill remains unchanged");
+}
+
 const inventoryPurchase = {
   id: "birdie-manual",
   date: "2026-06-01",

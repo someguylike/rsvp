@@ -625,7 +625,7 @@
     return Array.from(monthInput.options)
       .map((option) => option.value)
       .filter((month) => {
-        if (!month) {
+        if (!window.BalanceCalculator.isBillingMonthInHistory(month)) {
           return false;
         }
         return includeCurrent ? month <= getCurrentMonthValue() : month < getCurrentMonthValue();
@@ -652,7 +652,8 @@
 
   function populateBillingMonthOptions(months) {
     const currentSelection = monthInput.value;
-    const openMonths = months
+    const openMonths = window.BalanceCalculator
+      .filterBillingHistory(months)
       .filter(
         (month) =>
           isAdmin ||
@@ -757,24 +758,28 @@
     }
 
     const balancesByMonth = new Map(
-      (result.balances || []).map((entry) => [entry.month, entry]),
+      window.BalanceCalculator
+        .filterBillingHistory(result.balances)
+        .map((entry) => [entry.month, entry]),
     );
     balancesByMonth.forEach((entry, month) => {
       writeBillingCache(month, createMemberBillingSnapshot(entry, result));
     });
-    return (result.finalizedMonths || []).map((month) => {
-      const balance = balancesByMonth.get(month);
-      return {
-        month,
-        label: formatMonthLabel(month),
-        playerCount: (balance?.members || []).filter(
-          (member) => Number(member.spots || 0) > 0,
-        ).length,
-        allPaid: !balance,
-        billable: true,
-        calculatedAt: balance?.calculatedAt || "",
-      };
-    });
+    return (result.finalizedMonths || [])
+      .filter(window.BalanceCalculator.isBillingMonthInHistory)
+      .map((month) => {
+        const balance = balancesByMonth.get(month);
+        return {
+          month,
+          label: formatMonthLabel(month),
+          playerCount: (balance?.members || []).filter(
+            (member) => Number(member.spots || 0) > 0,
+          ).length,
+          allPaid: !balance,
+          billable: true,
+          calculatedAt: balance?.calculatedAt || "",
+        };
+      });
   }
 
   function requestBillingMonthOptions() {
@@ -1447,10 +1452,14 @@
     birdieUsageTubesInput.max = batch?.remaining || "";
   }
 
-  function getPaymentStatus(memberName) {
-    const backendPayment = backendBilling?.payments?.find(
+  function getPaymentRecord(memberName) {
+    return backendBilling?.payments?.find(
       (payment) => payment.playerName === memberName,
     );
+  }
+
+  function getPaymentStatus(memberName) {
+    const backendPayment = getPaymentRecord(memberName);
     if (backendPayment?.status) {
       return backendPayment.status;
     }
@@ -2480,19 +2489,69 @@
     return `${member.name} - Badminton ${formatMonthLabel(monthInput.value)}`;
   }
 
-  function buildVenmoPaymentUrls(member) {
-    const amount = roundMoney(member.netBalance).toFixed(2);
-    const encodedNote = encodeURIComponent(getVenmoPaymentNote(member));
+  function buildVenmoPaymentUrls(member, tipAmount) {
+    const billAmount = roundMoney(member.netBalance);
+    const tip = Math.max(0, roundMoney(tipAmount));
+    const amount = window.BalanceCalculator
+      .getPaymentTotal(billAmount, tip)
+      .toFixed(2);
+    const paymentNote = tip
+      ? `${getVenmoPaymentNote(member)} + ${formatMoney(tip)} admin tip`
+      : getVenmoPaymentNote(member);
+    const encodedNote = encodeURIComponent(paymentNote);
     const encodedRecipient = encodeURIComponent(VENMO_RECIPIENT_USERNAME);
     const appUrl = `venmo://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${amount}&note=${encodedNote}`;
     const webUrl = `https://venmo.com/${encodedRecipient}?txn=pay&amount=${amount}&note=${encodedNote}`;
 
     return {
       amount,
+      paymentNote,
       appUrl,
       webUrl,
       androidIntentUrl: `intent://paycharge?txn=pay&recipients=${encodedRecipient}&amount=${amount}&note=${encodedNote}#Intent;scheme=venmo;package=com.venmo;S.browser_fallback_url=${encodeURIComponent(webUrl)};end`,
     };
+  }
+
+  async function selfReportPayment(member, tipAmount, comment, button) {
+    if (
+      !window.confirm(
+        `Mark ${member.name}'s ${formatMonthLabel(monthInput.value)} bill as paid?`,
+      )
+    ) {
+      return;
+    }
+
+    button.disabled = true;
+    setStatus("Saving your payment report...", "loading");
+    try {
+      const result = await requestAppsScript({
+        action: "selfReportBillingPayment",
+        month: monthInput.value,
+        playerName: member.name,
+        billedAmount: roundMoney(member.netBalance).toFixed(2),
+        tipAmount: roundMoney(tipAmount).toFixed(2),
+        comment: String(comment || "").trim(),
+      });
+      if (!result.payment?.playerName) {
+        throw new Error("Apps Script did not save the payment report");
+      }
+      backendBilling = {
+        ...backendBilling,
+        payments: upsertByPlayerName(
+          backendBilling?.payments || [],
+          result.payment,
+        ),
+      };
+      writeBillingCache(monthInput.value, backendBilling);
+      render();
+      setStatus(
+        `${member.name}'s payment was marked Paid.`,
+        "success",
+      );
+    } catch (error) {
+      button.disabled = false;
+      setStatus(error.message, "error");
+    }
   }
 
   function renderVenmoPaymentAction(member) {
@@ -2503,34 +2562,90 @@
       return;
     }
 
-    const urls = buildVenmoPaymentUrls(member);
     const section = document.createElement("section");
     section.className = "billing-payment-action";
+    const tipLabel = document.createElement("label");
+    tipLabel.className = "field compact-field billing-tip-field";
+    tipLabel.append(createCell("span", "Optional tip / donation for admin work"));
+    const tipSelect = document.createElement("select");
+    [
+      ["0", "No tip"],
+      ["1", "Add $1"],
+      ["2", "Add $2"],
+      ["5", "Add $5"],
+    ].forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      tipSelect.append(option);
+    });
+    tipLabel.append(tipSelect);
+
     const link = document.createElement("a");
     link.className = "billing-payment-button venmo-payment-link";
-    link.href = IS_META_IN_APP_BROWSER
-      ? IS_ANDROID_DEVICE
-        ? urls.androidIntentUrl
-        : urls.appUrl
-      : urls.webUrl;
-    link.textContent = `Pay ${formatMoney(urls.amount)} with Venmo`;
     const note = document.createElement("p");
-    note.textContent = `To ${VENMO_RECIPIENT_NAME}: ${getVenmoPaymentNote(member)}`;
+    let fallback = null;
+    const updatePaymentLink = () => {
+      const urls = buildVenmoPaymentUrls(member, tipSelect.value);
+      link.href = IS_META_IN_APP_BROWSER
+        ? IS_ANDROID_DEVICE
+          ? urls.androidIntentUrl
+          : urls.appUrl
+        : urls.webUrl;
+      link.textContent = `Pay ${formatMoney(urls.amount)} with Venmo`;
+      note.textContent = `To ${VENMO_RECIPIENT_NAME}: ${urls.paymentNote}`;
+      return urls;
+    };
+    let urls = updatePaymentLink();
+    tipSelect.addEventListener("change", () => {
+      urls = updatePaymentLink();
+      if (fallback) fallback.href = urls.webUrl;
+    });
     const help = document.createElement("p");
     help.className = "billing-payment-help";
     help.textContent = IS_META_IN_APP_BROWSER
       ? "If Messenger blocks the app, use the website link."
       : "Opens the Venmo app or payment website.";
 
-    section.append(link, note);
+    section.append(tipLabel, link, note);
     if (IS_META_IN_APP_BROWSER) {
-      const fallback = document.createElement("a");
+      fallback = document.createElement("a");
       fallback.className = "venmo-web-fallback";
       fallback.href = urls.webUrl;
       fallback.textContent = "Use Venmo website";
       section.append(fallback);
     }
     section.append(help);
+
+    if (!isAdmin && backendAvailable && !LOCAL_BILLING_FIXTURE) {
+      const reportForm = document.createElement("div");
+      reportForm.className = "billing-payment-report";
+      const commentLabel = document.createElement("label");
+      commentLabel.className = "field";
+      commentLabel.append(createCell("span", "Payment comment (optional)"));
+      const commentInput = document.createElement("textarea");
+      commentInput.maxLength = 500;
+      commentInput.rows = 2;
+      commentInput.placeholder = "Example: Paid via Venmo today";
+      commentLabel.append(commentInput);
+      const markPaidButton = document.createElement("button");
+      markPaidButton.type = "button";
+      markPaidButton.className = "secondary-button billing-mark-paid-button";
+      markPaidButton.textContent = `Mark ${member.name} as paid`;
+      markPaidButton.addEventListener("click", () =>
+        selfReportPayment(
+          member,
+          Number(tipSelect.value || 0),
+          commentInput.value,
+          markPaidButton,
+        ),
+      );
+      const identityNote = document.createElement("p");
+      identityNote.className = "billing-payment-help";
+      identityNote.textContent = `Only use this for your own payment as ${member.name}. An admin can correct mistakes.`;
+      reportForm.append(commentLabel, markPaidButton, identityNote);
+      section.append(reportForm);
+    }
     memberDetail.append(section);
   }
 
@@ -2550,6 +2665,13 @@
     appendDetailRow("Paid credits", formatMoney(member.credits), member.credits ? "money-credit" : "");
     appendDetailRow("Net balance", formatMoney(member.netBalance), getMoneyClass(member.netBalance));
     appendDetailRow("Payment", getPaymentStatus(member.name));
+    const payment = getPaymentRecord(member.name);
+    if (payment?.comment) {
+      appendDetailRow("Payment comment", payment.comment);
+    }
+    if (Number(payment?.tipAmount || 0) > 0) {
+      appendDetailRow("Admin tip", formatMoney(payment.tipAmount));
+    }
     renderVenmoPaymentAction(member);
     renderCreditBreakdown(member);
 

@@ -661,4 +661,90 @@ function createAppsScriptContext() {
   assert.equal(cleanupCalls, 0, "cleanup action authenticates before mutation");
 }
 
+{
+  const isolated = createAppsScriptContext();
+  const paymentRows = [];
+  let snapshotReads = 0;
+  isolated.validatePlayerName_ = () => {};
+  isolated.findBillingPaymentRow_ = () => null;
+  isolated.getBillingPaymentSheet_ = () => ({
+    appendRow: (values) => paymentRows.push([...values]),
+  });
+  isolated.getBillingMonthSnapshot_ = (month) => {
+    snapshotReads += 1;
+    return {
+      month,
+      members: [
+        {
+          name: "Nam Pham",
+          netBalance: 12.34,
+          paymentStatus: "Not requested",
+        },
+      ],
+    };
+  };
+
+  const payment = isolated.selfReportBillingPayment_({
+    month: "2026-08",
+    playerName: "Nam Pham",
+    billedAmount: "12.34",
+    tipAmount: "2.00",
+    comment: "Paid via Venmo",
+  });
+  assert.equal(snapshotReads, 1, "self-report validates the finalized snapshot");
+  assert.equal(payment.status, "Paid");
+  assert.equal(payment.comment, "Paid via Venmo");
+  assert.equal(payment.reportedBillAmount, 12.34);
+  assert.equal(payment.tipAmount, 2);
+  assert.equal(payment.source, "Member self-report");
+  assert.equal(paymentRows[0][14], 12.34, "the verified bill amount is audited");
+  assert.equal(paymentRows[0][15], 2, "the optional tip is audited separately");
+
+  assert.throws(
+    () => isolated.selfReportBillingPayment_({
+      month: "2026-08",
+      playerName: "Nam Pham",
+      billedAmount: "12.35",
+      tipAmount: "0",
+    }),
+    /bill changed/i,
+    "a stale or altered amount cannot be marked paid",
+  );
+  assert.throws(
+    () => isolated.selfReportBillingPayment_({
+      month: "2026-04",
+      playerName: "Nam Pham",
+      billedAmount: "12.34",
+      tipAmount: "0",
+    }),
+    /starts in 2026-05/,
+    "self-reporting is limited to the visible billing history",
+  );
+  assert.equal(paymentRows.length, 1, "rejected reports do not write rows");
+}
+
+{
+  const isolated = createAppsScriptContext();
+  let selfReportCalls = 0;
+  isolated.requireAdmin_ = () => {
+    throw new Error("self-report unexpectedly required admin access");
+  };
+  isolated.selfReportBillingPayment_ = () => {
+    selfReportCalls += 1;
+    return { playerName: "Nam Pham", status: "Paid" };
+  };
+  isolated.jsonp_ = (callback, payload) => payload;
+  const result = isolated.doGet({
+    parameter: {
+      action: "selfReportBillingPayment",
+      month: "2026-08",
+      playerName: "Nam Pham",
+      billedAmount: "12.34",
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.payment.status, "Paid");
+  assert.equal(selfReportCalls, 1);
+}
+
 console.log("billing action tests passed");

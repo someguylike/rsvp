@@ -2,6 +2,18 @@
   "use strict";
 
   const MIN_BILLABLE_PARTICIPANTS = 4;
+  const BILLING_HISTORY_START_MONTH = "2026-05";
+
+  function isBillingMonthInHistory(month) {
+    const value = String(month || "");
+    return /^\d{4}-\d{2}$/.test(value) && value >= BILLING_HISTORY_START_MONTH;
+  }
+
+  function filterBillingHistory(entries) {
+    return (entries || []).filter((entry) =>
+      isBillingMonthInHistory(entry?.month),
+    );
+  }
 
   function roundMoney(value) {
     return Math.round(Number(value || 0) * 100) / 100;
@@ -10,6 +22,12 @@
   function toMoneyCents(value) {
     const amount = Number(value || 0);
     return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  }
+
+  function getPaymentTotal(billAmount, tipAmount) {
+    return roundMoney(
+      roundMoney(billAmount) + Math.max(0, roundMoney(tipAmount)),
+    );
   }
 
   function compareAllocationRows(first, second) {
@@ -275,6 +293,15 @@
       const member = ensureMember(payment.playerName);
       if (member && payment.status) {
         member.paymentStatus = payment.status;
+        if (payment.comment) member.paymentComment = payment.comment;
+        if (payment.updatedAt) member.paymentUpdatedAt = payment.updatedAt;
+        if (payment.reportedBillAmount !== undefined) {
+          member.reportedBillAmount = roundMoney(payment.reportedBillAmount);
+        }
+        if (payment.tipAmount !== undefined) {
+          member.tipAmount = roundMoney(payment.tipAmount);
+        }
+        if (payment.source) member.paymentSource = payment.source;
       }
     });
 
@@ -382,12 +409,16 @@
   }
 
   global.BalanceCalculator = {
+    BILLING_HISTORY_START_MONTH,
     MIN_BILLABLE_PARTICIPANTS,
     allocateCentsByWeight,
     areMembersSettled,
     calculateMonthBalances,
     createBillingViewFromSnapshot,
+    filterBillingHistory,
     getAmountDue,
+    getPaymentTotal,
+    isBillingMonthInHistory,
     isMemberSettled,
   };
 })(window);

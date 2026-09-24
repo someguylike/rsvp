@@ -183,7 +183,8 @@
   }
 
   function getVisibleMonths(months) {
-    return (months || [])
+    return window.BalanceCalculator
+      .filterBillingHistory(months)
       .filter((entry) => entry.month < getCurrentMonth() && !entry.allPaid)
       .sort((first, second) => first.month.localeCompare(second.month));
   }
@@ -195,9 +196,12 @@
   function getCachedMonthlyBalances() {
     const balanceCache = readCache(BILLING_BALANCES_CACHE_KEY);
     if (Array.isArray(balanceCache?.balances)) {
+      const balances = window.BalanceCalculator.filterBillingHistory(
+        balanceCache.balances,
+      );
       return {
-        balances: balanceCache.balances,
-        visibleMonthCount: balanceCache.balances.length,
+        balances,
+        visibleMonthCount: balances.length,
         savedAt: Number(balanceCache.savedAt || 0),
       };
     }
@@ -388,9 +392,9 @@
   }
 
   function showBalances(balances) {
-    monthlyBalances = balances.slice().sort((first, second) =>
-      first.month.localeCompare(second.month),
-    );
+    monthlyBalances = window.BalanceCalculator
+      .filterBillingHistory(balances)
+      .sort((first, second) => first.month.localeCompare(second.month));
     populateMembers();
     renderBalances();
     contentEl.hidden = false;
@@ -420,9 +424,9 @@
           action: "listBillingBalances",
         });
         if (snapshotResult.snapshotReady) {
-          precomputedBalances = Array.isArray(snapshotResult.balances)
-            ? snapshotResult.balances
-            : [];
+          precomputedBalances = window.BalanceCalculator.filterBillingHistory(
+            snapshotResult.balances,
+          );
           const initialBalances = new Map(
             precomputedBalances.map((entry) => [entry.month, entry]),
           );
@@ -438,10 +442,12 @@
           const draftResult = await requestAppsScript({
             action: "listBillingDraftMonths",
           });
-          snapshotDraftMonths = (draftResult.months || []).map((month) => ({
-            month,
-            allPaid: false,
-          }));
+          snapshotDraftMonths = (draftResult.months || [])
+            .filter(window.BalanceCalculator.isBillingMonthInHistory)
+            .map((month) => ({
+              month,
+              allPaid: false,
+            }));
           const initialBalances = new Map(
             precomputedBalances.map((entry) => [entry.month, entry]),
           );

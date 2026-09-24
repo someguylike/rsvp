@@ -1717,6 +1717,27 @@ body:not(.billing-admin) .admin-payment-column {
   font-size: 0.82rem;
 }
 
+.billing-tip-field,
+.billing-payment-report .field {
+  margin: 0;
+}
+
+.billing-payment-report {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.billing-payment-report textarea {
+  min-height: 68px;
+}
+
+.billing-mark-paid-button {
+  width: 100%;
+}
+
 .roster-edit-wrap {
   max-height: 70vh;
 }

@@ -10,12 +10,15 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-09-24.1";
+const ADMIN_BACKEND_VERSION = "2026-09-24.2";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
 const PREVIEW_MAX_COLUMNS = 80;
 const MIN_BILLABLE_PARTICIPANTS = 4;
+const BILLING_HISTORY_START_MONTH = "2026-05";
+const MAX_SELF_REPORTED_TIP = 25;
+const MAX_PAYMENT_COMMENT_LENGTH = 500;
 const ADMIN_TOKEN_TTL_SECONDS = 21600;
 const PLAY_DAYS = [2, 4, 5, 0];
 const PLAY_START_HOUR = 6;
@@ -93,6 +96,10 @@ const BILLING_PAYMENT_HEADERS = [
   "Adjustment Updated At",
   "Adjustment Created By",
   "Adjustment Updated By",
+  "Payment Comment",
+  "Reported Bill Amount",
+  "Tip Amount",
+  "Payment Source",
 ];
 const BILLING_ADJUSTMENT_HEADERS = [
   "ID",
@@ -430,6 +437,14 @@ function doGet(event) {
         ok: true,
         action: "markBillingMonthPaid",
         billing: markBillingMonthPaid_(params),
+      });
+    }
+
+    if (params.action === "selfReportBillingPayment") {
+      return jsonp_(callback, {
+        ok: true,
+        action: "selfReportBillingPayment",
+        payment: selfReportBillingPayment_(params),
       });
     }
 
@@ -1751,6 +1766,17 @@ function calculateBillingMemberBalances_(source) {
     const member = ensureMember(payment.playerName);
     if (member && payment.status) {
       member.paymentStatus = payment.status;
+      if (payment.comment) member.paymentComment = payment.comment;
+      if (payment.updatedAt) member.paymentUpdatedAt = payment.updatedAt;
+      if (payment.reportedBillAmount !== undefined) {
+        member.reportedBillAmount = roundBillingMoney_(
+          payment.reportedBillAmount,
+        );
+      }
+      if (payment.tipAmount !== undefined) {
+        member.tipAmount = roundBillingMoney_(payment.tipAmount);
+      }
+      if (payment.source) member.paymentSource = payment.source;
     }
   });
 
@@ -2609,6 +2635,10 @@ function markBillingMonthPaid_(params) {
         String(existing[10] || ""),
         String(existing[11] || ""),
         String(existing[12] || ""),
+        String(existing[13] || ""),
+        existing[14] || "",
+        existing[15] || "",
+        "Admin",
       ];
 
       if (row) {
@@ -2619,6 +2649,94 @@ function markBillingMonthPaid_(params) {
     });
 
     return getBillingMonth_(month);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function selfReportBillingPayment_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    if (month < BILLING_HISTORY_START_MONTH) {
+      throw new Error(`Member payment reporting starts in ${BILLING_HISTORY_START_MONTH}`);
+    }
+    const playerName = sanitizeText_(
+      required_(params.playerName, "Missing player name").trim(),
+    );
+    validatePlayerName_(playerName);
+    const comment = sanitizeText_(params.comment || "");
+    if (comment.length > MAX_PAYMENT_COMMENT_LENGTH) {
+      throw new Error(
+        `Payment comment must be ${MAX_PAYMENT_COMMENT_LENGTH} characters or fewer`,
+      );
+    }
+    const reportedBillAmount = parseMoneyNumber_(
+      required_(params.billedAmount, "Missing billed amount"),
+      "Billed amount must be a number",
+    );
+    const tipAmount = parseMoneyNumber_(
+      params.tipAmount || "0",
+      "Tip amount must be a number",
+    );
+    if (tipAmount > MAX_SELF_REPORTED_TIP) {
+      throw new Error(`Tip must be $${MAX_SELF_REPORTED_TIP} or less`);
+    }
+
+    const billing = getBillingMonthSnapshot_(month);
+    const member = billing.members.find(
+      (candidate) => normalize_(candidate.name) === normalize_(playerName),
+    );
+    if (!member) {
+      throw new Error("This member does not have a bill for the selected month");
+    }
+    const expectedBillAmount = roundBillingMoney_(member.netBalance);
+    if (expectedBillAmount <= 0) {
+      throw new Error("This member does not have a payment due");
+    }
+    if (
+      toBillingMoneyCents_(reportedBillAmount) !==
+      toBillingMoneyCents_(expectedBillAmount)
+    ) {
+      throw new Error("The bill changed. Reload Billing before marking it paid");
+    }
+
+    const sheet = getBillingPaymentSheet_();
+    const row = findBillingPaymentRow_(sheet, month, member.name);
+    const existing = row
+      ? sheet.getRange(row, 1, 1, BILLING_PAYMENT_HEADERS.length).getValues()[0]
+      : [];
+    const now = new Date().toISOString();
+    const values = [
+      month,
+      member.name,
+      "Paid",
+      now,
+      `Self-reported by ${member.name}`,
+      String(existing[5] || ""),
+      existing[6] || "",
+      String(existing[7] || ""),
+      String(existing[8] || ""),
+      String(existing[9] || ""),
+      String(existing[10] || ""),
+      String(existing[11] || ""),
+      String(existing[12] || ""),
+      comment,
+      expectedBillAmount,
+      tipAmount,
+      "Member self-report",
+    ];
+
+    if (row) {
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+
+    return billingPaymentRowToPayment_(values);
   } finally {
     lock.releaseLock();
   }
@@ -3240,6 +3358,10 @@ function saveBillingPaymentStatus_(params) {
       String(existing[10] || ""),
       String(existing[11] || ""),
       String(existing[12] || ""),
+      String(existing[13] || ""),
+      existing[14] || "",
+      existing[15] || "",
+      "Admin",
     ];
 
     if (row) {
@@ -3686,10 +3808,23 @@ function billingBirdiePurchaseRowToPurchase_(row) {
 }
 
 function billingPaymentRowToPayment_(row) {
-  return {
+  const payment = {
     playerName: String(row[1] || ""),
     status: String(row[2] || ""),
   };
+  const comment = String(row[13] || "");
+  const updatedAt = formatAuditValue_(row[3]);
+  const reportedBillAmount = String(row[14] ?? "").trim();
+  const tipAmount = String(row[15] ?? "").trim();
+  const source = String(row[16] || "");
+  if (comment) payment.comment = comment;
+  if (updatedAt) payment.updatedAt = updatedAt;
+  if (reportedBillAmount) {
+    payment.reportedBillAmount = parseStoredNumber_(row[14]);
+  }
+  if (tipAmount) payment.tipAmount = parseStoredNumber_(row[15]);
+  if (source) payment.source = source;
+  return payment;
 }
 
 function billingPaymentRowToAdjustment_(row) {
