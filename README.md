@@ -13,7 +13,7 @@ Static RSVP page for weekly play sessions.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
 - After submit and when the date changes, the page shows the reserved participant tally for that date.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
-- `billing.html` renders monthly billing from attendance, editable court blocks, birdie purchases, and local payment statuses.
+- `billing.html` renders finalized member billing from persisted balance snapshots; authenticated admins can load source details and explicitly recalculate a month.
 - `admin.html` lets an admin edit the current month attendance in a player-by-date table.
 - `roster.html` lets an admin add, remove, and update roster Venmo and Messenger details.
 
@@ -235,15 +235,15 @@ The purchaser receives credit for the full inventory purchase in its reimburseme
 
 Each inventory purchase has a **Reimburse** action. The reimbursement date defaults to the final day of the purchase month; the admin can replace it with the actual date before saving or change it later. The date, purchase amount, and admin are recorded in `Billing Birdie Purchases` (`Reimbursed Date`, `Reimbursed Amount`, and `Reimbursed By`). The purchaser credit follows the reimbursement month, so moving an April purchase's reimbursement into May removes that credit from April and adds it to May. Purchases without a recorded reimbursement date retain the purchase-month default. **Undo** clears the reimbursement record and returns the credit to the purchase month.
 
-## Payment Page Cache
+## Billing Snapshot Cache
 
-Finalizing a billing month writes one derived balance row per member to the `Billing Member Balances` sheet. These rows are a rebuildable cache; attendance, court blocks, birdie records, adjustments, and payment statuses remain the source data. Source edits require reopening the month as Draft, which removes its snapshot; finalizing it again rebuilds the snapshot. Once every balance and credit is settled, the retained snapshot is left unchanged unless the month is reopened or the backfill is run explicitly.
+Finalizing a billing month writes one derived balance row per member to the `Billing Member Balances` sheet. These rows are a rebuildable cache; attendance, court blocks, birdie records, adjustments, and payment statuses remain the source data. The public Billing and Payment pages read these stored amounts and never recalculate finalized bills from source sheets. Source edits require reopening the month as Draft, which removes its snapshot; finalizing it again rebuilds the snapshot. Once every balance and credit is settled, the retained snapshot is left unchanged unless the month is reopened or the backfill is run explicitly.
 
-The status lifecycle is deterministic: **Finalized → Draft** deletes that month's rows from `Billing Member Balances`, so the Payment page calculates the draft from source data; **Draft → Finalized** recreates all member snapshot rows from the current source data.
+The status lifecycle is deterministic: **Finalized → Draft** deletes that month's rows from `Billing Member Balances`, so member pages stop publishing it; **Draft → Finalized** recreates all member snapshot rows from the current source data.
 
-After deploying this backend change, run `backfillBillingMemberBalanceSnapshots` once from the Apps Script editor to create snapshots for existing finalized months. A calculation-version change also requires running that function again. Until every finalized month has a current snapshot, the Payment page safely falls back to loading and calculating the original monthly data.
+After deploying this backend change, run `backfillBillingMemberBalanceSnapshots` once from the Apps Script editor to create snapshots for existing finalized months. A calculation-version change also requires running that function again. Member pages fail closed rather than calculating from raw source data when a finalized snapshot is missing or stale.
 
-The Payment page loads open finalized balances with one backend request, merges current payment statuses, and displays those precomputed amounts immediately. Past draft months then load from their source records in parallel and appear as each calculation finishes. Globally paid-off months are excluded. Paid snapshots remain in the sheet for audit/history but are not recalculated or returned during normal payment loading. The browser also displays its previously saved result immediately while refreshing.
+The Billing and Payment pages load open finalized balances with one backend request, merge current payment statuses, and display those precomputed amounts immediately. Draft months and raw source records are admin-only. On Billing, the authenticated **Recalculate** action reloads the selected month from source data and refreshes its finalized snapshot; the member **Reload saved bill** action only rereads snapshots. Globally paid-off months are excluded unless directly requested. Paid snapshots remain in the sheet for audit/history and are not recalculated during normal member loading. The browser also displays its previously saved result while a stale snapshot is refreshed.
 
 Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block. In Messenger, Venmo actions use a direct app link with a visible payment-website fallback; other browsers retain the normal HTTPS Venmo payment link.
 

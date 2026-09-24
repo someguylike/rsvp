@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-09-20.4";
+const ADMIN_BACKEND_VERSION = "2026-09-24.1";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -363,21 +363,43 @@ function doGet(event) {
     }
 
     if (params.action === "listBillingMonths") {
+      const hasAdminAccess = hasAdminAccess_(params);
+      const result = hasAdminAccess
+        ? { months: getBillingMonths_(true) }
+        : listBillingMonthSnapshots_();
       return jsonp_(callback, {
         ok: true,
         action: "listBillingMonths",
-        months: getBillingMonths_(hasAdminAccess_(params)),
+        months: result.months,
+        snapshotReady:
+          result.snapshotReady === undefined ? null : result.snapshotReady,
+        missingMonths: result.missingMonths || [],
       });
     }
 
     if (params.action === "listBillingMonth") {
+      const hasAdminAccess = hasAdminAccess_(params);
+      const month = required_(params.month, "Missing billing month");
       return jsonp_(callback, {
         ok: true,
         action: "listBillingMonth",
-        billing: getBillingMonth_(
-          required_(params.month, "Missing billing month"),
-          params.includeDiagnostics === "true" && hasAdminAccess_(params),
-        ),
+        billing: hasAdminAccess
+          ? getBillingMonth_(
+              month,
+              params.includeDiagnostics === "true",
+            )
+          : getBillingMonthSnapshot_(month),
+      });
+    }
+
+    if (params.action === "refreshBillingMonth") {
+      requireAdmin_(params);
+      const result = refreshBillingMonthSnapshot_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "refreshBillingMonth",
+        billing: result.billing,
+        snapshot: result.snapshot,
       });
     }
 
@@ -398,7 +420,7 @@ function doGet(event) {
       return jsonp_(callback, {
         ok: true,
         action: "listBillingDraftMonths",
-        months: getDraftBillingMonths_(),
+        months: hasAdminAccess_(params) ? getDraftBillingMonths_() : [],
       });
     }
 
@@ -2159,7 +2181,7 @@ function getBillingPaymentStatuses_() {
   return statuses;
 }
 
-function listBillingBalanceSnapshots_() {
+function readBillingMemberBalanceSnapshotState_() {
   const expectedMonths = getFinalizedBillingMonths_(false);
   const expectedMonthSet = expectedMonths.reduce((months, month) => {
     months[month] = true;
@@ -2175,6 +2197,7 @@ function listBillingBalanceSnapshots_() {
       : [];
   const snapshotMonths = {};
   const membersByMonth = {};
+  const calculatedAtByMonth = {};
 
   rows.forEach((row) => {
     const month = normalizeMonth_(row[0]);
@@ -2187,6 +2210,9 @@ function listBillingBalanceSnapshots_() {
       return;
     }
     snapshotMonths[month] = true;
+    if (!calculatedAtByMonth[month] && row[8]) {
+      calculatedAtByMonth[month] = formatAuditValue_(row[8]);
+    }
     const playerName = String(row[1] || "").trim();
     if (!playerName) {
       return;
@@ -2206,6 +2232,29 @@ function listBillingBalanceSnapshots_() {
     });
   });
 
+  return {
+    expectedMonths,
+    snapshotMonths,
+    membersByMonth,
+    calculatedAtByMonth,
+  };
+}
+
+function getBillingSnapshotMembers_(state, month, paymentStatuses) {
+  return (state.membersByMonth[month] || [])
+    .map((member) => ({
+      ...member,
+      paymentStatus:
+        paymentStatuses[`${month}\n${normalize_(member.name)}`] || "Not requested",
+    }))
+    .sort((first, second) => first.name.localeCompare(second.name));
+}
+
+function listBillingBalanceSnapshots_() {
+  const state = readBillingMemberBalanceSnapshotState_();
+  const expectedMonths = state.expectedMonths;
+  const snapshotMonths = state.snapshotMonths;
+
   const missingMonths = expectedMonths.filter((month) => !snapshotMonths[month]);
   if (missingMonths.length) {
     return {
@@ -2218,16 +2267,14 @@ function listBillingBalanceSnapshots_() {
 
   const paymentStatuses = getBillingPaymentStatuses_();
   const balances = expectedMonths.reduce((result, month) => {
-    const members = (membersByMonth[month] || [])
-      .map((member) => ({
-        ...member,
-        paymentStatus:
-          paymentStatuses[`${month}\n${normalize_(member.name)}`] || "Not requested",
-      }))
-      .sort((first, second) => first.name.localeCompare(second.name));
+    const members = getBillingSnapshotMembers_(state, month, paymentStatuses);
     const allPaid = areBillingMembersSettled_(members);
     if (!allPaid) {
-      result.push({ month, members });
+      result.push({
+        month,
+        members,
+        calculatedAt: state.calculatedAtByMonth[month] || "",
+      });
     }
     return result;
   }, []);
@@ -2238,6 +2285,117 @@ function listBillingBalanceSnapshots_() {
     finalizedMonths: expectedMonths,
     balances,
   };
+}
+
+function listBillingMonthSnapshots_() {
+  const state = readBillingMemberBalanceSnapshotState_();
+  const paymentStatuses = getBillingPaymentStatuses_();
+  const missingMonths = state.expectedMonths.filter(
+    (month) => !state.snapshotMonths[month],
+  );
+  const months = state.expectedMonths
+    .filter((month) => state.snapshotMonths[month])
+    .map((month) => {
+      const members = getBillingSnapshotMembers_(state, month, paymentStatuses);
+      return {
+        month,
+        label: formatMonthLabel_(month),
+        playerCount: members.filter(
+          (member) => Number(member.spots || 0) > 0,
+        ).length,
+        allPaid: areBillingMembersSettled_(members),
+        billable: true,
+        calculatedAt: state.calculatedAtByMonth[month] || "",
+      };
+    });
+
+  return {
+    snapshotReady: missingMonths.length === 0,
+    missingMonths,
+    finalizedMonths: state.expectedMonths,
+    months,
+  };
+}
+
+function getBillingMonthSnapshot_(month) {
+  validateMonth_(month);
+  const state = readBillingMemberBalanceSnapshotState_();
+  if (state.expectedMonths.indexOf(month) === -1) {
+    throw new Error(`Billing month ${month} is not finalized`);
+  }
+  if (!state.snapshotMonths[month]) {
+    throw new Error(`Billing snapshot for ${month} is not ready`);
+  }
+
+  const paymentStatuses = getBillingPaymentStatuses_();
+  const members = getBillingSnapshotMembers_(state, month, paymentStatuses);
+  const summary = members.reduce(
+    (totals, member) => {
+      totals.totalSpots += Number(member.spots || 0);
+      totals.totalWeightedSpots += Number(member.weightedSpots || 0);
+      totals.courtTotalCents += toBillingMoneyCents_(member.courtFee);
+      totals.birdieTotalCents += toBillingMoneyCents_(member.birdieFee);
+      return totals;
+    },
+    {
+      totalSpots: 0,
+      totalWeightedSpots: 0,
+      courtTotalCents: 0,
+      birdieTotalCents: 0,
+    },
+  );
+
+  return {
+    month,
+    source: "balance_snapshot",
+    snapshotReady: true,
+    calculatedAt: state.calculatedAtByMonth[month] || "",
+    calculationVersion: BILLING_BALANCE_CALCULATION_VERSION,
+    members,
+    summary: {
+      totalSpots: summary.totalSpots,
+      totalWeightedSpots: summary.totalWeightedSpots,
+      courtTotal: summary.courtTotalCents / 100,
+      birdieTotal: summary.birdieTotalCents / 100,
+    },
+    attendance: [],
+    courtBlocks: [],
+    birdieInventory: { startTubes: 0, endTubes: 0 },
+    birdiePurchases: [],
+    payments: members.map((member) => ({
+      playerName: member.name,
+      status: member.paymentStatus,
+    })),
+    adjustments: [],
+    monthStatus: {
+      status: "finalized",
+      note: "",
+      updatedAt: "",
+      updatedBy: "",
+    },
+  };
+}
+
+function refreshBillingMonthSnapshot_(params) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const month = required_(params.month, "Missing billing month");
+    validateMonth_(month);
+    const billing = getBillingMonth_(
+      month,
+      params.includeDiagnostics === "true",
+    );
+    const snapshot = refreshBillingMemberBalanceSnapshotIfFinalized_(
+      month,
+      billing,
+      true,
+    );
+    return { billing, snapshot };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function backfillBillingMemberBalanceSnapshots() {
@@ -2254,6 +2412,10 @@ function backfillBillingMemberBalanceSnapshots() {
 }
 
 function getBillingMonths_(includeEditable) {
+  if (!includeEditable) {
+    return listBillingMonthSnapshots_().months;
+  }
+
   const currentMonth = getCurrentMonth_();
   const monthSet = {};
   const billableMonthSet = {};

@@ -295,6 +295,66 @@
     };
   }
 
+  function createBillingViewFromSnapshot(source) {
+    const snapshot = source || {};
+    const members = (snapshot.members || [])
+      .map((member) => ({
+        ...member,
+        spots: Number(member.spots || 0),
+        weightedSpots: Number(member.weightedSpots || 0),
+        courtFee: roundMoney(member.courtFee),
+        birdieFee: roundMoney(member.birdieFee),
+        credits: roundMoney(member.credits),
+        netBalance: roundMoney(member.netBalance),
+        attendance: Array.isArray(member.attendance) ? member.attendance : [],
+        creditDetails: member.creditDetails || null,
+      }))
+      .sort((first, second) => first.name.localeCompare(second.name));
+    const calculatedSummary = members.reduce(
+      (totals, member) => {
+        totals.totalSpots += member.spots;
+        totals.totalWeightedSpots += member.weightedSpots;
+        totals.courtTotalCents += toMoneyCents(member.courtFee);
+        totals.birdieTotalCents += toMoneyCents(member.birdieFee);
+        return totals;
+      },
+      {
+        totalSpots: 0,
+        totalWeightedSpots: 0,
+        courtTotalCents: 0,
+        birdieTotalCents: 0,
+      },
+    );
+    const summary = snapshot.summary || {};
+
+    return {
+      source: "balance_snapshot",
+      courtBlocks: [],
+      activeCourtBlocks: [],
+      ineligibleCourtBlocks: [],
+      birdieState: { purchases: [] },
+      birdiePerWeightedSpot: 0,
+      totalWeightedSpots: Number.isFinite(Number(summary.totalWeightedSpots))
+        ? Number(summary.totalWeightedSpots)
+        : calculatedSummary.totalWeightedSpots,
+      totalSpots: Number.isFinite(Number(summary.totalSpots))
+        ? Number(summary.totalSpots)
+        : calculatedSummary.totalSpots,
+      billableDateCount: null,
+      excludedDateCount: 0,
+      members,
+      daily: [],
+      summary: {
+        courtTotal: Number.isFinite(Number(summary.courtTotal))
+          ? roundMoney(summary.courtTotal)
+          : calculatedSummary.courtTotalCents / 100,
+        birdieTotal: Number.isFinite(Number(summary.birdieTotal))
+          ? roundMoney(summary.birdieTotal)
+          : calculatedSummary.birdieTotalCents / 100,
+      },
+    };
+  }
+
   function getAmountDue(member) {
     if (!member || String(member.paymentStatus || "").toLowerCase() === "paid") {
       return 0;
@@ -326,6 +386,7 @@
     allocateCentsByWeight,
     areMembersSettled,
     calculateMonthBalances,
+    createBillingViewFromSnapshot,
     getAmountDue,
     isMemberSettled,
   };

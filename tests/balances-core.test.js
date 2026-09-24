@@ -294,4 +294,37 @@ const juneUsage = {
   );
 }
 
+{
+  const view = BalanceCalculator.createBillingViewFromSnapshot({
+    source: "balance_snapshot",
+    summary: {
+      totalSpots: 3,
+      totalWeightedSpots: 3.5,
+      courtTotal: 20.01,
+      birdieTotal: 5.02,
+    },
+    members: [
+      {
+        name: "Snapshot Player",
+        spots: 3,
+        weightedSpots: 3.5,
+        courtFee: 20.01,
+        birdieFee: 5.02,
+        credits: 12.68,
+        netBalance: 12.34,
+        paymentStatus: "Requested",
+      },
+    ],
+  });
+  assert.equal(view.source, "balance_snapshot");
+  assert.equal(view.summary.courtTotal, 20.01);
+  assert.equal(view.summary.birdieTotal, 5.02);
+  assert.equal(
+    view.members[0].netBalance,
+    12.34,
+    "member views use the stored snapshot amount without recalculating it",
+  );
+  assert.deepEqual(view.members[0].attendance, []);
+}
+
 console.log("balances-core tests passed");

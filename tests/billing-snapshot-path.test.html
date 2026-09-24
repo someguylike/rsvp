@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Billing snapshot path tests</title>
+  </head>
+  <body>
+    <h1>Billing snapshot path tests</h1>
+    <p id="summary">Running...</p>
+    <ol id="results"></ol>
+    <script src="../balances-core.js"></script>
+    <script>
+      (async () => {
+        const tests = [];
+        const test = (name, fn) => tests.push({ name, fn });
+        const assert = (condition, message) => {
+          if (!condition) throw new Error(message || "Assertion failed");
+        };
+        const assertEqual = (actual, expected, message) => {
+          assert(
+            JSON.stringify(actual) === JSON.stringify(expected),
+            `${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+          );
+        };
+
+        const appsScriptSource = await fetch("../google-apps-script/Code.gs").then(
+          (response) => response.text(),
+        );
+        const script = document.createElement("script");
+        script.textContent = appsScriptSource;
+        document.head.append(script);
+
+        test("member view preserves stored snapshot amounts", () => {
+          const view = window.BalanceCalculator.createBillingViewFromSnapshot({
+            source: "balance_snapshot",
+            summary: {
+              totalSpots: 3,
+              totalWeightedSpots: 3.5,
+              courtTotal: 20.01,
+              birdieTotal: 5.02,
+            },
+            members: [
+              {
+                name: "Snapshot Player",
+                spots: 3,
+                weightedSpots: 3.5,
+                courtFee: 20.01,
+                birdieFee: 5.02,
+                credits: 12.68,
+                netBalance: 12.34,
+                paymentStatus: "Requested",
+              },
+            ],
+          });
+          assert(view.members[0].netBalance === 12.34, "net balance was recalculated");
+          assert(view.summary.courtTotal === 20.01, "court total changed");
+          assert(view.summary.birdieTotal === 5.02, "birdie total changed");
+        });
+
+        const snapshotRows = [
+          ["2026-06", "", 0, 0, 0, 0, 0, 0, "2026-07-01T00:00:00Z", 4],
+          ["2026-06", "Alice", 1, 1, 20, 5, 0, 25, "2026-07-01T00:00:00Z", 4],
+          ["2026-07", "", 0, 0, 0, 0, 0, 0, "2026-08-01T00:00:00Z", 4],
+          ["2026-07", "Bob", 2, 2, 30, 10, 5, 35, "2026-08-01T00:00:00Z", 4],
+        ];
+        window.getFinalizedBillingMonths_ = () => ["2026-06", "2026-07"];
+        window.getBillingMemberBalanceSheet_ = () => ({
+          getLastRow: () => snapshotRows.length + 1,
+          getRange: () => ({ getValues: () => snapshotRows }),
+        });
+        window.getBillingPaymentStatuses_ = () => ({
+          "2026-06\nalice": "Paid",
+          "2026-07\nbob": "Requested",
+        });
+        window.formatMonthLabel_ = (month) =>
+          ({ "2026-06": "June 2026", "2026-07": "July 2026" })[month] || month;
+        window.getBillingBirdiePurchaseSheet_ = () => {
+          throw new Error("public month discovery read raw billing data");
+        };
+
+        test("public month discovery uses snapshots only", () => {
+          const months = window.getBillingMonths_(false);
+          assertEqual(
+            months.map(({ month, allPaid, billable }) => ({ month, allPaid, billable })),
+            [
+              { month: "2026-06", allPaid: true, billable: true },
+              { month: "2026-07", allPaid: false, billable: true },
+            ],
+            "snapshot month list changed",
+          );
+        });
+
+        test("public month detail returns the exact stored amount", () => {
+          const snapshot = window.getBillingMonthSnapshot_("2026-07");
+          assert(snapshot.source === "balance_snapshot", "wrong source");
+          assert(snapshot.members[0].netBalance === 35, "stored net balance changed");
+          assertEqual(snapshot.summary, {
+            totalSpots: 2,
+            totalWeightedSpots: 2,
+            courtTotal: 30,
+            birdieTotal: 10,
+          }, "snapshot totals changed");
+        });
+
+        const results = document.querySelector("#results");
+        let passed = 0;
+        tests.forEach(({ name, fn }) => {
+          const item = document.createElement("li");
+          try {
+            fn();
+            passed += 1;
+            item.className = "pass";
+            item.textContent = `PASS ${name}`;
+          } catch (error) {
+            item.className = "fail";
+            item.textContent = `FAIL ${name}: ${error.message}`;
+          }
+          results.append(item);
+        });
+        const summary = document.querySelector("#summary");
+        summary.className = passed === tests.length ? "pass" : "fail";
+        summary.textContent = `${passed} of ${tests.length} tests passed.`;
+      })().catch((error) => {
+        const summary = document.querySelector("#summary");
+        summary.className = "fail";
+        summary.textContent = `FAIL setup: ${error.message}`;
+      });
+    </script>
+  </body>
+</html>

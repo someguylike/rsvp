@@ -21,13 +21,11 @@
             <label class="field compact-field">
               <span>Month</span>
               <select id="billing-month" name="month" required>
-                <option value="2026-06">June 2026</option>
-                <option value="2026-05">May 2026</option>
-                <option value="2026-04">April 2026</option>
+                <option value="">Loading billing months...</option>
               </select>
             </label>
             <button id="reload-billing-button" class="secondary-button" type="button">
-              Refresh
+              Reload saved bill
             </button>
           </div>
         </div>
@@ -294,6 +292,7 @@
     <script src="./admin-auth.js?v=20260811-1"></script>
     <script src="./vendor/jszip.min.js?v=3.10.1"></script>
     <script src="./billing-parser.js?v=20260920-1"></script>
-    <script src="./billing.js?v=20260920-6"></script>
+    <script src="./balances-core.js?v=20260924-1"></script>
+    <script src="./billing.js?v=20260924-1"></script>
   </body>
 </html>

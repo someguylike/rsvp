@@ -13,8 +13,12 @@ vm.runInContext(
 );
 
 const appsScriptContext = vm.createContext({ console });
+const appsScriptSource = fs.readFileSync(
+  path.join(root, "google-apps-script", "Code.gs"),
+  "utf8",
+);
 vm.runInContext(
-  fs.readFileSync(path.join(root, "google-apps-script", "Code.gs"), "utf8"),
+  appsScriptSource,
   appsScriptContext,
 );
 
@@ -160,6 +164,10 @@ appsScriptContext.getBillingPaymentStatuses_ = () => ({
   "2026-06\nalice": "Paid",
   "2026-07\nbob": "Requested",
 });
+appsScriptContext.formatMonthLabel_ = (month) => ({
+  "2026-06": "June 2026",
+  "2026-07": "July 2026",
+}[month] || month);
 appsScriptContext.getPastBillingSourceMonths_ = () => [
   "2026-05",
   "2026-06",
@@ -192,10 +200,54 @@ assert.deepEqual(
           paymentStatus: "Requested",
         },
       ],
+      calculatedAt: "2026-08-01T00:00:00Z",
     },
   ],
   "globally paid months stay stored but are excluded from payment loading",
 );
+
+const snapshotMonths = appsScriptContext.listBillingMonthSnapshots_();
+assert.equal(snapshotMonths.snapshotReady, true);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(snapshotMonths.months)),
+  [
+    {
+      month: "2026-06",
+      label: "June 2026",
+      playerCount: 1,
+      allPaid: true,
+      billable: true,
+      calculatedAt: "2026-07-01T00:00:00Z",
+    },
+    {
+      month: "2026-07",
+      label: "July 2026",
+      playerCount: 1,
+      allPaid: false,
+      billable: true,
+      calculatedAt: "2026-08-01T00:00:00Z",
+    },
+  ],
+  "member month discovery reads only finalized snapshots",
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(appsScriptContext.getBillingMonths_(false))),
+  JSON.parse(JSON.stringify(snapshotMonths.months)),
+  "the public month-list path never falls back to raw monthly recalculation",
+);
+
+const julySnapshot = appsScriptContext.getBillingMonthSnapshot_("2026-07");
+assert.equal(julySnapshot.source, "balance_snapshot");
+assert.equal(julySnapshot.calculationVersion, 4);
+assert.equal(julySnapshot.members[0].netBalance, 35);
+assert.equal(julySnapshot.members[0].paymentStatus, "Requested");
+assert.deepEqual(JSON.parse(JSON.stringify(julySnapshot.summary)), {
+  totalSpots: 2,
+  totalWeightedSpots: 2,
+  courtTotal: 30,
+  birdieTotal: 10,
+});
+assert.deepEqual(JSON.parse(JSON.stringify(julySnapshot.attendance)), []);
 
 appsScriptContext.getFinalizedBillingMonths_ = () => [
   "2026-06",
@@ -207,5 +259,81 @@ assert.equal(incompleteSnapshots.snapshotReady, false);
 assert.deepEqual(JSON.parse(JSON.stringify(incompleteSnapshots.missingMonths)), [
   "2026-08",
 ]);
+
+{
+  const sourceBilling = {
+    month: "2026-07",
+    attendance: [],
+    courtBlocks: [],
+    birdiePurchases: [],
+    payments: [],
+    adjustments: [],
+    monthStatus: { status: "finalized" },
+  };
+  let refreshCall = null;
+  appsScriptContext.LockService = {
+    getScriptLock: () => ({ waitLock() {}, releaseLock() {} }),
+  };
+  appsScriptContext.getBillingMonth_ = () => sourceBilling;
+  appsScriptContext.refreshBillingMemberBalanceSnapshotIfFinalized_ =
+    (month, billingValue, force) => {
+      refreshCall = { month, billingValue, force };
+      return { month, memberCount: 0 };
+    };
+  const refreshed = appsScriptContext.refreshBillingMonthSnapshot_({
+    month: "2026-07",
+  });
+  assert.equal(refreshed.billing, sourceBilling);
+  assert.equal(refreshCall.month, "2026-07");
+  assert.equal(refreshCall.billingValue, sourceBilling);
+  assert.equal(refreshCall.force, true, "admin refresh must force a snapshot rebuild");
+  assert.match(
+    appsScriptSource,
+    /if \(params\.action === "refreshBillingMonth"\) \{\s*requireAdmin_\(params\);/,
+    "refreshBillingMonth must remain admin-only",
+  );
+}
+
+{
+  let rawReads = 0;
+  let adminChecks = 0;
+  appsScriptContext.jsonp_ = (_callback, payload) => payload;
+  appsScriptContext.hasAdminAccess_ = () => false;
+  appsScriptContext.getBillingMonth_ = () => {
+    rawReads += 1;
+    throw new Error("public request read raw billing data");
+  };
+  appsScriptContext.getBillingMonthSnapshot_ = (month) => ({
+    month,
+    source: "balance_snapshot",
+  });
+  const publicResult = appsScriptContext.doGet({
+    parameter: {
+      action: "listBillingMonth",
+      month: "2026-07",
+      callback: "testCallback",
+    },
+  });
+  assert.equal(publicResult.ok, true);
+  assert.equal(publicResult.billing.source, "balance_snapshot");
+  assert.equal(rawReads, 0, "public month detail must not read raw billing data");
+
+  appsScriptContext.requireAdmin_ = () => {
+    adminChecks += 1;
+  };
+  appsScriptContext.refreshBillingMonthSnapshot_ = () => ({
+    billing: { month: "2026-07" },
+    snapshot: { month: "2026-07" },
+  });
+  const refreshResult = appsScriptContext.doGet({
+    parameter: {
+      action: "refreshBillingMonth",
+      month: "2026-07",
+      callback: "testCallback",
+    },
+  });
+  assert.equal(refreshResult.ok, true);
+  assert.equal(adminChecks, 1, "snapshot refresh must require admin access");
+}
 
 console.log("billing snapshot parity tests passed");

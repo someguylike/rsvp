@@ -374,8 +374,8 @@
     localStorage.setItem(key, JSON.stringify(value));
   }
 
-  function getBillingCacheKey(month) {
-    return `${BILLING_CACHE_PREFIX}${month}`;
+  function getBillingCacheKey(month, role) {
+    return `${BILLING_CACHE_PREFIX}${role || (isAdmin ? "admin" : "member")}:${month}`;
   }
 
   function getBillingCacheTtl() {
@@ -444,7 +444,8 @@
 
   function clearBillingCache(month) {
     if (month) {
-      localStorage.removeItem(getBillingCacheKey(month));
+      localStorage.removeItem(getBillingCacheKey(month, "admin"));
+      localStorage.removeItem(getBillingCacheKey(month, "member"));
     }
   }
 
@@ -693,11 +694,102 @@
       : months || [];
   }
 
-  async function loadBillingMonthOptions() {
+  function createMemberBillingSnapshot(entry, result) {
+    const members = Array.isArray(entry?.members) ? entry.members : [];
+    const summary = members.reduce(
+      (totals, member) => {
+        totals.totalSpots += Number(member.spots || 0);
+        totals.totalWeightedSpots += Number(member.weightedSpots || 0);
+        totals.courtTotalCents += toMoneyCents(member.courtFee);
+        totals.birdieTotalCents += toMoneyCents(member.birdieFee);
+        return totals;
+      },
+      {
+        totalSpots: 0,
+        totalWeightedSpots: 0,
+        courtTotalCents: 0,
+        birdieTotalCents: 0,
+      },
+    );
+
+    return {
+      month: entry.month,
+      source: "balance_snapshot",
+      snapshotReady: true,
+      calculatedAt: entry.calculatedAt || "",
+      calculationVersion: Number(result.calculationVersion || 0),
+      members,
+      summary: {
+        totalSpots: summary.totalSpots,
+        totalWeightedSpots: summary.totalWeightedSpots,
+        courtTotal: summary.courtTotalCents / 100,
+        birdieTotal: summary.birdieTotalCents / 100,
+      },
+      attendance: [],
+      courtBlocks: [],
+      birdieInventory: { startTubes: 0, endTubes: 0 },
+      birdiePurchases: [],
+      payments: members.map((member) => ({
+        playerName: member.name,
+        status: member.paymentStatus,
+      })),
+      adjustments: [],
+      monthStatus: {
+        status: "finalized",
+        note: "",
+        updatedAt: "",
+        updatedBy: "",
+      },
+    };
+  }
+
+  function getBillingMonthsFromResponse(result) {
+    if (isAdmin) {
+      return normalizeBillingMonthOptions(result.months || []);
+    }
+    if (!result.snapshotReady) {
+      const missingMonths = (result.missingMonths || []).join(", ");
+      throw new Error(
+        missingMonths
+          ? `Billing snapshots are still updating for ${missingMonths}`
+          : "Billing snapshots are still updating",
+      );
+    }
+
+    const balancesByMonth = new Map(
+      (result.balances || []).map((entry) => [entry.month, entry]),
+    );
+    balancesByMonth.forEach((entry, month) => {
+      writeBillingCache(month, createMemberBillingSnapshot(entry, result));
+    });
+    return (result.finalizedMonths || []).map((month) => {
+      const balance = balancesByMonth.get(month);
+      return {
+        month,
+        label: formatMonthLabel(month),
+        playerCount: (balance?.members || []).filter(
+          (member) => Number(member.spots || 0) > 0,
+        ).length,
+        allPaid: !balance,
+        billable: true,
+        calculatedAt: balance?.calculatedAt || "",
+      };
+    });
+  }
+
+  function requestBillingMonthOptions() {
+    return requestAppsScript({
+      action: isAdmin ? "listBillingMonths" : "listBillingBalances",
+      adminToken,
+    });
+  }
+
+  async function loadBillingMonthOptions(options) {
     if (LOCAL_BILLING_FIXTURE) {
       return true;
     }
 
+    const forceRefresh = Boolean(options?.forceRefresh);
     const cached = readBillingMonthsCache();
     let hasCachedMonths = false;
     if (cached?.months?.length) {
@@ -709,32 +801,42 @@
             : `Showing older saved billing months from ${formatCacheAge(cached.savedAt)} while refreshing...`,
           "loading",
         );
-        requestAppsScript({
-          action: "listBillingMonths",
-          adminToken,
-        })
-          .then((result) => {
-            const months = normalizeBillingMonthOptions(result.months || []);
-            writeBillingMonthsCache(months);
-            if (months.some((month) => month.month === monthInput.value)) {
-              populateBillingMonthOptions(months);
-            }
-          })
-          .catch(() => {
-            // Keep using cached month options; billing load has its own error path.
-          });
-        return true;
+        const cachedBilling = readBillingCache(monthInput.value);
+        if (
+          !forceRefresh &&
+          isBillingMonthsCacheFresh(cached) &&
+          (isAdmin || isBillingCacheFresh(cachedBilling))
+        ) {
+          setStatus("Billing months loaded from saved data.", "success");
+          return true;
+        }
+        if (isAdmin && !forceRefresh) {
+          requestBillingMonthOptions()
+            .then((result) => {
+              const months = getBillingMonthsFromResponse(result);
+              writeBillingMonthsCache(months);
+              if (months.some((month) => month.month === monthInput.value)) {
+                populateBillingMonthOptions(months);
+              }
+            })
+            .catch(() => {
+              // Keep using cached month options; billing load has its own error path.
+            });
+          return true;
+        }
       }
     }
 
-    setStatus("Loading billing months...", "loading");
+    setStatus(
+      hasCachedMonths
+        ? "Refreshing saved billing snapshots..."
+        : "Loading billing snapshots...",
+      "loading",
+    );
 
     try {
-      const result = await requestAppsScript({
-        action: "listBillingMonths",
-        adminToken,
-      });
-      const months = normalizeBillingMonthOptions(result.months || []);
+      const result = await requestBillingMonthOptions();
+      const months = getBillingMonthsFromResponse(result);
       writeBillingMonthsCache(months);
       const hasMonths = populateBillingMonthOptions(months);
       if (!hasMonths) {
@@ -1435,6 +1537,10 @@
   }
 
   function calculateBilling() {
+    if (backendBilling?.source === "balance_snapshot") {
+      return window.BalanceCalculator.createBillingViewFromSnapshot(backendBilling);
+    }
+
     const courtBlocks = getCourtBlocks();
     const birdieState = getBirdieState();
     const billableAttendanceRows = attendanceRows.filter(
@@ -1634,14 +1740,20 @@
   }
 
   function renderSummary() {
-    const courtTotal = billing.activeCourtBlocks
-      .reduce((sum, block) => sum + Number(block.amount || 0), 0);
-    const birdieTotal = billing.birdieState.purchases
-      .filter(isBilledBirdiePurchase)
-      .reduce(
-      (sum, purchase) => sum + Number(purchase.amount || 0),
-      0,
-    );
+    const courtTotal = billing.summary
+      ? Number(billing.summary.courtTotal || 0)
+      : billing.activeCourtBlocks.reduce(
+          (sum, block) => sum + Number(block.amount || 0),
+          0,
+        );
+    const birdieTotal = billing.summary
+      ? Number(billing.summary.birdieTotal || 0)
+      : billing.birdieState.purchases
+          .filter(isBilledBirdiePurchase)
+          .reduce(
+            (sum, purchase) => sum + Number(purchase.amount || 0),
+            0,
+          );
     const openBalance = billing.members
       .filter((member) => getPaymentStatus(member.name) !== "Paid")
       .reduce((sum, member) => sum + Math.max(0, member.netBalance), 0);
@@ -2441,19 +2553,21 @@
     renderVenmoPaymentAction(member);
     renderCreditBreakdown(member);
 
-    const attendance = document.createElement("section");
-    attendance.className = "billing-detail-section";
-    attendance.append(createCell("h3", "Attendance"));
-    member.attendance.forEach((entry) => {
-      const row = document.createElement("div");
-      row.className = "billing-detail-row";
-      row.append(
-        createCell("span", formatDisplayDate(entry.date)),
-        createCell("strong", `${entry.spots} spot${entry.spots === 1 ? "" : "s"}`),
-      );
-      attendance.append(row);
-    });
-    memberDetail.append(attendance);
+    if (member.attendance?.length) {
+      const attendance = document.createElement("section");
+      attendance.className = "billing-detail-section";
+      attendance.append(createCell("h3", "Attendance"));
+      member.attendance.forEach((entry) => {
+        const row = document.createElement("div");
+        row.className = "billing-detail-row";
+        row.append(
+          createCell("span", formatDisplayDate(entry.date)),
+          createCell("strong", `${entry.spots} spot${entry.spots === 1 ? "" : "s"}`),
+        );
+        attendance.append(row);
+      });
+      memberDetail.append(attendance);
+    }
   }
 
   function render() {
@@ -2699,8 +2813,11 @@
         return;
       }
 
+      const action = isAdmin && forceRefresh
+        ? "refreshBillingMonth"
+        : "listBillingMonth";
       const result = await requestAppsScript({
-        action: "listBillingMonth",
+        action,
         month,
         adminToken,
       });
@@ -2708,7 +2825,14 @@
         return;
       }
       writeBillingCache(month, result.billing);
-      applyBackendBilling(result.billing, message);
+      applyBackendBilling(
+        result.billing,
+        action === "refreshBillingMonth"
+          ? result.snapshot
+            ? "Billing recalculated and the member snapshot was updated."
+            : "Draft billing recalculated. Members only see finalized snapshots."
+          : message,
+      );
     } catch (error) {
       if (requestId !== latestBillingRequest) {
         return;
@@ -3700,6 +3824,7 @@
       const wasAdmin = isAdmin;
       isAdmin = Boolean(state.isLoggedIn);
       adminToken = state.token || "";
+      reloadBillingButton.textContent = isAdmin ? "Recalculate" : "Reload saved bill";
       document.body.classList.toggle("billing-admin", isAdmin);
       document.querySelectorAll(".admin-only").forEach((element) => {
         element.hidden = !isAdmin;
@@ -3743,9 +3868,17 @@
     initializeInputs();
     loadBillingMonth("Month changed. Billing data loaded.");
   });
-  reloadBillingButton.addEventListener("click", () =>
-    loadBillingMonth("Billing reloaded.", { forceRefresh: true }),
-  );
+  reloadBillingButton.addEventListener("click", async () => {
+    if (isAdmin) {
+      loadBillingMonth(null, { forceRefresh: true });
+      return;
+    }
+    const hasMonths = await loadBillingMonthOptions({ forceRefresh: true });
+    if (hasMonths) {
+      initializeInputs();
+      loadBillingMonth("Saved billing reloaded.");
+    }
+  });
   courtForm.addEventListener("submit", handleCourtSubmit);
   courtDateInput.addEventListener("change", updateCourtRateFromDate);
   courtDurationInput.addEventListener("input", updateCourtAmount);
