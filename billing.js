@@ -2566,7 +2566,7 @@
     section.className = "billing-payment-action";
     const tipLabel = document.createElement("label");
     tipLabel.className = "field compact-field billing-tip-field";
-    tipLabel.append(createCell("span", "Optional tip / donation for admin work"));
+    tipLabel.append(createCell("span", "Optional tip / donation"));
     const tipSelect = document.createElement("select");
     [
       ["0", "No tip"],
@@ -2620,9 +2620,13 @@
     if (!isAdmin && backendAvailable && !LOCAL_BILLING_FIXTURE) {
       const reportForm = document.createElement("div");
       reportForm.className = "billing-payment-report";
+      const reportTitle = document.createElement("strong");
+      reportTitle.textContent = "Already paid?";
       const commentLabel = document.createElement("label");
       commentLabel.className = "field";
-      commentLabel.append(createCell("span", "Payment comment (optional)"));
+      commentLabel.append(
+        createCell("span", "Comment for marking this payment paid (optional)"),
+      );
       const commentInput = document.createElement("textarea");
       commentInput.maxLength = 500;
       commentInput.rows = 2;
@@ -2643,7 +2647,7 @@
       const identityNote = document.createElement("p");
       identityNote.className = "billing-payment-help";
       identityNote.textContent = `Only use this for your own payment as ${member.name}. An admin can correct mistakes.`;
-      reportForm.append(commentLabel, markPaidButton, identityNote);
+      reportForm.append(reportTitle, commentLabel, markPaidButton, identityNote);
       section.append(reportForm);
     }
     memberDetail.append(section);
