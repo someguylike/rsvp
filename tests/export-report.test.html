@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Export report tests</title>
+    <style>
+      body { font-family: sans-serif; padding: 24px; }
+      .pass { color: #087a42; }
+      .fail { color: #b42318; }
+    </style>
+  </head>
+  <body>
+    <h1>Export report tests</h1>
+    <p id="summary">Running...</p>
+    <ol id="results"></ol>
+    <script src="../google-apps-script/Code.gs"></script>
+    <script>
+      (() => {
+        const tests = [];
+        const test = (name, fn) => tests.push({ name, fn });
+        const assert = (condition, message) => {
+          if (!condition) throw new Error(message || "Assertion failed");
+        };
+
+        test("loads a live monthly report with one source and roster read", () => {
+          let sourceReads = 0;
+          let rosterReads = 0;
+          const rows = [
+            ["2026-10-02", "Alice", "Yes", 1],
+            ["2026-10-02", "Bob", "Yes", 2],
+            ["2026-10-02", "Cara", "Yes", 1],
+            ["2026-10-04", "Alice", "Yes", 1],
+            ["2026-10-04", "Not On Roster", "Yes", 5],
+            ["2026-09-29", "Alice", "Yes", 5],
+          ];
+          const sourceSheet = {
+            getLastRow: () => rows.length + 1,
+            getRange: (row, column, rowCount, columnCount) => {
+              assert(row === 2 && column === 1, "unexpected source range start");
+              assert(rowCount === rows.length, "unexpected source row count");
+              assert(columnCount === 4, "unexpected source column count");
+              return {
+                getValues: () => {
+                  sourceReads += 1;
+                  return rows;
+                },
+              };
+            },
+          };
+
+          getSheet_ = () => sourceSheet;
+          getRosterNames_ = () => {
+            rosterReads += 1;
+            return ["Alice", "Bob", "Cara"];
+          };
+          Session = {
+            getScriptTimeZone: () => "America/Los_Angeles",
+          };
+          Utilities = {
+            formatDate: (date, timeZone, format) => {
+              assert(timeZone === "America/Los_Angeles", "unexpected time zone");
+              assert(format === "MMMM yyyy", "unexpected date format");
+              return date.toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+              });
+            },
+          };
+          SpreadsheetApp = {
+            openById: () => ({ getSheetByName: () => null }),
+          };
+
+          const report = viewMonthRoster_("2026-10");
+
+          assert(sourceReads === 1, `expected 1 source read, got ${sourceReads}`);
+          assert(rosterReads === 1, `expected 1 roster read, got ${rosterReads}`);
+          assert(report.exportedDates === 1, "only the four-player date is exported");
+          assert(report.previewRows[0][1] === "10/02/2026", "date header is preserved");
+          assert(report.previewRows[1][1] === 1, "Alice count is preserved");
+          assert(report.previewRows[2][1] === 2, "Bob count is preserved");
+          assert(report.previewRows[3][1] === 1, "Cara count is preserved");
+        });
+
+        const results = document.querySelector("#results");
+        let passed = 0;
+        tests.forEach(({ name, fn }) => {
+          const item = document.createElement("li");
+          try {
+            fn();
+            passed += 1;
+            item.className = "pass";
+            item.textContent = `PASS ${name}`;
+          } catch (error) {
+            item.className = "fail";
+            item.textContent = `FAIL ${name}: ${error.message}`;
+          }
+          results.append(item);
+        });
+        const summary = document.querySelector("#summary");
+        summary.className = passed === tests.length ? "pass" : "fail";
+        summary.textContent = `${passed} of ${tests.length} tests passed.`;
+      })();
+    </script>
+  </body>
+</html>

@@ -6,7 +6,7 @@
       id: "admin-billing",
       label: "Admin / Billing",
       url: "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec",
-      deploymentVersion: "2026-09-24.3",
+      deploymentVersion: "2026-10-05.1",
       billingCalculationVersion: 4,
     },
     {

@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-09-24.3";
+const ADMIN_BACKEND_VERSION = "2026-10-05.1";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -4289,7 +4289,8 @@ function exportMonthRoster_(month) {
     exportSheet = targetSpreadsheet.insertSheet(exportSheetName);
   }
 
-  const matrix = buildMonthRosterMatrix_(sourceSheet, month);
+  const monthRosterData = loadMonthRosterData_(sourceSheet, month);
+  const matrix = buildMonthRosterMatrix_(sourceSheet, month, monthRosterData);
 
   exportSheet
     .getRange(1, 1, matrix.length, matrix[0].length)
@@ -4314,20 +4315,28 @@ function exportMonthRoster_(month) {
   };
 }
 
-function buildMonthRosterMatrix_(sourceSheet, month) {
-  const totalsByDate = {};
-  const monthDates = getExportDatesForMonth_(sourceSheet, month).filter((date) => {
-    totalsByDate[date] = getRsvpTotalsByPlayerForDate_(sourceSheet, date);
-    return getTotalParticipants_(totalsByDate[date]) >= MIN_BILLABLE_PARTICIPANTS;
-  });
+function buildMonthRosterMatrix_(sourceSheet, month, loadedMonthRosterData) {
+  const monthRosterData =
+    loadedMonthRosterData || loadMonthRosterData_(sourceSheet, month);
+  const monthDates = Object.keys(monthRosterData.attendanceByDate)
+    .filter(
+      (date) =>
+        getTotalParticipants_(
+          monthRosterData.attendanceByDate[date].totalsByPlayer,
+        ) >= MIN_BILLABLE_PARTICIPANTS,
+    )
+    .sort();
   const header = ["Name"].concat(monthDates.map((date) => formatDisplayDate_(date)));
 
   return [header].concat(
-    getRosterNames_().map((player) => {
+    monthRosterData.rosterNames.map((player) => {
       const normalizedPlayer = normalize_(player);
       return [player].concat(
         monthDates.map((date) => {
-          const total = totalsByDate[date][normalizedPlayer];
+          const total =
+            monthRosterData.attendanceByDate[date].totalsByPlayer[
+              normalizedPlayer
+            ];
           return total ? Math.trunc(total) : "";
         }),
       );
@@ -4348,7 +4357,12 @@ function viewMonthRoster_(month) {
   const targetSpreadsheet = SpreadsheetApp.openById(EXPORT_SPREADSHEET_ID);
   const exportSheetName = formatMonthTabName_(month);
   const exportSheet = targetSpreadsheet.getSheetByName(exportSheetName);
-  const currentDates = getCurrentExportDatesForMonth_(sourceSheet, month);
+  const monthRosterData = loadMonthRosterData_(sourceSheet, month);
+  const currentDates = getCurrentExportDatesForMonth_(
+    sourceSheet,
+    month,
+    monthRosterData,
+  );
 
   if (exportSheet) {
     const savedRows = getPreviewRows_(exportSheet);
@@ -4365,7 +4379,9 @@ function viewMonthRoster_(month) {
       };
     }
 
-    const liveRows = trimEmptyEdges_(buildMonthRosterMatrix_(sourceSheet, month));
+    const liveRows = trimEmptyEdges_(
+      buildMonthRosterMatrix_(sourceSheet, month, monthRosterData),
+    );
     return {
       sheetName: `${exportSheetName} live preview`,
       exportedDates: liveRows.length > 0 ? Math.max(0, liveRows[0].length - 1) : 0,
@@ -4378,7 +4394,9 @@ function viewMonthRoster_(month) {
     };
   }
 
-  const previewRows = trimEmptyEdges_(buildMonthRosterMatrix_(sourceSheet, month));
+  const previewRows = trimEmptyEdges_(
+    buildMonthRosterMatrix_(sourceSheet, month, monthRosterData),
+  );
 
   return {
     sheetName: `${exportSheetName} live preview`,
@@ -4423,48 +4441,38 @@ function trimEmptyEdges_(values) {
   return values.slice(0, lastRow + 1).map((row) => row.slice(0, lastColumn + 1));
 }
 
-function getExportDatesForMonth_(sheet, month) {
+function getPlayDatesForMonth_(month) {
   validateMonth_(month);
-  const dateSet = {};
+  const dates = [];
   const year = Number(month.slice(0, 4));
   const monthIndex = Number(month.slice(5, 7)) - 1;
   const current = new Date(year, monthIndex, 1);
 
   while (current.getMonth() === monthIndex) {
     if (PLAY_DAYS.indexOf(current.getDay()) !== -1) {
-      dateSet[formatDate_(current)] = true;
+      dates.push(formatDate_(current));
     }
     current.setDate(current.getDate() + 1);
   }
 
-  const lastRow = sheet.getLastRow();
-  if (lastRow >= 2) {
-    const rows = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    rows.forEach((row) => {
-      const date = normalizeDate_(row[0]);
-      if (date.indexOf(`${month}-`) === 0) {
-        dateSet[date] = true;
-      }
-    });
-  }
-
-  return Object.keys(dateSet).sort();
+  return dates;
 }
 
-function getCurrentExportDatesForMonth_(sheet, month) {
+function loadMonthRosterData_(sheet, month) {
   validateMonth_(month);
-  const totalsByDate = {};
-  const year = Number(month.slice(0, 4));
-  const monthIndex = Number(month.slice(5, 7)) - 1;
-  const current = new Date(year, monthIndex, 1);
-  const rosterNameSet = getRosterNameSet_();
+  const rosterNames = getRosterNames_();
+  const rosterNameSet = rosterNames.reduce((names, playerName) => {
+    names[normalize_(playerName)] = true;
+    return names;
+  }, {});
+  const attendanceByDate = {};
 
-  while (current.getMonth() === monthIndex) {
-    if (PLAY_DAYS.indexOf(current.getDay()) !== -1) {
-      totalsByDate[formatDate_(current)] = 0;
-    }
-    current.setDate(current.getDate() + 1);
-  }
+  getPlayDatesForMonth_(month).forEach((date) => {
+    attendanceByDate[date] = {
+      totalParticipants: 0,
+      totalsByPlayer: {},
+    };
+  });
 
   const lastRow = sheet.getLastRow();
   if (lastRow >= 2) {
@@ -4480,18 +4488,40 @@ function getCurrentExportDatesForMonth_(sheet, month) {
           return;
         }
 
-        if (!Object.prototype.hasOwnProperty.call(totalsByDate, date)) {
-          totalsByDate[date] = 0;
+        if (!Object.prototype.hasOwnProperty.call(attendanceByDate, date)) {
+          attendanceByDate[date] = {
+            totalParticipants: 0,
+            totalsByPlayer: {},
+          };
         }
 
-        if (vote === "yes" && isRosterPlayer_(playerName, rosterNameSet)) {
-          totalsByDate[date] += clampStoredParticipantCount_(row[3]);
+        if (vote !== "yes" || !isRosterPlayer_(playerName, rosterNameSet)) {
+          return;
         }
+
+        const participantCount = clampStoredParticipantCount_(row[3]);
+        attendanceByDate[date].totalParticipants += participantCount;
+        attendanceByDate[date].totalsByPlayer[normalize_(playerName)] =
+          participantCount;
       });
   }
 
-  return Object.keys(totalsByDate)
-    .filter((date) => totalsByDate[date] >= MIN_BILLABLE_PARTICIPANTS)
+  return {
+    rosterNames,
+    attendanceByDate,
+  };
+}
+
+function getCurrentExportDatesForMonth_(sheet, month, loadedMonthRosterData) {
+  const monthRosterData =
+    loadedMonthRosterData || loadMonthRosterData_(sheet, month);
+
+  return Object.keys(monthRosterData.attendanceByDate)
+    .filter(
+      (date) =>
+        monthRosterData.attendanceByDate[date].totalParticipants >=
+        MIN_BILLABLE_PARTICIPANTS,
+    )
     .sort();
 }
 
@@ -4532,38 +4562,6 @@ function getMissingDates_(currentDates, savedDates) {
   }, {});
 
   return currentDates.filter((date) => !savedDateSet[date]);
-}
-
-function getRsvpTotalsByPlayerForDate_(sheet, playDate) {
-  const lastRow = sheet.getLastRow();
-  const rosterNameSet = getRosterNameSet_();
-  const totals = {};
-
-  if (lastRow < 2) {
-    return totals;
-  }
-
-  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
-  rows.forEach((row) => {
-    const rowDate = normalizeDate_(row[0]);
-    const playerName = String(row[1] || "").trim();
-    const vote = normalize_(row[2]);
-    const participantCount = clampStoredParticipantCount_(row[3]);
-
-    if (
-      rowDate !== playDate ||
-      vote !== "yes" ||
-      !isRosterPlayer_(playerName, rosterNameSet)
-    ) {
-      return;
-    }
-
-    totals[normalize_(playerName)] = Number.isFinite(participantCount)
-      ? participantCount
-      : 1;
-  });
-
-  return totals;
 }
 
 function getTotalParticipants_(totalsByPlayer) {
