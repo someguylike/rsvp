@@ -7,18 +7,18 @@ const ROSTER_CACHE_KEY = "rsvp-public-roster-v1";
 const ROSTER_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const TALLY_CACHE_KEY_PREFIX = "rsvp-tally-v1:";
 // Bump this whenever deployment-relevant code in this file changes.
-const RSVP_BACKEND_VERSION = "2026-09-20.2";
+const RSVP_BACKEND_VERSION = "2026-10-09.1";
 // The admin tool writes through a separate Apps Script project and cannot
 // invalidate this cache. Keep this below one minute while spanning the
 // frontend's 30-second refresh interval so every other poll can be a cache hit.
 const TALLY_CACHE_TTL_SECONDS = 45;
 const PLAY_DAYS = [2, 4, 5, 0];
 const PLAY_START_HOUR = 6;
-const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
+const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 8;
 const UNVOTE_LOCK_MESSAGE =
-  "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.";
+  "RSVP removals close at 10 PM the night before the play date. No-shows may still be charged court fees.";
 const RSVP_CHANGE_LOCK_MESSAGE =
-  "RSVP changes close at 12AM before the play date. Contact an admin for corrections.";
+  "RSVP changes close at 10 PM the night before the play date. Contact an admin for corrections.";
 
 const HEADERS = [
   "Play Date",
@@ -827,10 +827,11 @@ function isUnvoteLocked_(playDate) {
     0,
     0,
   );
-  const lockTime = new Date(
-    playStart.getTime() - UNVOTE_LOCK_HOURS_BEFORE_PLAY * 60 * 60 * 1000,
+  // Subtract calendar hours to preserve 10 PM across overnight DST changes.
+  playStart.setHours(
+    playStart.getHours() - UNVOTE_LOCK_HOURS_BEFORE_PLAY,
   );
-  return new Date() >= lockTime;
+  return new Date() >= playStart;
 }
 
 function isRosterPlayer_(playerName, rosterNameSet) {

@@ -79,7 +79,7 @@
           assertEqual(
             window.RsvpRules.isUnvoteLocked(
               "2026-06-28",
-              new Date(2026, 5, 27, 23, 59, 59),
+              new Date(2026, 5, 27, 21, 59, 59, 999),
             ),
             false,
           );
@@ -89,38 +89,38 @@
           assertEqual(
             window.RsvpRules.isUnvoteLocked(
               "2026-06-28",
-              new Date(2026, 5, 28, 0, 0, 0),
+              new Date(2026, 5, 27, 22, 0, 0),
             ),
             true,
           );
         });
 
-        test("unvote lock is midnight for a 6AM play start", () => {
+        test("unvote lock is 10 PM the night before a 6AM play start", () => {
           assertDateValue(
             window.RsvpRules.getUnvoteLockTime("2026-06-28"),
-            "2026-06-28",
+            "2026-06-27",
           );
           assertEqual(
             window.RsvpRules.getUnvoteLockTime("2026-06-28").getHours(),
-            0,
+            22,
           );
         });
 
-        test("unvote is allowed before midnight cutoff", () => {
+        test("unvote is allowed before 10 PM cutoff", () => {
           assertEqual(
             window.RsvpRules.isUnvoteLocked(
               "2026-06-28",
-              new Date(2026, 5, 27, 23, 59, 59),
+              new Date(2026, 5, 27, 21, 59, 59, 999),
             ),
             false,
           );
         });
 
-        test("unvote is blocked at midnight cutoff", () => {
+        test("unvote is blocked at 10 PM cutoff", () => {
           assertEqual(
             window.RsvpRules.isUnvoteLocked(
               "2026-06-28",
-              new Date(2026, 5, 28, 0, 0, 0),
+              new Date(2026, 5, 27, 22, 0, 0),
             ),
             true,
           );
@@ -134,6 +134,28 @@
             ),
             true,
           );
+        });
+
+        [
+          ["2026-03-08", new Date(2026, 2, 7, 22)],
+          ["2026-11-01", new Date(2026, 9, 31, 22)],
+          ["2027-01-01", new Date(2026, 11, 31, 22)],
+        ].forEach(([playDate, cutoff]) => {
+          test(`${playDate} cutoff stays at 10 PM across DST or year rollover`, () => {
+            assertEqual(
+              window.RsvpRules.getUnvoteLockTime(playDate).getTime(),
+              cutoff.getTime(),
+            );
+            assertEqual(
+              window.RsvpRules.isUnvoteLocked(playDate, new Date(cutoff.getTime() - 1)),
+              false,
+            );
+            assertEqual(window.RsvpRules.isUnvoteLocked(playDate, cutoff), true);
+            assertEqual(
+              window.RsvpRules.isUnvoteLocked(playDate, new Date(cutoff.getTime() + 1)),
+              true,
+            );
+          });
         });
 
         let passed = 0;

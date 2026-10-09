@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-10-05.1";
+const ADMIN_BACKEND_VERSION = "2026-10-09.1";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -22,11 +22,11 @@ const MAX_PAYMENT_COMMENT_LENGTH = 500;
 const ADMIN_TOKEN_TTL_SECONDS = 21600;
 const PLAY_DAYS = [2, 4, 5, 0];
 const PLAY_START_HOUR = 6;
-const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
+const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 8;
 const UNVOTE_LOCK_MESSAGE =
-  "RSVP removals close at 12AM before the play date. No-shows may still be charged court fees.";
+  "RSVP removals close at 10 PM the night before the play date. No-shows may still be charged court fees.";
 const RSVP_CHANGE_LOCK_MESSAGE =
-  "RSVP changes close at 12AM before the play date. Contact an admin for corrections.";
+  "RSVP changes close at 10 PM the night before the play date. Contact an admin for corrections.";
 const HEADERS = [
   "Play Date",
   "Player Name",
@@ -4810,10 +4810,11 @@ function isUnvoteLocked_(playDate) {
     0,
     0,
   );
-  const lockTime = new Date(
-    playStart.getTime() - UNVOTE_LOCK_HOURS_BEFORE_PLAY * 60 * 60 * 1000,
+  // Subtract calendar hours to preserve 10 PM across overnight DST changes.
+  playStart.setHours(
+    playStart.getHours() - UNVOTE_LOCK_HOURS_BEFORE_PLAY,
   );
-  return new Date() >= lockTime;
+  return new Date() >= playStart;
 }
 
 function formatDate_(date) {

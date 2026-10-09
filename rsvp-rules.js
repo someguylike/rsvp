@@ -1,6 +1,6 @@
 (function (global) {
   const DEFAULT_PLAY_START_HOUR = 6;
-  const DEFAULT_UNVOTE_LOCK_HOURS_BEFORE_PLAY = 6;
+  const DEFAULT_UNVOTE_LOCK_HOURS_BEFORE_PLAY = 8;
 
   function formatDate(date) {
     const year = date.getFullYear();
@@ -44,16 +44,16 @@
       return null;
     }
 
-    return new Date(
-      playStart.getTime() -
+    // Use local calendar hours so the cutoff stays at 10 PM the night before
+    // a 6 AM session even when daylight saving time changes overnight.
+    playStart.setHours(
+      playStart.getHours() -
         Number(
           options?.unvoteLockHoursBeforePlay ??
             DEFAULT_UNVOTE_LOCK_HOURS_BEFORE_PLAY,
-        ) *
-          60 *
-          60 *
-          1000,
+        ),
     );
+    return playStart;
   }
 
   function isUnvoteLocked(value, now, options) {

@@ -8,6 +8,7 @@ Static RSVP page for weekly play sessions.
 - Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an optional calendar picker.
 - Reserved spots defaults to `1` for the player; increase it to include guests.
 - Reserved spots `0` means not going and removes that player/date reservation.
+- Voting, changes, and removals close at 10 PM the night before the play date.
 - Submit writes to Google Sheets through Apps Script.
 - Dedup key is `Play Date + normalized Player Name`; duplicate submissions update the existing row.
 - Existing RSVPs show a confirmation dialog before they are overwritten.
@@ -88,6 +89,7 @@ Then open:
 - Export page: `http://localhost:8000/export.html`
 - Billing page: `http://localhost:8000/billing.html`
 - Browser tests: `http://localhost:8000/tests/rsvp-rules.test.html`
+- Backend cutoff tests: `http://localhost:8000/tests/rsvp-cutoff-backend.test.html`
 - Billing parser tests: `http://localhost:8000/tests/billing-parser.test.html`
 
 Development workflow:
@@ -165,6 +167,16 @@ RSVP backend deployment is also manual:
 7. Copy the RSVP Web App URL into `app.js` as `APPS_SCRIPT_URL`.
 8. Bump the `app.js` query string in `index.html`.
 9. Commit and push the URL/cachebuster change.
+
+The 10 PM voting cutoff is enforced in `rsvp-rules.js` and both Apps Script
+backends. It uses local calendar hours (8 hours before a 6 AM play start) so
+daylight-saving changes do not shift the cutoff. Both Apps Script projects must
+use the play venue's time zone, `America/Los_Angeles`. Public new votes, changes,
+and removals close at the cutoff; authenticated admin corrections still follow
+the existing Draft-month rules. Deploy a **New version** of both existing Web
+App deployments after changing the cutoff, keeping their URLs unchanged.
+For this update, both expected backend versions are `2026-10-09.1` and the
+billing calculation version remains `4`; no billing snapshot backfill is needed.
 
 ## Production Reset
 

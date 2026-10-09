@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RSVP backend cutoff tests</title>
+    <style>
+      body { font-family: sans-serif; padding: 24px; }
+      .pass { color: #087a42; }
+      .fail { color: #b42318; }
+    </style>
+  </head>
+  <body>
+    <h1>RSVP backend cutoff tests</h1>
+    <p id="summary">Running...</p>
+    <p id="timezone"></p>
+    <ol id="results"></ol>
+    <script>
+      (async () => {
+        const results = document.querySelector("#results");
+        const summary = document.querySelector("#summary");
+        const tests = [];
+        const test = (name, fn) => tests.push({ name, fn });
+        const assert = (condition, message) => {
+          if (!condition) throw new Error(message || "Assertion failed");
+        };
+        const expectError = (fn, pattern) => {
+          let error;
+          try { fn(); } catch (caught) { error = caught; }
+          assert(error && pattern.test(error.message),
+            `Expected ${pattern}, received ${error?.message || "no error"}`);
+        };
+
+        // Execute each complete backend in its own scope with a fixed clock.
+        // Mock sheet access with a sentinel: allowed requests reach it, while
+        // closed requests must fail earlier without touching RSVP data.
+        function loadBackend(source, now) {
+          class FixedDate extends Date {
+            constructor(...args) {
+              super(...(args.length ? args : [now.getTime()]));
+            }
+            static now() { return now.getTime(); }
+          }
+          return new Function("Date", `${source}
+            const LockService = {
+              getScriptLock: () => ({ waitLock() {}, releaseLock() {} }),
+            };
+            if (typeof isBillingMonthFinalized_ === "function") {
+              isBillingMonthFinalized_ = () => false;
+            }
+            if (typeof getBillingMonthStatus_ === "function") {
+              getBillingMonthStatus_ = () => ({ status: "Draft" });
+            }
+            getRosterNameSet_ = () => ({ "nam pham": true });
+            validatePlayerName_ = () => {};
+            getSheet_ = () => { throw new Error("reached RSVP data"); };
+            if (typeof invalidateTallyCache_ === "function") {
+              invalidateTallyCache_ = () => {};
+            }
+            return {
+              isLocked: isUnvoteLocked_,
+              guard: requirePublicRsvpMutationAllowed_,
+              upsert: upsertRsvpWithLock_,
+              remove: deleteRsvp_,
+              isUnvoteBlocked: typeof isUnvoteBlocked_ === "function"
+                ? isUnvoteBlocked_ : null,
+            };
+          `)(FixedDate);
+        }
+
+        document.querySelector("#timezone").textContent =
+          `Test time zone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+
+        try {
+          const backends = await Promise.all([
+            ["Admin", "../google-apps-script/Code.gs"],
+            ["RSVP", "../google-apps-script/rsvp-web-app/Code.gs"],
+          ].map(async ([name, url]) => {
+            const response = await fetch(url);
+            assert(response.ok, `Could not load ${name} backend`);
+            return [name, await response.text()];
+          }));
+          const cases = [
+            ["2026-10-11", new Date(2026, 9, 10, 22)],
+            ["2026-03-08", new Date(2026, 2, 7, 22)],
+            ["2026-11-01", new Date(2026, 9, 31, 22)],
+            ["2027-01-01", new Date(2026, 11, 31, 22)],
+          ];
+
+          backends.forEach(([name, source]) => {
+            cases.forEach(([playDate, cutoff]) => {
+              [-1, 0, 1, 60 * 60 * 1000].forEach((offset) => {
+                test(`${name}: ${playDate} ${offset}ms from 10 PM cutoff`, () => {
+                  const backend = loadBackend(source, new Date(cutoff.getTime() + offset));
+                  const locked = offset >= 0;
+                  assert(backend.isLocked(playDate) === locked, "Wrong lock boundary");
+                  const payload = {
+                    playDate,
+                    playerName: "Nam Pham",
+                    participantCount: 1,
+                    confirmOverride: "true",
+                  };
+                  if (locked) {
+                    expectError(() => backend.guard(playDate), /10 PM the night before/);
+                  } else {
+                    backend.guard(playDate);
+                  }
+                  const expected = locked ? /10 PM the night before/ : /reached RSVP data/;
+                  expectError(() => backend.upsert(payload), expected);
+                  expectError(() => backend.upsert({ ...payload, participantCount: 0 }), expected);
+                  expectError(() => backend.remove(payload), expected);
+                  if (backend.isUnvoteBlocked) {
+                    assert(backend.isUnvoteBlocked({ action: "adminUpsertRsvp" }, playDate) === false,
+                      "Admin correction exemption must remain available");
+                  }
+                });
+              });
+            });
+          });
+        } catch (error) {
+          test("loads backend source files", () => { throw error; });
+        }
+
+        let passed = 0;
+        tests.forEach(({ name, fn }) => {
+          const item = document.createElement("li");
+          try {
+            fn();
+            passed += 1;
+            item.className = "pass";
+            item.textContent = `PASS ${name}`;
+          } catch (error) {
+            item.className = "fail";
+            item.textContent = `FAIL ${name}: ${error.message}`;
+          }
+          results.append(item);
+        });
+        summary.className = passed === tests.length ? "pass" : "fail";
+        summary.textContent = `${passed} of ${tests.length} tests passed.`;
+      })();
+    </script>
+  </body>
+</html>
