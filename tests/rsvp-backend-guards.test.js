@@ -21,8 +21,12 @@ vm.runInContext(
 );
 
 assert.equal(context.validatePlayDate_("2026-05-24"), "2026-05-24");
+assert.equal(
+  context.validatePlayDate_("2026-05-25"),
+  "2026-05-25",
+  "players may RSVP for dates outside the usual weekly schedule",
+);
 assert.throws(() => context.validatePlayDate_("2026-02-30"), /invalid/);
-assert.throws(() => context.validatePlayDate_("2026-05-25"), /must be Tuesday/);
 
 context.isBillingMonthFinalized_ = () => true;
 assert.throws(

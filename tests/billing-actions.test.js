@@ -87,8 +87,12 @@ function createAppsScriptContext() {
 
 {
   assert.equal(context.validatePlayDate_("2026-05-24"), "2026-05-24");
+  assert.equal(
+    context.validatePlayDate_("2026-05-25"),
+    "2026-05-25",
+    "admin RSVP edits support dates outside the usual weekly schedule",
+  );
   assert.throws(() => context.validatePlayDate_("2026-02-30"), /invalid/);
-  assert.throws(() => context.validatePlayDate_("2026-05-25"), /must be Tuesday/);
   assert.equal(
     context.validateBirdieDateForMonth_(
       "2026-04-15",

@@ -7,12 +7,11 @@ const ROSTER_CACHE_KEY = "rsvp-public-roster-v1";
 const ROSTER_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const TALLY_CACHE_KEY_PREFIX = "rsvp-tally-v1:";
 // Bump this whenever deployment-relevant code in this file changes.
-const RSVP_BACKEND_VERSION = "2026-10-09.1";
+const RSVP_BACKEND_VERSION = "2026-11-03.1";
 // The admin tool writes through a separate Apps Script project and cannot
 // invalidate this cache. Keep this below one minute while spanning the
 // frontend's 30-second refresh interval so every other poll can be a cache hit.
 const TALLY_CACHE_TTL_SECONDS = 45;
-const PLAY_DAYS = [2, 4, 5, 0];
 const PLAY_START_HOUR = 6;
 const UNVOTE_LOCK_HOURS_BEFORE_PLAY = 8;
 const UNVOTE_LOCK_MESSAGE =
@@ -770,13 +769,7 @@ function validateIsoDate_(value, label) {
 }
 
 function validatePlayDate_(value) {
-  const playDate = validateIsoDate_(value, "Play date");
-  const parts = playDate.split("-").map(Number);
-  const dayOfWeek = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getUTCDay();
-  if (PLAY_DAYS.indexOf(dayOfWeek) === -1) {
-    throw new Error("Play date must be Tuesday, Thursday, Friday, or Sunday");
-  }
-  return playDate;
+  return validateIsoDate_(value, "Play date");
 }
 
 function normalizeMonth_(value) {

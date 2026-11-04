@@ -5,7 +5,7 @@ Static RSVP page for weekly play sessions.
 ## What it does
 
 - Player name is limited to a fixed roster dropdown.
-- Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an optional calendar picker.
+- Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an **Other date** calendar picker that accepts any valid date.
 - Reserved spots defaults to `1` for the player; increase it to include guests.
 - Reserved spots `0` means not going and removes that player/date reservation.
 - Voting, changes, and removals close at 10 PM the night before the play date.
@@ -174,8 +174,9 @@ daylight-saving changes do not shift the cutoff. Both Apps Script projects must
 use the play venue's time zone, `America/Los_Angeles`. Public new votes, changes,
 and removals close at the cutoff; authenticated admin corrections still follow
 the existing Draft-month rules. Deploy a **New version** of both existing Web
-App deployments after changing the cutoff, keeping their URLs unchanged.
-For this update, both expected backend versions are `2026-10-09.1` and the
+App deployments after changing RSVP validation or cutoff behavior, keeping
+their URLs unchanged.
+For this update, both expected backend versions are `2026-11-03.1` and the
 billing calculation version remains `4`; no billing snapshot backfill is needed.
 
 ## Production Reset

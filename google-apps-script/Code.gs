@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-10-09.1";
+const ADMIN_BACKEND_VERSION = "2026-11-03.1";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -4609,13 +4609,7 @@ function validateIsoDate_(value, label) {
 }
 
 function validatePlayDate_(value) {
-  const playDate = validateIsoDate_(value, "Play date");
-  const parts = playDate.split("-").map(Number);
-  const dayOfWeek = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getUTCDay();
-  if (PLAY_DAYS.indexOf(dayOfWeek) === -1) {
-    throw new Error("Play date must be Tuesday, Thursday, Friday, or Sunday");
-  }
-  return playDate;
+  return validateIsoDate_(value, "Play date");
 }
 
 function requirePublicRsvpMutationAllowed_(playDate) {
