@@ -10,6 +10,8 @@
   const nameInput = document.querySelector("#member-name");
   const memberNameList = document.querySelector("#member-name-list");
   const venmoInput = document.querySelector("#venmo");
+  const zelleInput = document.querySelector("#zelle");
+  const zellePlaceholder = zelleInput.placeholder;
   const messengerInput = document.querySelector("#messenger");
   const noteInput = document.querySelector("#member-note");
   const memberSearch = document.querySelector("#member-search");
@@ -20,6 +22,8 @@
   let roster = [];
   let adminToken = "";
   let editingOriginalName = "";
+  let rosterRequestId = 0;
+  let adminLoginExpired = false;
 
   function setStatus(message, type) {
     status.textContent = message;
@@ -29,8 +33,27 @@
   function renderAdminState() {
     adminEyebrow.hidden = !adminToken;
     noteInput.disabled = false;
+    updateZelleInputState(findRosterMemberByName(editingOriginalName));
     updateSaveButtonLabel();
     renderRoster();
+  }
+
+  // The public roster only says whether a Zelle exists (hasZelle); the admin
+  // roster has the value. Lock the field until the value is known so an empty
+  // input never clears a stored Zelle.
+  function updateZelleInputState(member) {
+    const isHiddenOnFile = Boolean(member?.hasZelle);
+    zelleInput.disabled = isHiddenOnFile;
+    if (isHiddenOnFile) {
+      zelleInput.value = "";
+    }
+    zelleInput.placeholder = isHiddenOnFile
+      ? adminToken
+        ? adminLoginExpired
+          ? "On file (admin login expired; log in again)"
+          : "On file (loading...)"
+        : "On file (only admins can view or change it)"
+      : zellePlaceholder;
   }
 
   function buildAppsScriptUrl(payload, callbackName) {
@@ -152,6 +175,7 @@
   function clearForm() {
     form.reset();
     editingOriginalName = "";
+    updateZelleInputState(null);
     updateSaveButtonLabel();
     renderRoster();
     nameInput.focus();
@@ -173,8 +197,10 @@
     editingOriginalName = member.name || "";
     nameInput.value = member.name || "";
     venmoInput.value = member.venmo || "";
+    zelleInput.value = member.zelle || "";
     messengerInput.value = member.messenger || "";
     noteInput.value = member.note || "";
+    updateZelleInputState(member);
     updateSaveButtonLabel();
     if (options?.focusRelevantField) {
       focusRelevantMemberField(member);
@@ -277,6 +303,31 @@
     return `https://account.venmo.com/u/${handle}`;
   }
 
+  function appendZelleCell(row, member) {
+    const zelle = String(member.zelle || "").trim();
+    if (!zelle) {
+      const cell = appendLinkCell(row, "", "", "", "zelle");
+      if (member.hasZelle) {
+        const onFile = document.createElement("span");
+        onFile.className = "contact-chip muted-contact";
+        onFile.textContent = "On file";
+        onFile.title = "Only admins can view Zelle details";
+        cell.replaceChildren(onFile);
+      }
+      return cell;
+    }
+
+    const normalized = normalizeZelle(zelle);
+    const isLink = /^https:\/\//.test(normalized);
+    return appendLinkCell(
+      row,
+      isLink ? "Zelle link" : zelle,
+      isLink ? normalized : "",
+      normalized ? "" : "Invalid Zelle. Use a Zelle QR link, email, or US phone number.",
+      "zelle",
+    );
+  }
+
   function getMessengerUrl(value) {
     const contact = normalizeMessengerContact(value);
     if (!contact) {
@@ -359,6 +410,35 @@
     return /^[A-Za-z0-9_.-]{2,30}$/.test(handle) ? handle : "";
   }
 
+  // Mirrors normalizeZelle_ in google-apps-script/Code.gs.
+  function normalizeZelle(value) {
+    const text = String(value || "").trim();
+    const urlMatch = text.match(
+      /^(?:https?:\/\/)?((?:[a-z0-9-]+\.)*(?:zellepay|zelle)\.com)(\/\S*)?$/i,
+    );
+    if (urlMatch && text.length <= 2000) {
+      return `https://${urlMatch[1].toLowerCase()}${urlMatch[2] || ""}`;
+    }
+
+    if (
+      text.length <= 254 &&
+      /^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(text)
+    ) {
+      return text.toLowerCase();
+    }
+
+    if (/^[0-9\s().+-]+$/.test(text)) {
+      const digits = text.replace(/\D/g, "");
+      const national =
+        digits.length === 11 && digits[0] === "1" ? digits.slice(1) : digits;
+      if (national.length === 10) {
+        return `(${national.slice(0, 3)}) ${national.slice(3, 6)}-${national.slice(6)}`;
+      }
+    }
+
+    return "";
+  }
+
   function normalizeMessengerContact(value) {
     const text = String(value || "").trim();
     if (!text) {
@@ -414,7 +494,7 @@
     }
 
     return roster.filter((member) =>
-      [member.name, member.venmo, member.messenger, member.note].some(
+      [member.name, member.venmo, member.zelle, member.messenger, member.note].some(
         (value) => normalizeSearchText(value).includes(query),
       ),
     );
@@ -441,7 +521,7 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    const headers = ["Name", "Venmo", "Facebook", "Note"];
+    const headers = ["Name", "Venmo", "Zelle", "Facebook", "Note"];
     if (adminToken) {
       headers.push("Actions");
     }
@@ -493,6 +573,7 @@
           : "",
         "venmo",
       ).dataset.label = "Venmo";
+      appendZelleCell(row, member).dataset.label = "Zelle";
       const messengerUrl = getMessengerUrl(member.messenger);
       appendLinkCell(
         row,
@@ -531,22 +612,53 @@
   }
 
   async function loadRoster() {
+    const requestId = ++rosterRequestId;
     setStatus("Loading roster...", "");
     try {
       const result = await requestAppsScript({
         action: "listRoster",
+        ...(adminToken ? { adminToken } : {}),
       });
+      if (requestId !== rosterRequestId) {
+        return;
+      }
+      // Older backends omit isAdmin; only an explicit false means expired.
+      adminLoginExpired = Boolean(adminToken) && result.isAdmin === false;
       roster = Array.isArray(result.roster) ? result.roster : [];
+      const editingMember = findRosterMemberByName(editingOriginalName);
+      if (editingMember && zelleInput.disabled) {
+        zelleInput.value = editingMember.zelle || "";
+      }
+      updateZelleInputState(editingMember);
       renderMemberNameOptions();
       renderRoster();
-      setStatus("Roster loaded.", "success");
+      if (adminLoginExpired) {
+        setStatus("Admin login expired. Log in again on the Admin page.", "error");
+      } else {
+        setStatus("Roster loaded.", "success");
+      }
     } catch (error) {
+      if (requestId !== rosterRequestId) {
+        return;
+      }
       memberCount.textContent = "Could not load roster";
       setStatus(error.message, "error");
     }
   }
 
+  // Write responses carry the roster for the role that sent them. If the admin
+  // state changed meanwhile, refetch instead of showing the wrong view.
+  function applyRosterResult(result, requestToken) {
+    if (requestToken !== adminToken) {
+      loadRoster();
+      return;
+    }
+    rosterRequestId += 1;
+    roster = Array.isArray(result.roster) ? result.roster : [];
+  }
+
   async function saveMember(payload) {
+    const requestToken = adminToken;
     saveButton.disabled = true;
     setStatus(adminToken ? "Saving member..." : "Adding missing info...", "");
 
@@ -559,7 +671,7 @@
         adminToken,
         ...payload,
       });
-      roster = Array.isArray(result.roster) ? result.roster : [];
+      applyRosterResult(result, requestToken);
       refreshPublicRsvpRosterCache();
       renderMemberNameOptions();
       renderRoster();
@@ -609,13 +721,14 @@
     }
 
     setStatus("Removing member...", "");
+    const requestToken = adminToken;
     try {
       const result = await requestAppsScript({
         action: "removeRosterMember",
         adminToken,
         playerName,
       });
-      roster = Array.isArray(result.roster) ? result.roster : [];
+      applyRosterResult(result, requestToken);
       refreshPublicRsvpRosterCache();
       renderMemberNameOptions();
       renderRoster();
@@ -670,6 +783,22 @@
       }
       payload.messenger = messengerContact.url;
     }
+
+    const zelle = zelleInput.value.trim();
+    if (zelleInput.disabled) {
+      // Stored Zelle is hidden; leave it unchanged.
+    } else if (zelle) {
+      const normalizedZelle = normalizeZelle(zelle);
+      if (!normalizedZelle) {
+        setStatus("Enter a valid Zelle QR link, email, or US phone number.", "error");
+        return;
+      }
+      payload.zelle = normalizedZelle;
+    } else if (adminToken && findRosterMemberByName(editingOriginalName)?.zelle) {
+      // The admin emptied a Zelle they could see: clear it. Otherwise send
+      // nothing so the backend keeps whatever is stored.
+      payload.zelle = "";
+    }
     if (isRenamingMember()) {
       payload.oldPlayerName = editingOriginalName;
     }
@@ -697,8 +826,13 @@
   });
 
   function handleAdminStateChange(state) {
+    const previousToken = adminToken;
     adminToken = state.token || "";
     renderAdminState();
+    // Admin and public roster responses differ (Zelle details), so refetch.
+    if (adminToken !== previousToken) {
+      loadRoster();
+    }
   }
 
   adminAuth.onChange(handleAdminStateChange);

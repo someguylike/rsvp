@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Roster</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260918-3" />
+    <link rel="stylesheet" href="./styles.css?v=20261104-1" />
   </head>
   <body>
     <main class="shell">
@@ -53,6 +53,17 @@
                 placeholder="@username"
                 title="Used for payment collection"
                 required
+              />
+            </label>
+
+            <label class="field">
+              <span>Zelle <small class="field-tag">Optional</small></span>
+              <input
+                id="zelle"
+                name="zelle"
+                autocomplete="off"
+                placeholder="Zelle QR link, email, or phone"
+                title="Used for payment collection. Only admins can see it."
               />
             </label>
 
@@ -111,6 +122,6 @@
     </main>
 
     <script src="./admin-auth.js?v=20260811-1"></script>
-    <script src="./roster.js?v=20260702-1"></script>
+    <script src="./roster.js?v=20261104-1"></script>
   </body>
 </html>

@@ -16,7 +16,7 @@ Static RSVP page for weekly play sessions.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
 - `billing.html` renders finalized member billing from persisted balance snapshots; authenticated admins can load source details and explicitly recalculate a month.
 - `admin.html` shows the current login state, provides Log Out when authenticated, and lets an admin edit the current month attendance in a player-by-date table. Backend deployment health is visible and queried only while logged in.
-- `roster.html` lets an admin add, remove, and update roster Venmo and Messenger details.
+- `roster.html` lets an admin add, remove, and update roster Venmo, Zelle, and Messenger details. Zelle (a Zelle QR link, email, or US phone number) is optional and visible only to logged-in admins; other visitors see only whether one is on file and can add a missing one.
 
 ## Recommended Hosting
 
@@ -28,7 +28,7 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 
 - `index.html`, `app.js`, `styles.css`: public RSVP page.
 - `admin.html`, `admin.js`: admin page for editing player/date attendance counts.
-- `roster.html`, `roster.js`: admin page for roster membership, Venmo, and Messenger details.
+- `roster.html`, `roster.js`: admin page for roster membership, Venmo, Zelle, and Messenger details.
 - `export.html`, `export.js`: admin page for monthly roster export.
 - `billing.html`, `billing.js`: billing page for court block entry, birdie cost entry, and member balance calculation.
 - `payment.html`, `balances.js`, `balances-core.js`: Payment page with monthly balances, paid-month history, and one Venmo action per amount due.
@@ -176,8 +176,15 @@ and removals close at the cutoff; authenticated admin corrections still follow
 the existing Draft-month rules. Deploy a **New version** of both existing Web
 App deployments after changing RSVP validation or cutoff behavior, keeping
 their URLs unchanged.
-For this update, both expected backend versions are `2026-11-03.1` and the
-billing calculation version remains `4`; no billing snapshot backfill is needed.
+The expected backend versions are `2026-11-04.1` (Admin/Billing) and
+`2026-11-03.1` (RSVP); the billing calculation version remains `4`, so no
+billing snapshot backfill is needed.
+
+The `Roster` tab has a fifth column, `Zelle`. Deploy the Admin/Billing backend
+before pushing the matching frontend, otherwise Zelle entries made in between
+are silently ignored. Do not roll the Admin/Billing deployment back to a version
+older than `2026-11-04.1` while column E holds data: older versions treat it as
+an extra column, merge it into the public `Note`, and delete it.
 
 ## Production Reset
 

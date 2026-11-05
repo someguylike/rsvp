@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-11-03.1";
+const ADMIN_BACKEND_VERSION = "2026-11-04.1";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -35,7 +35,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Note"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Note", "Zelle"];
 const BILLING_COURT_HEADERS = [
   "ID",
   "Month",
@@ -240,9 +240,12 @@ function doGet(event) {
     }
 
     if (params.action === "listRoster") {
+      const roster = getRoster_();
+      const isAdmin = hasAdminAccess_(params);
       return jsonp_(callback, {
         ok: true,
-        roster: getRoster_(),
+        isAdmin,
+        roster: isAdmin ? roster : toPublicRoster_(roster),
       });
     }
 
@@ -262,7 +265,7 @@ function doGet(event) {
         ok: true,
         action: result.action,
         updatedFields: result.updatedFields,
-        roster: result.roster,
+        roster: toPublicRoster_(result.roster),
       });
     }
 
@@ -1059,7 +1062,7 @@ function getRosterSheet_() {
   if (shouldSeedRoster && sheet.getLastRow() < 2) {
     sheet
       .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
-      .setValues(PLAYERS.map((name) => [name, "", "", ""]));
+      .setValues(PLAYERS.map((name) => [name, "", "", "", ""]));
   }
 
   return sheet;
@@ -1130,14 +1133,19 @@ function mergeRosterExtraColumnsIntoNote_(sheet) {
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
   if (lastRow >= 2 && lastColumn > ROSTER_HEADERS.length) {
-    const width = lastColumn - ROSTER_HEADERS.length;
-    const values = sheet
-      .getRange(2, 4, lastRow - 1, width + 1)
+    // Only columns after the last known header are extra; Note stays column 4.
+    const notes = sheet.getRange(2, 4, lastRow - 1, 1).getValues();
+    const extras = sheet
+      .getRange(
+        2,
+        ROSTER_HEADERS.length + 1,
+        lastRow - 1,
+        lastColumn - ROSTER_HEADERS.length,
+      )
       .getValues();
-    const mergedNotes = values.map((row) => {
-      const existingNote = String(row[0] || "").trim();
-      const extraValues = row
-        .slice(1)
+    const mergedNotes = notes.map((noteRow, index) => {
+      const existingNote = String(noteRow[0] || "").trim();
+      const extraValues = extras[index]
         .map((value) => String(value || "").trim())
         .filter(Boolean);
       if (extraValues.length === 0) {
@@ -1172,9 +1180,21 @@ function getRoster_() {
       venmo: String(row[1] || "").trim(),
       messenger: String(row[2] || "").trim(),
       note: String(row[3] || "").trim(),
+      zelle: String(row[4] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
+}
+
+// Zelle details identify a member's bank email/phone, so only admins see them.
+function toPublicRoster_(roster) {
+  return roster.map((member) => ({
+    name: member.name,
+    venmo: member.venmo,
+    messenger: member.messenger,
+    note: member.note,
+    hasZelle: Boolean(member.zelle),
+  }));
 }
 
 function getRosterNames_() {
@@ -1222,11 +1242,24 @@ function saveRosterMember_(params) {
     const sheet = getRosterSheet_();
     const oldRow = oldName ? findRosterRow_(sheet, oldName) : null;
     const row = findRosterRow_(sheet, name);
-    const values = [name, venmo, messenger, note];
 
     if (oldName && oldName !== name) {
       requirePlayerWithoutHistoricalReferences_(oldName, "rename");
     }
+
+    const existingRow = oldRow || row;
+    // Older cached pages don't send zelle; keep the stored value for them.
+    const zelle = Object.prototype.hasOwnProperty.call(params, "zelle")
+      ? params.zelle
+        ? normalizeZelle_(params.zelle)
+        : ""
+      : existingRow
+        ? String(
+            sheet.getRange(existingRow, 1, 1, ROSTER_HEADERS.length).getValues()[0][4] ||
+              "",
+          ).trim()
+        : "";
+    const values = [name, venmo, messenger, note, zelle];
 
     if (oldName && normalize_(oldName) !== normalize_(name)) {
       if (!oldRow) {
@@ -1284,11 +1317,13 @@ function completeRosterMemberInfo_(params) {
       venmo: String(values[1] || "").trim(),
       messenger: String(values[2] || "").trim(),
       note: String(values[3] || "").trim(),
+      zelle: String(values[4] || "").trim(),
     };
     const requested = {
       venmo: params.venmo ? normalizeVenmo_(params.venmo) : "",
       messenger: params.messenger ? normalizeMessenger_(params.messenger) : "",
       note: sanitizeText_(params.note || ""),
+      zelle: params.zelle ? normalizeZelle_(params.zelle) : "",
     };
     const updatedFields = [];
 
@@ -1309,6 +1344,15 @@ function completeRosterMemberInfo_(params) {
         throw new Error(
           "Admin login is required to change an existing Facebook profile.",
         );
+      }
+    }
+
+    if (requested.zelle) {
+      if (!current.zelle) {
+        values[4] = requested.zelle;
+        updatedFields.push("Zelle");
+      } else if (normalize_(current.zelle) !== normalize_(requested.zelle)) {
+        throw new Error("Admin login is required to change an existing Zelle.");
       }
     }
 
@@ -4875,6 +4919,36 @@ function normalizeMessenger_(value) {
   }
 
   return `https://www.facebook.com/${handle}`;
+}
+
+function normalizeZelle_(value) {
+  const text = String(value || "").trim();
+  const urlMatch = text.match(
+    /^(?:https?:\/\/)?((?:[a-z0-9-]+\.)*(?:zellepay|zelle)\.com)(\/\S*)?$/i,
+  );
+  if (urlMatch && text.length <= 2000) {
+    return `https://${urlMatch[1].toLowerCase()}${urlMatch[2] || ""}`;
+  }
+
+  // Strict pattern: anonymous users can set this, so it must never start a
+  // spreadsheet formula (=, +, -, @) or carry formula punctuation.
+  if (
+    text.length <= 254 &&
+    /^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(text)
+  ) {
+    return text.toLowerCase();
+  }
+
+  if (/^[0-9\s().+-]+$/.test(text)) {
+    const digits = text.replace(/\D/g, "");
+    const national =
+      digits.length === 11 && digits[0] === "1" ? digits.slice(1) : digits;
+    if (national.length === 10) {
+      return `(${national.slice(0, 3)}) ${national.slice(3, 6)}-${national.slice(6)}`;
+    }
+  }
+
+  throw new Error("Enter a valid Zelle QR link, email, or US phone number");
 }
 
 function sanitizeText_(value) {
