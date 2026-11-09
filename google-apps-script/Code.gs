@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-11-04.1";
+const ADMIN_BACKEND_VERSION = "2026-11-09.2";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -277,6 +277,17 @@ function doGet(event) {
         action: "removeRosterMember",
         removed: result.removed,
         roster: result.roster,
+      });
+    }
+
+    if (params.action === "listAdminAttendance") {
+      requireAdmin_(params);
+      return jsonp_(callback, {
+        ok: true,
+        action: "listAdminAttendance",
+        attendance: getBillingAttendance_(
+          required_(params.month, "Missing attendance month"),
+        ),
       });
     }
 

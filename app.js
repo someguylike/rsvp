@@ -1,6 +1,8 @@
 (function () {
   const APPS_SCRIPT_URL =
     "https://script.google.com/macros/s/AKfycbwkQT5n28qD0wVpRCA3qgJs5fZy_YG_TmNIXAyqQ-AZFTYJVyMOCjGKfsE-D9_R4x64VQ/exec";
+  const ADMIN_APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
   let PLAYERS = [
     "Alex Yeung",
     "Anh Khoa Tran (Truc Phuong)",
@@ -71,6 +73,7 @@
     { value: "5", label: "Me + 4" },
   ];
   const rsvpRules = window.RsvpRules;
+  const adminAuth = window.RsvpAdminAuth;
 
   const form = document.querySelector("#rsvp-form");
   const playerInput = document.querySelector("#player-name");
@@ -82,6 +85,8 @@
   const dateOptions = document.querySelector("#date-options");
   const customDateField = document.querySelector("#custom-date-field");
   const customDateInput = document.querySelector("#custom-play-date");
+  const adminBackfillNotice = document.querySelector("#admin-backfill-notice");
+  const cutoffHelp = document.querySelector("#rsvp-cutoff-help");
   const participantInput = document.querySelector("#participant-count");
   const status = document.querySelector("#status");
   const submitButton = document.querySelector("#submit-button");
@@ -247,9 +252,7 @@
 
   function renderDateOptions() {
     const dates = getUpcomingPlayDates(4);
-    if (customDateInput) {
-      customDateInput.min = rsvpRules.getStartOfMonthValue();
-    }
+    updateDateMinimum();
     dateOptions.replaceChildren(
       ...dates.map((date) => {
         const value = formatDate(date);
@@ -302,7 +305,39 @@
   }
 
   function canSelectNotGoing(playDate) {
-    return !playDate || !rsvpRules.isUnvoteLocked(playDate);
+    return isAdminBackfill() || !playDate || !rsvpRules.isUnvoteLocked(playDate);
+  }
+
+  function isAdminBackfill() {
+    const state = adminAuth?.getState();
+    return Boolean(
+      state?.isLoggedIn && state.token && Number(state.expiresAt) > Date.now(),
+    );
+  }
+
+  function updateDateMinimum() {
+    if (!customDateInput) return;
+    if (isAdminBackfill()) {
+      customDateInput.removeAttribute("min");
+    } else {
+      customDateInput.min = rsvpRules.getStartOfMonthValue();
+    }
+  }
+
+  function updateAdminBackfill() {
+    const enabled = isAdminBackfill();
+    if (adminBackfillNotice) adminBackfillNotice.hidden = !enabled;
+    if (cutoffHelp) {
+      cutoffHelp.textContent = enabled
+        ? "Admin backfill: past dates are allowed. The billing month must be Draft."
+        : "Voting and RSVP changes close at 10 PM the night before play.";
+    }
+    updateDateMinimum();
+    renderParticipantOptions();
+    updatePlayerMemory();
+    setRemoveRsvpAction(null);
+    invalidateTallyRefresh();
+    if (dateInput.value) loadTally(dateInput.value);
   }
 
   function renderParticipantOptions() {
@@ -899,7 +934,11 @@
   }
 
   function buildAppsScriptUrl(payload, callbackName) {
-    const url = new URL(APPS_SCRIPT_URL);
+    // Admin tokens belong to the Admin/Billing project. Read its fresh tally
+    // after corrections instead of the separate public project's cached tally.
+    const useAdminBackend = payload.action === "adminUpsertRsvp" ||
+      (payload.action === "list" && isAdminBackfill());
+    const url = new URL(useAdminBackend ? ADMIN_APPS_SCRIPT_URL : APPS_SCRIPT_URL);
     if (callbackName) {
       url.searchParams.set("callback", callbackName);
     }
@@ -1049,7 +1088,7 @@
     setStatus("Submitting...", "");
 
     try {
-      const result = await requestAppsScript(payload);
+      const result = await requestRsvpMutation(payload);
 
       if (result.action === "needs_confirmation") {
         askOverrideConfirmation(result.existing, payload);
@@ -1078,7 +1117,7 @@
         );
       }
     } catch (error) {
-      if (error.message === "Could not reach Apps Script") {
+      if (error.message === "Could not reach Apps Script" && !isAdminBackfill()) {
         setStatusWithLink(
           "Your browser blocked the embedded submit.",
           "Open fallback submit.",
@@ -1094,6 +1133,19 @@
     }
   }
 
+  async function requestRsvpMutation(payload) {
+    await adminAuth?.ready;
+    if (!isAdminBackfill()) return requestAppsScript(payload);
+    // Keep the token out of saved RSVP history and confirmation payloads.
+    const removal = payload.action === "delete";
+    return requestAppsScript({
+      ...payload,
+      action: "adminUpsertRsvp",
+      adminToken: adminAuth.getState().token,
+      ...(removal ? { participantCount: 0, vote: "No" } : {}),
+    });
+  }
+
   async function removeExistingRsvp(payload) {
     submitButton.disabled = true;
     if (removeRsvpButton) {
@@ -1102,7 +1154,7 @@
     setStatus("Removing RSVP...", "");
 
     try {
-      const result = await requestAppsScript(
+      const result = await requestRsvpMutation(
         await enrichPayloadWithAuditMetadata({
           action: "delete",
           playerName: payload.playerName,
@@ -1371,6 +1423,7 @@
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    await adminAuth?.ready;
 
     const payload = collectPayload();
     if (
@@ -1405,13 +1458,14 @@
 
     if (
       payload.vote === "Yes" &&
+      !isAdminBackfill() &&
       rsvpRules.isUnvoteLocked(payload.playDate)
     ) {
       setStatus("RSVP changes are closed for this date.", "error");
       return;
     }
 
-    submitRsvp(await enrichPayloadWithAuditMetadata(payload));
+    await submitRsvp(await enrichPayloadWithAuditMetadata(payload));
   });
 
   playerInput.addEventListener("focus", () => {
@@ -1478,6 +1532,10 @@
   });
 
   initialize();
+  adminAuth?.onChange(updateAdminBackfill);
+  window.addEventListener("storage", (event) => {
+    if (event.key === "play-rsvp.adminAuth") window.location.reload();
+  });
 
   cancelOverride?.addEventListener("click", () => {
     pendingOverridePayload = null;

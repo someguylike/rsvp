@@ -15,7 +15,7 @@ Static RSVP page for weekly play sessions.
 - After submit and when the date changes, the page shows the reserved participant tally for that date.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
 - `billing.html` renders finalized member billing from persisted balance snapshots; authenticated admins can load source details and explicitly recalculate a month.
-- `admin.html` shows the current login state, provides Log Out when authenticated, and lets an admin edit the current month attendance in a player-by-date table. Backend deployment health is visible and queried only while logged in.
+- `admin.html` shows the current login state, provides Log Out when authenticated, and lets an admin edit attendance for any calendar date in the selected month, including past dates and nonstandard weekdays. Attendance loads in one authenticated monthly request. Backend deployment health is visible and queried only while logged in.
 - `roster.html` lets an admin add, remove, and update roster Venmo, Zelle, and Messenger details. Zelle (a Zelle QR link, email, or US phone number) is optional and visible only to logged-in admins; other visitors see only whether one is on file and can add a missing one.
 
 ## Recommended Hosting
@@ -176,15 +176,30 @@ and removals close at the cutoff; authenticated admin corrections still follow
 the existing Draft-month rules. Deploy a **New version** of both existing Web
 App deployments after changing RSVP validation or cutoff behavior, keeping
 their URLs unchanged.
-The expected backend versions are `2026-11-04.1` (Admin/Billing) and
-`2026-11-03.1` (RSVP); the billing calculation version remains `4`, so no
-billing snapshot backfill is needed.
+The expected Admin/Billing backend version is `2026-11-09.2`; the public RSVP
+backend version remains `2026-11-03.1`. For the admin attendance update, deploy
+only `google-apps-script/Code.gs` to the existing Admin/Billing project. This
+version includes both admin backfill and the Zelle roster changes. The billing
+calculation version remains `4`; no billing snapshot backfill is needed.
 
 The `Roster` tab has a fifth column, `Zelle`. Deploy the Admin/Billing backend
 before pushing the matching frontend, otherwise Zelle entries made in between
 are silently ignored. Do not roll the Admin/Billing deployment back to a version
 older than `2026-11-04.1` while column E holds data: older versions treat it as
-an extra column, merge it into the public `Note`, and delete it.
+an extra column, merge it into the public `Note`, and delete it. The initial
+backfill-only version `2026-11-09.1` also predates these Zelle changes; replace
+it with the combined version before using Zelle entries.
+
+To backfill missed votes, log in on Admin and return to RSVP in the same browser.
+The form displays **Admin backfill enabled**. Choose a player, use **Other date**
+to select any past date, and submit or update the vote. Removing a vote also
+uses the authenticated admin path. The Admin month table remains available
+for bulk corrections. The public RSVP cutoff still applies when logged out.
+Admin corrections bypass that cutoff but require the billing month to be
+Draft. For an already finalized month, reopen it as Draft, correct attendance
+and court costs, then finalize it again to rebuild its balances. Wednesday and
+other custom dates use the same billing and report rules as standard weekdays;
+only Sunday receives the existing 1.5 birdie-share weight.
 
 ## Production Reset
 

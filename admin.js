@@ -3,7 +3,6 @@
     "https://script.google.com/macros/s/AKfycbzcjWqKlqoILjYBAZLZ1Ka1xZ5QDXL_Mq65kOZXsTAxpNhp39pIkbIDPXiNjGOah0EF/exec";
   const BROWSER_ID_KEY = "play-rsvp.browserId";
   const DISPLAY_LOCALE = "en-US";
-  const PLAY_DAYS = [2, 4, 5, 0];
   let PLAYERS = [
     "Alex Yeung",
     "Anh Khoa Tran (Truc Phuong)",
@@ -248,24 +247,16 @@
       return [];
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const year = Number(month.slice(0, 4));
     const monthIndex = Number(month.slice(5, 7)) - 1;
-    const isCurrentMonth = month === formatMonth(today);
-    const daysUntilThisSunday = (7 - today.getDay()) % 7;
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + daysUntilThisSunday + 7);
+    if (monthIndex < 0 || monthIndex > 11) {
+      return [];
+    }
     const current = new Date(year, monthIndex, 1);
     const dates = [];
 
-    while (
-      current.getMonth() === monthIndex &&
-      (!isCurrentMonth || current <= endDate)
-    ) {
-      if (PLAY_DAYS.includes(current.getDay())) {
-        dates.push(formatDate(current));
-      }
+    while (current.getMonth() === monthIndex) {
+      dates.push(formatDate(current));
       current.setDate(current.getDate() + 1);
     }
 
@@ -774,30 +765,29 @@
     loadAudit(month);
 
     try {
-      for (let index = 0; index < monthDates.length; index += 1) {
-        const playDate = monthDates[index];
-        setStatus(
-          `Loading ${index + 1} of ${monthDates.length} dates...`,
-          "loading",
-        );
-        const result = await requestAppsScript({
-          action: "list",
-          playDate,
-        });
-        if (requestId !== latestLoadRequest || monthInput.value !== month) {
+      const result = await requestAppsScript({
+        action: "listAdminAttendance",
+        adminToken,
+        month,
+      });
+      if (
+        requestId !== latestLoadRequest ||
+        monthInput.value !== month ||
+        !adminToken
+      ) {
+        return;
+      }
+      (result.attendance || []).forEach((day) => {
+        if (!monthDates.includes(day.date)) {
           return;
         }
-
-        const players = Array.isArray(result.tally?.players)
-          ? result.tally.players
-          : [];
-        players.forEach((player) => {
+        (day.players || []).forEach((player) => {
           rosterValues.set(
-            getKey(player.name, playDate),
-            parseParticipantCount(player.participantCount),
+            getKey(player.name, day.date),
+            parseParticipantCount(player.spots),
           );
         });
-      }
+      });
 
       renderRosterTable();
       setStatus("Month loaded.", "success");
