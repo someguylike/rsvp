@@ -5013,7 +5013,7 @@ function normalizeZelle_(value) {
   throw new Error("Enter a valid Zelle QR link, email, or US phone number");
 }
 
-// A BBC (Bay Badminton Center) membership number. Anonymous users can set an
+// A BBC (Bellevue Badminton Club) membership number. Anonymous users can set an
 // empty one, so allow only letters, digits, single spaces and inner dashes:
 // nothing that can start a formula.
 function normalizeBbcMembership_(value) {
