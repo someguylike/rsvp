@@ -73,12 +73,17 @@
   const BILLING_QUERY = new URLSearchParams(window.location.search);
   const LOCAL_BILLING_FIXTURE = BILLING_QUERY.get("localBillingFixture");
   const REQUESTED_BILLING_MONTH = BILLING_QUERY.get("month") || "";
+  const REQUESTED_BILLING_MEMBER = BILLING_QUERY.get("member") || "";
   let isAdmin = false;
   let adminToken = "";
   let backendBilling = null;
   let backendAvailable = false;
   let latestBillingRequest = 0;
-  let requestedBillingMonthApplied = false;
+  // "pending" until a ?month= link is applied or found unavailable.
+  let requestedBillingMonthState = REQUESTED_BILLING_MONTH ? "pending" : "none";
+  let requestedBillingMemberConsumed = false;
+  // "link" (?member=), "user" (dropdown or Detail) or "remembered" (default).
+  let memberSelectionSource = "remembered";
 
   const monthInput = document.querySelector("#billing-month");
   const reloadBillingButton = document.querySelector("#reload-billing-button");
@@ -147,6 +152,8 @@
   const markMonthPaidButton = document.querySelector("#mark-month-paid-button");
   const memberSelect = document.querySelector("#member-detail-select");
   const memberDetail = document.querySelector("#member-detail");
+  const copyMemberLinkButton = document.querySelector("#copy-member-link-button");
+  const memberShareStatus = document.querySelector("#member-share-status");
 
   let attendanceRows = [];
   let billing = null;
@@ -650,7 +657,7 @@
     return Array.from(byMonth.values());
   }
 
-  function populateBillingMonthOptions(months) {
+  function populateBillingMonthOptions(months, options) {
     const currentSelection = monthInput.value;
     const openMonths = window.BalanceCalculator
       .filterBillingHistory(months)
@@ -675,18 +682,38 @@
     });
 
     if (
-      !requestedBillingMonthApplied &&
+      requestedBillingMonthState === "pending" &&
       openMonths.some((month) => month.month === REQUESTED_BILLING_MONTH)
     ) {
       monthInput.value = REQUESTED_BILLING_MONTH;
-      requestedBillingMonthApplied = true;
+      requestedBillingMonthState = "applied";
     } else if (openMonths.some((month) => month.month === currentSelection)) {
       monthInput.value = currentSelection;
     } else if (openMonths.length) {
       monthInput.value = openMonths[openMonths.length - 1].month;
     }
+    if (options?.final) {
+      resolveUnavailableRequestedMonth(monthInput.value);
+    }
 
     return openMonths.length > 0;
+  }
+
+  function resolveUnavailableRequestedMonth(shownMonth) {
+    if (requestedBillingMonthState !== "pending") {
+      return;
+    }
+    requestedBillingMonthState = "unavailable";
+    if (!shownMonth || !/^\d{4}-\d{2}$/.test(REQUESTED_BILLING_MONTH)) {
+      return;
+    }
+    const requestedLabel = formatMonthLabel(REQUESTED_BILLING_MONTH);
+    setMemberShareStatus(
+      isAdmin
+        ? `${requestedLabel} billing isn't available; showing ${formatMonthLabel(shownMonth)}.`
+        : `${requestedLabel} billing isn't finalized yet; showing ${formatMonthLabel(shownMonth)}.`,
+      "error",
+    );
   }
 
   function normalizeBillingMonthOptions(months) {
@@ -808,7 +835,10 @@
           "loading",
         );
         const cachedBilling = readBillingCache(monthInput.value);
+        // A ?month= link missing from the cached list needs a fresh fetch.
+        const requestedMonthMissing = requestedBillingMonthState === "pending";
         if (
+          !requestedMonthMissing &&
           !forceRefresh &&
           isBillingMonthsCacheFresh(cached) &&
           (isAdmin || isBillingCacheFresh(cachedBilling))
@@ -816,7 +846,7 @@
           setStatus("Billing months loaded from saved data.", "success");
           return true;
         }
-        if (isAdmin && !forceRefresh) {
+        if (isAdmin && !forceRefresh && !requestedMonthMissing) {
           requestBillingMonthOptions()
             .then((result) => {
               const months = getBillingMonthsFromResponse(result);
@@ -844,7 +874,7 @@
       const result = await requestBillingMonthOptions();
       const months = getBillingMonthsFromResponse(result);
       writeBillingMonthsCache(months);
-      const hasMonths = populateBillingMonthOptions(months);
+      const hasMonths = populateBillingMonthOptions(months, { final: true });
       if (!hasMonths) {
         setBillingContentVisible(false);
         setStatus(
@@ -857,9 +887,13 @@
       return hasMonths;
     } catch (error) {
       if (hasCachedMonths) {
+        resolveUnavailableRequestedMonth(monthInput.value);
         return true;
       }
-      const hasMonths = populateBillingMonthOptions(getFallbackBillingMonths(isAdmin));
+      const hasMonths = populateBillingMonthOptions(
+        getFallbackBillingMonths(isAdmin),
+        { final: true },
+      );
       if (!hasMonths) {
         setBillingContentVisible(false);
         setStatus(
@@ -2357,10 +2391,19 @@
         detailButton.type = "button";
         detailButton.textContent = "Detail";
         detailButton.addEventListener("click", () => {
+          memberSelectionSource = "user";
           memberSelect.value = member.name;
           renderMemberDetail(member.name);
         });
-        actionCell.append(detailButton);
+        const copyLinkButton = document.createElement("button");
+        copyLinkButton.className = "secondary-button inline-button";
+        copyLinkButton.type = "button";
+        copyLinkButton.textContent = "Copy link";
+        copyLinkButton.setAttribute("aria-label", `Copy ${member.name}'s billing link`);
+        copyLinkButton.addEventListener("click", () =>
+          copyMemberBillingLink(member.name, memberFeedback),
+        );
+        actionCell.append(detailButton, copyLinkButton);
 
         return [
           { text: member.name, className: "name-cell" },
@@ -2387,8 +2430,28 @@
       "Payment status saves for admins when Apps Script billing is connected.";
   }
 
+  function normalizeMemberName(value) {
+    return normalizeText(value).replace(/\s+/g, " ");
+  }
+
+  function findRequestedBillingMember() {
+    const requested = normalizeMemberName(REQUESTED_BILLING_MEMBER);
+    if (requestedBillingMemberConsumed || !requested) {
+      return null;
+    }
+    return (
+      billing.members.find((member) => normalizeMemberName(member.name) === requested) ||
+      null
+    );
+  }
+
   function renderMemberSelect() {
-    const current = memberSelect.value || getRememberedPlayer();
+    // A ?member= link wins over the remembered player on the first real
+    // render of the resolved month, matched or not; later renders keep the
+    // current choice.
+    const requestedMember = findRequestedBillingMember();
+    const previous = memberSelect.value;
+    const current = requestedMember?.name || previous || getRememberedPlayer();
     clearElement(memberSelect);
     billing.members.forEach((member) => {
       const option = document.createElement("option");
@@ -2399,6 +2462,14 @@
     memberSelect.value = billing.members.some((member) => member.name === current)
       ? current
       : billing.members[0]?.name || "";
+    if (requestedMember) {
+      memberSelectionSource = "link";
+    } else if (!previous || memberSelect.value !== previous) {
+      memberSelectionSource = "remembered";
+    }
+    if (backendBilling && requestedBillingMonthState !== "pending") {
+      requestedBillingMemberConsumed = true;
+    }
   }
 
   function appendDetailRow(label, value, className) {
@@ -2671,6 +2742,103 @@
     memberDetail.append(section);
   }
 
+  function getSelectedBillingMonth() {
+    // Fixture mode has no month options, so fall back to the loaded month.
+    return monthInput.value || backendBilling?.month || "";
+  }
+
+  function buildBillingShareUrl(memberName) {
+    const url = new URL(window.location.href);
+    const month = getSelectedBillingMonth();
+    if (month) {
+      url.searchParams.set("month", month);
+    }
+    if (memberName) {
+      url.searchParams.set("member", memberName);
+    }
+    return url;
+  }
+
+  function syncBillingShareUrl() {
+    // The address bar names a member only when it came from the link or an
+    // explicit choice, and keeps a ?month= link until it has resolved.
+    const url = new URL(window.location.href);
+    const month = getSelectedBillingMonth();
+    if (month && requestedBillingMonthState !== "pending") {
+      url.searchParams.set("month", month);
+    }
+    if (memberSelect.value && memberSelectionSource !== "remembered") {
+      url.searchParams.set("member", memberSelect.value);
+    } else if (requestedBillingMemberConsumed) {
+      url.searchParams.delete("member");
+    }
+    if (url.href !== window.location.href) {
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }
+
+  function setMemberShareStatus(message, type) {
+    setSectionStatus(memberShareStatus, message, type);
+    memberShareStatus.hidden = !message;
+  }
+
+  async function copyTextToClipboard(text) {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Some in-app browsers reject the async clipboard; try execCommand.
+      }
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    textarea.remove();
+    return copied;
+  }
+
+  async function copyMemberBillingLink(memberName, feedbackEl) {
+    const showStatus =
+      feedbackEl === memberShareStatus
+        ? setMemberShareStatus
+        : (message, type) => setSectionStatus(feedbackEl, message, type);
+    if (!memberName) {
+      showStatus("Choose a member first.", "error");
+      return;
+    }
+
+    const url = buildBillingShareUrl(memberName);
+    url.hash = "";
+    const link = url.toString();
+    const month = getSelectedBillingMonth();
+    const label = month
+      ? `${memberName}'s ${formatMonthLabel(month)} billing link`
+      : `${memberName}'s billing link`;
+    const draftWarning =
+      isAdmin && getMonthStatus().status !== "finalized"
+        ? " Members can't open it until the month is finalized."
+        : "";
+    if (await copyTextToClipboard(link)) {
+      showStatus(`Copied ${label}.${draftWarning}`, draftWarning ? "error" : "success");
+    } else {
+      showStatus(`Copy this link: ${link}${draftWarning}`, draftWarning ? "error" : "");
+    }
+  }
+
   function renderMemberDetail(name) {
     const member = billing.members.find((candidate) => candidate.name === name);
     clearElement(memberDetail);
@@ -2679,7 +2847,11 @@
       return;
     }
 
-    localStorage.setItem(LAST_PLAYER_KEY, member.name);
+    // A shared link must not overwrite the visitor's remembered identity.
+    if (memberSelectionSource !== "link") {
+      localStorage.setItem(LAST_PLAYER_KEY, member.name);
+    }
+    syncBillingShareUrl();
     appendDetailRow("Attendance", `${member.spots} spots`);
     appendDetailRow("Weighted spots", formatNumber(member.weightedSpots, 1));
     appendDetailRow("Birdie fee", formatMoney(member.birdieFee));
@@ -2779,6 +2951,14 @@
 
   function applyBackendBilling(nextBilling, message, sourceLabel, options) {
     backendBilling = nextBilling;
+    if (
+      requestedBillingMonthState === "pending" &&
+      nextBilling?.month === REQUESTED_BILLING_MONTH
+    ) {
+      // Fixture mode has no month list, so the loaded month resolves the link.
+      requestedBillingMonthState = "applied";
+    }
+    resolveUnavailableRequestedMonth(nextBilling?.month);
     backendAvailable = true;
     attendanceRows =
       Array.isArray(backendBilling.attendance)
@@ -4007,6 +4187,7 @@
   }
 
   monthInput.addEventListener("change", () => {
+    setMemberShareStatus("");
     clearCourtImportPreview();
     showCanceledCourtsInput.checked = false;
     initializeInputs();
@@ -4070,7 +4251,14 @@
   birdieUsageBatchInput.addEventListener("change", updateBirdieUsageMax);
   finalizationForm.addEventListener("submit", handleFinalizationSubmit);
   markMonthPaidButton.addEventListener("click", handleMarkMonthPaid);
-  memberSelect.addEventListener("change", () => renderMemberDetail(memberSelect.value));
+  memberSelect.addEventListener("change", () => {
+    memberSelectionSource = "user";
+    setMemberShareStatus("");
+    renderMemberDetail(memberSelect.value);
+  });
+  copyMemberLinkButton.addEventListener("click", () =>
+    copyMemberBillingLink(memberSelect.value, memberShareStatus),
+  );
 
   initializeCourtReserveBookmarklet();
   initializeAdminVisibility();

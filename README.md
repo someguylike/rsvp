@@ -16,7 +16,7 @@ Static RSVP page for weekly play sessions.
 - `export.html` exports a selected month, then renders clickable group heatmap and player-filtered overview.
 - `billing.html` renders finalized member billing from persisted balance snapshots; authenticated admins can load source details and explicitly recalculate a month.
 - `admin.html` shows the current login state, provides Log Out when authenticated, and lets an admin edit attendance for any calendar date in the selected month, including past dates and nonstandard weekdays. Attendance loads in one authenticated monthly request. Backend deployment health is visible and queried only while logged in.
-- `roster.html` lets an admin add, remove, and update roster Venmo, Zelle, and Messenger details. Zelle (a Zelle QR link, email, or US phone number) is optional and visible only to logged-in admins; other visitors see only whether one is on file and can add a missing one.
+- `roster.html` lets an admin add, remove, and update roster Venmo, Zelle, BBC membership number, and Messenger details. Zelle (a Zelle QR link, email, or US phone number) is optional and admin-only: the Zelle column and form field appear only in admin mode, the backend returns Zelle data (not even whether one is on file) only with a valid admin token, and non-admins can't add one. The BBC (Bay Badminton Center) membership number is optional, shown to everyone, and searchable; non-admins can fill it in only when it is empty, like Venmo and Facebook. It may contain letters, digits, spaces, and inner dashes (up to 20 characters, stored uppercase as plain text).
 
 ## Recommended Hosting
 
@@ -28,7 +28,7 @@ GitHub Pages can host `index.html`, `styles.css`, and `app.js` for free, but it 
 
 - `index.html`, `app.js`, `styles.css`: public RSVP page.
 - `admin.html`, `admin.js`: admin page for editing player/date attendance counts.
-- `roster.html`, `roster.js`: admin page for roster membership, Venmo, Zelle, and Messenger details.
+- `roster.html`, `roster.js`: admin page for roster membership, Venmo, Zelle, BBC membership number, and Messenger details.
 - `export.html`, `export.js`: admin page for monthly roster export.
 - `billing.html`, `billing.js`: billing page for court block entry, birdie cost entry, and member balance calculation.
 - `payment.html`, `balances.js`, `balances-core.js`: Payment page with monthly balances, paid-month history, and one Venmo action per amount due.
@@ -176,19 +176,23 @@ and removals close at the cutoff; authenticated admin corrections still follow
 the existing Draft-month rules. Deploy a **New version** of both existing Web
 App deployments after changing RSVP validation or cutoff behavior, keeping
 their URLs unchanged.
-The expected Admin/Billing backend version is `2026-11-09.2`; the public RSVP
-backend version remains `2026-11-03.1`. For the admin attendance update, deploy
-only `google-apps-script/Code.gs` to the existing Admin/Billing project. This
-version includes both admin backfill and the Zelle roster changes. The billing
-calculation version remains `4`; no billing snapshot backfill is needed.
+The expected Admin/Billing backend version is `2026-11-09.3`; the public RSVP
+backend version remains `2026-11-03.1`. Deploy only `google-apps-script/Code.gs`
+to the existing Admin/Billing project. This version combines admin backfill
+(`listAdminAttendance`), the admin-only Zelle changes and the BBC membership
+column. The billing calculation version remains `4`, so no billing snapshot
+backfill is needed.
 
-The `Roster` tab has a fifth column, `Zelle`. Deploy the Admin/Billing backend
-before pushing the matching frontend, otherwise Zelle entries made in between
-are silently ignored. Do not roll the Admin/Billing deployment back to a version
-older than `2026-11-04.1` while column E holds data: older versions treat it as
-an extra column, merge it into the public `Note`, and delete it. The initial
-backfill-only version `2026-11-09.1` also predates these Zelle changes; replace
-it with the combined version before using Zelle entries.
+The `Roster` tab has a fifth column, `Zelle`, and a sixth, `BBC Membership`.
+Deploy the Admin/Billing backend before pushing the matching frontend. Until the
+backend returns `bbcMembership`, the Members page locks the BBC field instead of
+sending values the old backend would ignore. Do not roll the Admin/Billing
+deployment back while those columns hold data: versions older than
+`2026-11-09.3` treat column F as an extra column, and versions older than
+`2026-11-04.1` also treat column E that way; they merge it into the public
+`Note` and delete it. Clear the column by hand first if a rollback is
+unavoidable. The RSVP backend reads only the first four `Roster` columns and
+never deletes any, so it needs no change.
 
 To backfill missed votes, log in on Admin and return to RSVP in the same browser.
 The form displays **Admin backfill enabled**. Choose a player, use **Other date**
@@ -281,6 +285,8 @@ After deploying this backend change, run `backfillBillingMemberBalanceSnapshots`
 The Billing and Payment pages show May 2026 forward, load open finalized balances with one backend request, merge current payment statuses, and display those precomputed amounts immediately. Older snapshots remain stored for audit and carryover history but are not shown. Draft months and raw source records are admin-only. On Billing, the authenticated **Recalculate** action reloads the selected month from source data and refreshes its finalized snapshot; the member **Reload saved bill** action only rereads snapshots. Globally paid-off months are excluded unless directly requested. Paid snapshots remain in the sheet for audit/history and are not recalculated during normal member loading. The browser also displays its previously saved result while a stale snapshot is refreshed.
 
 For an amount due, Billing offers optional $1, $2, and $5 tips or donations that are added only to the Venmo payment amount, never to the stored bill. A non-admin member can self-report the selected member's bill as Paid and save an optional comment. The backend verifies the submitted bill amount against the finalized snapshot and stores the comment, base amount, tip, timestamp, and `Member self-report` source in `Billing Payments`. Member-facing status text uses `Payment due` instead of the internal `Not requested` state and distinguishes `Paid - Member self-reported` from `Paid - Admin verified`. Because the public site does not authenticate individual members, the page explicitly asks people to use this action only for their own selected name; admins can correct an incorrect report.
+
+Billing links can name a member: `billing.html?month=2026-10&member=First%20Last` opens that month with that member selected in Member Detail. The `member` value is matched trimmed and case-insensitively against the requested month's members and is used once, on the first loaded render of that month; with no match the page falls back to the browser's remembered player. A member opened from a link is never saved as the visitor's remembered player (which the RSVP page and billing audit fields use). If the requested month isn't listed for the visitor (members only see finalized months), Member Detail says so and shows the latest available month instead. The address bar keeps `month` in sync once the requested month has loaded, and adds `member` only for a link or an explicit choice, never for the remembered default; other parameters such as `localBillingFixture` are kept. **Copy link** in Member Detail, or next to **Detail** in the admin Member Billing table, copies the link for that member and month to send by Messenger; for a Draft month it warns that members can't open the link until the month is finalized.
 
 Meta/Messenger in-app browsers use the Apps Script JSONP path directly so they do not wait for a fetch attempt that those browsers commonly block. In Messenger, Venmo actions use a direct app link with a visible payment-website fallback; other browsers retain the normal HTTPS Venmo payment link.
 

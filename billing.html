@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Billing</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260924-1" />
+    <link rel="stylesheet" href="./styles.css?v=20261109-1" />
   </head>
   <body>
     <main class="shell billing-shell">
@@ -99,6 +99,14 @@
                     <h2 id="member-detail-heading">Member Detail</h2>
                     <p>Review the selected member's balance and attendance.</p>
                   </div>
+                  <button
+                    id="copy-member-link-button"
+                    class="secondary-button inline-button"
+                    type="button"
+                    title="Copy a link to this member's bill for the selected month"
+                  >
+                    Copy link
+                  </button>
                 </div>
                 <div class="billing-member-detail-controls">
                   <label class="field">
@@ -106,6 +114,7 @@
                     <select id="member-detail-select"></select>
                   </label>
                 </div>
+                <p id="member-share-status" class="section-status" role="status" aria-live="polite" hidden></p>
                 <div id="member-detail" class="billing-detail-list"></div>
               </section>
 
@@ -297,6 +306,6 @@
     <script src="./vendor/jszip.min.js?v=3.10.1"></script>
     <script src="./billing-parser.js?v=20260920-1"></script>
     <script src="./balances-core.js?v=20260924-3"></script>
-    <script src="./billing.js?v=20260924-4"></script>
+    <script src="./billing.js?v=20261109-1"></script>
   </body>
 </html>

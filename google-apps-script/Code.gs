@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-11-09.2";
+const ADMIN_BACKEND_VERSION = "2026-11-09.3";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -35,7 +35,7 @@ const HEADERS = [
   "Submitted At",
   "Updated At",
 ];
-const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Note", "Zelle"];
+const ROSTER_HEADERS = ["Name", "Venmo", "Facebook", "Note", "Zelle", "BBC Membership"];
 const BILLING_COURT_HEADERS = [
   "ID",
   "Month",
@@ -1059,6 +1059,11 @@ function getRosterSheet_() {
 
   migrateRosterSheet_(sheet);
 
+  const maxColumns = sheet.getMaxColumns();
+  if (maxColumns < ROSTER_HEADERS.length) {
+    sheet.insertColumnsAfter(maxColumns, ROSTER_HEADERS.length - maxColumns);
+  }
+
   const headerRange = sheet.getRange(1, 1, 1, ROSTER_HEADERS.length);
   const currentHeaders = headerRange.getValues()[0];
   const needsHeaders = ROSTER_HEADERS.some(
@@ -1073,7 +1078,7 @@ function getRosterSheet_() {
   if (shouldSeedRoster && sheet.getLastRow() < 2) {
     sheet
       .getRange(2, 1, PLAYERS.length, ROSTER_HEADERS.length)
-      .setValues(PLAYERS.map((name) => [name, "", "", "", ""]));
+      .setValues(PLAYERS.map((name) => [name, "", "", "", "", ""]));
   }
 
   return sheet;
@@ -1192,19 +1197,21 @@ function getRoster_() {
       messenger: String(row[2] || "").trim(),
       note: String(row[3] || "").trim(),
       zelle: String(row[4] || "").trim(),
+      bbcMembership: String(row[5] || "").trim(),
     }))
     .filter((member) => member.name)
     .sort((first, second) => first.name.localeCompare(second.name));
 }
 
-// Zelle details identify a member's bank email/phone, so only admins see them.
+// Zelle details identify a member's bank email/phone, so only admins see them
+// (not even whether one is on file).
 function toPublicRoster_(roster) {
   return roster.map((member) => ({
     name: member.name,
     venmo: member.venmo,
     messenger: member.messenger,
     note: member.note,
-    hasZelle: Boolean(member.zelle),
+    bbcMembership: member.bbcMembership,
   }));
 }
 
@@ -1259,18 +1266,35 @@ function saveRosterMember_(params) {
     }
 
     const existingRow = oldRow || row;
-    // Older cached pages don't send zelle; keep the stored value for them.
+    const existingValues = existingRow
+      ? sheet.getRange(existingRow, 1, 1, ROSTER_HEADERS.length).getValues()[0]
+      : [];
+    // Older cached pages don't send zelle or bbcMembership; keep the stored
+    // values for them.
     const zelle = Object.prototype.hasOwnProperty.call(params, "zelle")
       ? params.zelle
         ? normalizeZelle_(params.zelle)
         : ""
-      : existingRow
-        ? String(
-            sheet.getRange(existingRow, 1, 1, ROSTER_HEADERS.length).getValues()[0][4] ||
-              "",
-          ).trim()
-        : "";
+      : String(existingValues[4] || "").trim();
+    // Validate and write BBC Membership only when it changes, so a hand-edited
+    // cell (or a date Sheets made of it) never blocks unrelated saves and an
+    // unchanged cell is left exactly as it is.
+    const storedBbcMembership = String(existingValues[5] || "").trim();
+    const bbcMembershipChanged =
+      Object.prototype.hasOwnProperty.call(params, "bbcMembership") &&
+      String(params.bbcMembership || "").trim() !== storedBbcMembership;
+    const bbcMembership = bbcMembershipChanged
+      ? normalizeBbcMembership_(params.bbcMembership)
+      : storedBbcMembership;
     const values = [name, venmo, messenger, note, zelle];
+    const writeRosterRow = (targetRow) => {
+      sheet.getRange(targetRow, 1, 1, values.length).setValues([values]);
+      if (bbcMembershipChanged) {
+        sheet
+          .getRange(targetRow, 6, 1, 1)
+          .setValues([[toPlainTextCell_(bbcMembership)]]);
+      }
+    };
 
     if (oldName && normalize_(oldName) !== normalize_(name)) {
       if (!oldRow) {
@@ -1280,7 +1304,7 @@ function saveRosterMember_(params) {
         throw new Error("A roster member with the new name already exists");
       }
 
-      sheet.getRange(oldRow, 1, 1, ROSTER_HEADERS.length).setValues([values]);
+      writeRosterRow(oldRow);
       const renameCounts = renamePlayerEverywhere_(oldName, name);
       return {
         action: "renamed",
@@ -1290,14 +1314,14 @@ function saveRosterMember_(params) {
     }
 
     if (row) {
-      sheet.getRange(row, 1, 1, ROSTER_HEADERS.length).setValues([values]);
+      writeRosterRow(row);
       return {
         action: "updated",
         roster: getRoster_(),
       };
     }
 
-    sheet.appendRow(values);
+    sheet.appendRow([...values, toPlainTextCell_(bbcMembership)]);
     return {
       action: "created",
       roster: getRoster_(),
@@ -1322,25 +1346,37 @@ function completeRosterMemberInfo_(params) {
       throw new Error("Only admins can create new members.");
     }
 
-    const range = sheet.getRange(row, 1, 1, ROSTER_HEADERS.length);
-    const values = range.getValues()[0];
+    const values = sheet.getRange(row, 1, 1, ROSTER_HEADERS.length).getValues()[0];
     const current = {
       venmo: String(values[1] || "").trim(),
       messenger: String(values[2] || "").trim(),
       note: String(values[3] || "").trim(),
       zelle: String(values[4] || "").trim(),
+      bbcMembership: String(values[5] || "").trim(),
     };
     const requested = {
       venmo: params.venmo ? normalizeVenmo_(params.venmo) : "",
       messenger: params.messenger ? normalizeMessenger_(params.messenger) : "",
       note: sanitizeText_(params.note || ""),
-      zelle: params.zelle ? normalizeZelle_(params.zelle) : "",
+      // Zelle is admin-only; anonymous visitors can't add one.
+      zelle:
+        params.zelle && hasAdminAccess_(params) ? normalizeZelle_(params.zelle) : "",
+      // Validate only a changed value, so an unchanged hand-edited cell
+      // doesn't block other updates.
+      bbcMembership:
+        String(params.bbcMembership || "").trim() &&
+        String(params.bbcMembership || "").trim() !== current.bbcMembership
+          ? normalizeBbcMembership_(params.bbcMembership)
+          : "",
     };
     const updatedFields = [];
+    // Column index -> new cell value. Only changed cells are written, so
+    // untouched cells (plain-text numbers, dates, formats) stay as they are.
+    const changes = {};
 
     if (requested.venmo) {
       if (!current.venmo) {
-        values[1] = requested.venmo;
+        changes[1] = requested.venmo;
         updatedFields.push("Venmo");
       } else if (normalize_(current.venmo) !== normalize_(requested.venmo)) {
         throw new Error("Admin login is required to change an existing Venmo.");
@@ -1349,7 +1385,7 @@ function completeRosterMemberInfo_(params) {
 
     if (requested.messenger) {
       if (!current.messenger) {
-        values[2] = requested.messenger;
+        changes[2] = requested.messenger;
         updatedFields.push("Facebook profile");
       } else if (normalize_(current.messenger) !== normalize_(requested.messenger)) {
         throw new Error(
@@ -1360,15 +1396,28 @@ function completeRosterMemberInfo_(params) {
 
     if (requested.zelle) {
       if (!current.zelle) {
-        values[4] = requested.zelle;
+        changes[4] = requested.zelle;
         updatedFields.push("Zelle");
       } else if (normalize_(current.zelle) !== normalize_(requested.zelle)) {
         throw new Error("Admin login is required to change an existing Zelle.");
       }
     }
 
+    if (requested.bbcMembership) {
+      if (!current.bbcMembership) {
+        changes[5] = toPlainTextCell_(requested.bbcMembership);
+        updatedFields.push("BBC membership #");
+      } else if (
+        normalize_(current.bbcMembership) !== normalize_(requested.bbcMembership)
+      ) {
+        throw new Error(
+          "Admin login is required to change an existing BBC membership number.",
+        );
+      }
+    }
+
     if (current.note !== requested.note) {
-      values[3] = requested.note;
+      changes[3] = requested.note;
       updatedFields.push("Note");
     }
 
@@ -1376,7 +1425,9 @@ function completeRosterMemberInfo_(params) {
       throw new Error("There is no missing member info to add.");
     }
 
-    range.setValues([values]);
+    Object.keys(changes).forEach((index) => {
+      sheet.getRange(row, Number(index) + 1, 1, 1).setValues([[changes[index]]]);
+    });
     return {
       action: "completed",
       updatedFields,
@@ -4960,6 +5011,28 @@ function normalizeZelle_(value) {
   }
 
   throw new Error("Enter a valid Zelle QR link, email, or US phone number");
+}
+
+// A BBC (Bay Badminton Center) membership number. Anonymous users can set an
+// empty one, so allow only letters, digits, single spaces and inner dashes:
+// nothing that can start a formula.
+function normalizeBbcMembership_(value) {
+  const text = String(value || "").trim().replace(/\s+/g, " ");
+  if (!text) {
+    return "";
+  }
+  if (text.length <= 20 && /^[A-Za-z0-9](?:[A-Za-z0-9 -]*[A-Za-z0-9])?$/.test(text)) {
+    return text.toUpperCase();
+  }
+  throw new Error(
+    "Enter a valid BBC membership number: letters, numbers, spaces or dashes, up to 20 characters",
+  );
+}
+
+// The leading apostrophe stores the value as plain text, so Sheets never turns
+// "00123" into 123 or "1-2" into a date. Sheets doesn't return the apostrophe.
+function toPlainTextCell_(value) {
+  return value ? `'${value}` : "";
 }
 
 function sanitizeText_(value) {

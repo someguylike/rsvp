@@ -10,8 +10,10 @@
   const nameInput = document.querySelector("#member-name");
   const memberNameList = document.querySelector("#member-name-list");
   const venmoInput = document.querySelector("#venmo");
+  const zelleField = document.querySelector("#zelle-field");
   const zelleInput = document.querySelector("#zelle");
-  const zellePlaceholder = zelleInput.placeholder;
+  const bbcMembershipInput = document.querySelector("#bbc-membership");
+  const bbcMembershipPlaceholder = bbcMembershipInput.placeholder;
   const messengerInput = document.querySelector("#messenger");
   const noteInput = document.querySelector("#member-note");
   const memberSearch = document.querySelector("#member-search");
@@ -24,6 +26,8 @@
   let editingOriginalName = "";
   let rosterRequestId = 0;
   let adminLoginExpired = false;
+  // True only while `roster` came from an admin response (it has Zelle values).
+  let rosterHasAdminDetails = false;
 
   function setStatus(message, type) {
     status.textContent = message;
@@ -33,27 +37,40 @@
   function renderAdminState() {
     adminEyebrow.hidden = !adminToken;
     noteInput.disabled = false;
-    updateZelleInputState(findRosterMemberByName(editingOriginalName));
+    updateZelleInputState();
     updateSaveButtonLabel();
     renderRoster();
   }
 
-  // The public roster only says whether a Zelle exists (hasZelle); the admin
-  // roster has the value. Lock the field until the value is known so an empty
-  // input never clears a stored Zelle.
-  function updateZelleInputState(member) {
-    const isHiddenOnFile = Boolean(member?.hasZelle);
-    zelleInput.disabled = isHiddenOnFile;
-    if (isHiddenOnFile) {
+  // Zelle is admin-only: the column and the form field exist only once an
+  // admin roster (with the stored values) has loaded, so an empty input never
+  // clears a Zelle the page couldn't see.
+  function canShowZelle() {
+    return Boolean(adminToken) && rosterHasAdminDetails;
+  }
+
+  function updateZelleInputState() {
+    const showZelle = canShowZelle();
+    zelleField.hidden = !showZelle;
+    zelleInput.disabled = !showZelle;
+    if (!showZelle) {
       zelleInput.value = "";
     }
-    zelleInput.placeholder = isHiddenOnFile
-      ? adminToken
-        ? adminLoginExpired
-          ? "On file (admin login expired; log in again)"
-          : "On file (loading...)"
-        : "On file (only admins can view or change it)"
-      : zellePlaceholder;
+  }
+
+  // Backends older than 2026-11-09.3 don't return bbcMembership and would
+  // silently drop a new value, so keep the field locked until a loaded roster
+  // shows the backend has it (unknown, e.g. not loaded yet, counts as no).
+  function updateBbcMembershipInputState() {
+    const isSupported = roster.some((member) =>
+      Object.prototype.hasOwnProperty.call(member, "bbcMembership"),
+    );
+    bbcMembershipInput.disabled = !isSupported;
+    bbcMembershipInput.placeholder = isSupported
+      ? bbcMembershipPlaceholder
+      : roster.length > 0
+        ? "Available after the backend update"
+        : "Available once the roster loads";
   }
 
   function buildAppsScriptUrl(payload, callbackName) {
@@ -175,7 +192,7 @@
   function clearForm() {
     form.reset();
     editingOriginalName = "";
-    updateZelleInputState(null);
+    updateZelleInputState();
     updateSaveButtonLabel();
     renderRoster();
     nameInput.focus();
@@ -184,6 +201,10 @@
   function focusRelevantMemberField(member) {
     if (!member.venmo) {
       venmoInput.focus();
+      return;
+    }
+    if (!member.bbcMembership && !bbcMembershipInput.disabled) {
+      bbcMembershipInput.focus();
       return;
     }
     if (!member.messenger) {
@@ -197,10 +218,10 @@
     editingOriginalName = member.name || "";
     nameInput.value = member.name || "";
     venmoInput.value = member.venmo || "";
-    zelleInput.value = member.zelle || "";
+    zelleInput.value = canShowZelle() ? member.zelle || "" : "";
+    bbcMembershipInput.value = member.bbcMembership || "";
     messengerInput.value = member.messenger || "";
     noteInput.value = member.note || "";
-    updateZelleInputState(member);
     updateSaveButtonLabel();
     if (options?.focusRelevantField) {
       focusRelevantMemberField(member);
@@ -306,15 +327,7 @@
   function appendZelleCell(row, member) {
     const zelle = String(member.zelle || "").trim();
     if (!zelle) {
-      const cell = appendLinkCell(row, "", "", "", "zelle");
-      if (member.hasZelle) {
-        const onFile = document.createElement("span");
-        onFile.className = "contact-chip muted-contact";
-        onFile.textContent = "On file";
-        onFile.title = "Only admins can view Zelle details";
-        cell.replaceChildren(onFile);
-      }
-      return cell;
+      return appendLinkCell(row, "", "", "", "zelle");
     }
 
     const normalized = normalizeZelle(zelle);
@@ -325,6 +338,19 @@
       isLink ? normalized : "",
       normalized ? "" : "Invalid Zelle. Use a Zelle QR link, email, or US phone number.",
       "zelle",
+    );
+  }
+
+  function appendBbcMembershipCell(row, member) {
+    const bbcMembership = String(member.bbcMembership || "").trim();
+    return appendLinkCell(
+      row,
+      bbcMembership,
+      "",
+      bbcMembership && !normalizeBbcMembership(bbcMembership)
+        ? "Invalid BBC membership number. Use letters, numbers, spaces or dashes."
+        : "",
+      "bbc",
     );
   }
 
@@ -439,6 +465,18 @@
     return "";
   }
 
+  // Mirrors normalizeBbcMembership_ in google-apps-script/Code.gs.
+  function normalizeBbcMembership(value) {
+    const text = String(value || "").trim().replace(/\s+/g, " ");
+    if (!text) {
+      return "";
+    }
+    if (text.length <= 20 && /^[A-Za-z0-9](?:[A-Za-z0-9 -]*[A-Za-z0-9])?$/.test(text)) {
+      return text.toUpperCase();
+    }
+    return "";
+  }
+
   function normalizeMessengerContact(value) {
     const text = String(value || "").trim();
     if (!text) {
@@ -494,9 +532,14 @@
     }
 
     return roster.filter((member) =>
-      [member.name, member.venmo, member.zelle, member.messenger, member.note].some(
-        (value) => normalizeSearchText(value).includes(query),
-      ),
+      [
+        member.name,
+        member.venmo,
+        canShowZelle() ? member.zelle : "",
+        member.bbcMembership,
+        member.messenger,
+        member.note,
+      ].some((value) => normalizeSearchText(value).includes(query)),
     );
   }
 
@@ -521,12 +564,18 @@
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    const headers = ["Name", "Venmo", "Zelle", "Facebook", "Note"];
-    if (adminToken) {
-      headers.push("Actions");
-    }
-    headers.forEach((header) => {
-      appendCell(headerRow, "th", header);
+    const showZelle = canShowZelle();
+    const columns = [
+      ["name", "Name"],
+      ["venmo", "Venmo"],
+      ...(showZelle ? [["zelle", "Zelle"]] : []),
+      ["bbc", "BBC Membership #"],
+      ["facebook", "Facebook"],
+      ["note", "Note"],
+      ...(adminToken ? [["actions", "Actions"]] : []),
+    ];
+    columns.forEach(([key, header]) => {
+      appendCell(headerRow, "th", header, `roster-col-${key}`);
     });
     thead.append(headerRow);
 
@@ -563,8 +612,8 @@
           }
         }
       });
-      appendMemberNameCell(row, member);
-      appendLinkCell(
+      appendMemberNameCell(row, member).classList.add("roster-col-name");
+      const venmoCell = appendLinkCell(
         row,
         member.venmo || "",
         venmoUrl,
@@ -572,10 +621,19 @@
           ? "Invalid Venmo handle or profile URL. Use a normal hyphen, not a long dash."
           : "",
         "venmo",
-      ).dataset.label = "Venmo";
-      appendZelleCell(row, member).dataset.label = "Zelle";
+      );
+      venmoCell.dataset.label = "Venmo";
+      venmoCell.classList.add("roster-col-venmo");
+      if (showZelle) {
+        const zelleCell = appendZelleCell(row, member);
+        zelleCell.dataset.label = "Zelle";
+        zelleCell.classList.add("roster-col-zelle");
+      }
+      const bbcCell = appendBbcMembershipCell(row, member);
+      bbcCell.dataset.label = "BBC #";
+      bbcCell.classList.add("roster-col-bbc");
       const messengerUrl = getMessengerUrl(member.messenger);
-      appendLinkCell(
+      const messengerCell = appendLinkCell(
         row,
         getMessengerDisplayValue(member.messenger),
         messengerUrl,
@@ -583,13 +641,15 @@
           ? "Invalid Facebook profile URL. Use a profile URL or plain profile handle."
           : "",
         "facebook",
-      ).dataset.label = "Facebook";
-      appendNoteCell(row, member);
+      );
+      messengerCell.dataset.label = "Facebook";
+      messengerCell.classList.add("roster-col-facebook");
+      appendNoteCell(row, member).classList.add("roster-col-note");
       if (adminToken) {
         const actions = document.createElement("td");
         const removeButton = document.createElement("button");
 
-        actions.className = "roster-actions-cell";
+        actions.className = "roster-actions-cell roster-col-actions";
         actions.dataset.label = "Actions";
         const actionsWrap = document.createElement("div");
         actionsWrap.className = "roster-actions";
@@ -624,12 +684,15 @@
       }
       // Older backends omit isAdmin; only an explicit false means expired.
       adminLoginExpired = Boolean(adminToken) && result.isAdmin === false;
+      const wasShowingZelle = canShowZelle();
       roster = Array.isArray(result.roster) ? result.roster : [];
+      rosterHasAdminDetails = Boolean(adminToken) && result.isAdmin === true;
+      updateZelleInputState();
       const editingMember = findRosterMemberByName(editingOriginalName);
-      if (editingMember && zelleInput.disabled) {
+      if (editingMember && canShowZelle() && !wasShowingZelle) {
         zelleInput.value = editingMember.zelle || "";
       }
-      updateZelleInputState(editingMember);
+      updateBbcMembershipInputState();
       renderMemberNameOptions();
       renderRoster();
       if (adminLoginExpired) {
@@ -655,6 +718,11 @@
     }
     rosterRequestId += 1;
     roster = Array.isArray(result.roster) ? result.roster : [];
+    // saveRosterMember and removeRosterMember (admin) return the admin roster;
+    // completeRosterMemberInfo returns the public one.
+    rosterHasAdminDetails = Boolean(requestToken);
+    updateZelleInputState();
+    updateBbcMembershipInputState();
   }
 
   async function saveMember(payload) {
@@ -784,9 +852,11 @@
       payload.messenger = messengerContact.url;
     }
 
+    // Without the admin roster the Zelle field is hidden: send nothing so the
+    // backend keeps whatever is stored.
     const zelle = zelleInput.value.trim();
-    if (zelleInput.disabled) {
-      // Stored Zelle is hidden; leave it unchanged.
+    if (!canShowZelle() || zelleInput.disabled) {
+      // Leave the stored Zelle unchanged.
     } else if (zelle) {
       const normalizedZelle = normalizeZelle(zelle);
       if (!normalizedZelle) {
@@ -794,10 +864,32 @@
         return;
       }
       payload.zelle = normalizedZelle;
-    } else if (adminToken && findRosterMemberByName(editingOriginalName)?.zelle) {
-      // The admin emptied a Zelle they could see: clear it. Otherwise send
-      // nothing so the backend keeps whatever is stored.
+    } else if (findRosterMemberByName(editingOriginalName)?.zelle) {
+      // The admin emptied a Zelle they could see: clear it.
       payload.zelle = "";
+    }
+
+    // Send BBC Membership only when it changed, and validate only then, so a
+    // hand-edited stored value never blocks unrelated updates.
+    const bbcMembership = bbcMembershipInput.value.trim();
+    const storedBbcMembership = String(
+      findRosterMemberByName(editingOriginalName || payload.playerName)?.bbcMembership || "",
+    ).trim();
+    if (bbcMembershipInput.disabled || bbcMembership === storedBbcMembership) {
+      // Older backend or unchanged: leave the stored value as it is.
+    } else if (bbcMembership) {
+      const normalizedBbcMembership = normalizeBbcMembership(bbcMembership);
+      if (!normalizedBbcMembership) {
+        setStatus(
+          "Enter a valid BBC membership number: letters, numbers, spaces or dashes, up to 20 characters.",
+          "error",
+        );
+        return;
+      }
+      payload.bbcMembership = normalizedBbcMembership;
+    } else if (adminToken) {
+      // The admin emptied a stored number: clear it. Non-admins can't clear.
+      payload.bbcMembership = "";
     }
     if (isRenamingMember()) {
       payload.oldPlayerName = editingOriginalName;
@@ -828,6 +920,11 @@
   function handleAdminStateChange(state) {
     const previousToken = adminToken;
     adminToken = state.token || "";
+    if (adminToken !== previousToken) {
+      // Drop Zelle details right away; the refetch below gets the right view.
+      rosterHasAdminDetails = false;
+      roster = roster.map(({ zelle, ...member }) => member);
+    }
     renderAdminState();
     // Admin and public roster responses differ (Zelle details), so refetch.
     if (adminToken !== previousToken) {
@@ -835,6 +932,7 @@
     }
   }
 
+  updateBbcMembershipInputState();
   adminAuth.onChange(handleAdminStateChange);
   window.addEventListener("storage", (event) => {
     if (event.key === "play-rsvp.adminAuth") {

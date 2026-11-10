@@ -630,6 +630,18 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+/* Admins also get the Zelle field. */
+@media (min-width: 1101px) {
+  .roster-form-grid:has(#zelle-field:not([hidden])) {
+    grid-template-columns:
+      minmax(160px, 0.9fr)
+      minmax(130px, 0.7fr)
+      minmax(160px, 0.9fr)
+      minmax(130px, 0.7fr)
+      minmax(180px, 1fr);
+  }
+}
+
 .status {
   min-height: 22px;
   margin: 0;
@@ -1293,6 +1305,15 @@ button:disabled {
   font-size: 0.84rem;
 }
 
+.billing-band-header > .inline-button {
+  align-self: center;
+  margin-bottom: 12px;
+}
+
+#member-billing-table td .inline-button + .inline-button {
+  margin-left: 6px;
+}
+
 .court-canceled-toggle {
   margin-bottom: 12px;
 }
@@ -1854,8 +1875,8 @@ body:not(.billing-admin) .admin-payment-column {
   max-width: 420px;
 }
 
-.roster-member-table th:nth-child(2),
-.roster-member-table td:nth-child(2) {
+/* Columns are matched by class: Zelle and Actions only exist for admins. */
+.roster-member-table .roster-col-venmo {
   min-width: 140px;
   text-align: left;
 }
@@ -1877,20 +1898,22 @@ body:not(.billing-admin) .admin-payment-column {
   vertical-align: middle;
 }
 
-.roster-member-table th:nth-child(3),
-.roster-member-table td:nth-child(3) {
+.roster-member-table .roster-col-zelle {
   min-width: 130px;
   text-align: left;
 }
 
-.roster-member-table th:nth-child(4),
-.roster-member-table td:nth-child(4) {
+.roster-member-table .roster-col-bbc {
+  min-width: 120px;
+  text-align: left;
+}
+
+.roster-member-table .roster-col-facebook {
   min-width: 190px;
   text-align: left;
 }
 
-.roster-member-table th:nth-child(5),
-.roster-member-table td:nth-child(5) {
+.roster-member-table .roster-col-note {
   min-width: 160px;
   text-align: left;
   white-space: normal;
@@ -1900,8 +1923,7 @@ body:not(.billing-admin) .admin-payment-column {
   color: var(--muted);
 }
 
-.roster-member-table th:nth-child(6),
-.roster-member-table td:nth-child(6) {
+.roster-member-table .roster-col-actions {
   min-width: 110px;
   text-align: center;
 }
@@ -2002,7 +2024,8 @@ body:not(.billing-admin) .admin-payment-column {
 }
 
 .missing-facebook,
-.missing-zelle {
+.missing-zelle,
+.missing-bbc {
   border-color: var(--line);
   background: #f8fafc;
   color: var(--muted);
@@ -2691,16 +2714,8 @@ body:not(.billing-admin) .admin-payment-column {
   .roster-member-table td,
   .roster-member-table th:first-child,
   .roster-member-table td:first-child,
-  .roster-member-table th:nth-child(2),
-  .roster-member-table td:nth-child(2),
-  .roster-member-table th:nth-child(3),
-  .roster-member-table td:nth-child(3),
-  .roster-member-table th:nth-child(4),
-  .roster-member-table td:nth-child(4),
-  .roster-member-table th:nth-child(5),
-  .roster-member-table td:nth-child(5),
-  .roster-member-table th:nth-child(6),
-  .roster-member-table td:nth-child(6) {
+  .roster-member-table th[class*="roster-col-"],
+  .roster-member-table td[class*="roster-col-"] {
     position: static;
     display: grid;
     grid-template-columns: 82px minmax(0, 1fr);

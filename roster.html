@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Manage Roster</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20261104-1" />
+    <link rel="stylesheet" href="./styles.css?v=20261109-1" />
   </head>
   <body>
     <main class="shell">
@@ -56,14 +56,28 @@
               />
             </label>
 
-            <label class="field">
-              <span>Zelle <small class="field-tag">Optional</small></span>
+            <label id="zelle-field" class="field" hidden>
+              <span>Zelle <small class="field-tag">Admin only</small></span>
               <input
                 id="zelle"
                 name="zelle"
                 autocomplete="off"
                 placeholder="Zelle QR link, email, or phone"
                 title="Used for payment collection. Only admins can see it."
+                disabled
+              />
+            </label>
+
+            <label class="field">
+              <span>BBC Membership # <small class="field-tag">Optional</small></span>
+              <input
+                id="bbc-membership"
+                name="bbcMembership"
+                autocomplete="off"
+                maxlength="40"
+                placeholder="Bay Badminton Center #"
+                title="Bay Badminton Center membership number: letters, numbers, spaces or dashes"
+                disabled
               />
             </label>
 
@@ -108,7 +122,7 @@
             <input
               id="member-search"
               autocomplete="off"
-              placeholder="Search by name, Venmo, Facebook, or note"
+              placeholder="Search by name, Venmo, BBC #, Facebook, or note"
               type="search"
             />
             <small class="field-help">Click a member row to update that member.</small>
@@ -122,6 +136,6 @@
     </main>
 
     <script src="./admin-auth.js?v=20260811-1"></script>
-    <script src="./roster.js?v=20261104-1"></script>
+    <script src="./roster.js?v=20261109-1"></script>
   </body>
 </html>

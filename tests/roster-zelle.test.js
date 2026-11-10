@@ -20,6 +20,11 @@ function createAppsScriptContext() {
   return context;
 }
 
+// Like Sheets: a leading apostrophe marks plain text and isn't returned.
+function fromSheetInput(value) {
+  return typeof value === "string" && value.startsWith("'") ? value.slice(1) : value;
+}
+
 function createRosterSheet(rows) {
   const data = rows.map((row) => row.slice());
   return {
@@ -43,13 +48,13 @@ function createRosterSheet(rows) {
         setValues(values) {
           values.forEach((valueRow, rowOffset) => {
             valueRow.forEach((value, columnOffset) => {
-              data[row - 2 + rowOffset][column - 1 + columnOffset] = value;
+              data[row - 2 + rowOffset][column - 1 + columnOffset] = fromSheetInput(value);
             });
           });
         },
       };
     },
-    appendRow: (values) => data.push(values.slice()),
+    appendRow: (values) => data.push(values.map(fromSheetInput)),
   };
 }
 
@@ -124,12 +129,13 @@ function withRoster(rows) {
 }
 
 {
-  // A stray column F must be merged into Note without touching Zelle (E).
+  // A stray column G must be merged into Note without touching Zelle (E) or
+  // BBC Membership (F).
   const { context, sheet } = withRoster([
-    ["Ann", "@ann", "", "note A", "ann@bank.example", "extra A"],
-    ["Bob", "@bob", "", "", "", ""],
+    ["Ann", "@ann", "", "note A", "ann@bank.example", "BBC-1", "extra A"],
+    ["Bob", "@bob", "", "", "", "", ""],
   ]);
-  sheet.header = ["Name", "Venmo", "Facebook", "Note", "Zelle", "Extra"];
+  sheet.header = ["Name", "Venmo", "Facebook", "Note", "Zelle", "BBC Membership", "Extra"];
   sheet.getRange = ((getRange) =>
     function (row, column, numRows, numColumns) {
       if (row === 1) {
@@ -142,25 +148,28 @@ function withRoster(rows) {
     sheet.data.forEach((row) => row.splice(start - 1, count));
   };
   context.migrateRosterSheet_(sheet);
-  assert.deepEqual([...sheet.data[0]], ["Ann", "@ann", "", "note A; extra A", "ann@bank.example"]);
-  assert.deepEqual([...sheet.data[1]], ["Bob", "@bob", "", "", ""]);
+  assert.deepEqual(
+    [...sheet.data[0]],
+    ["Ann", "@ann", "", "note A; extra A", "ann@bank.example", "BBC-1"],
+  );
+  assert.deepEqual([...sheet.data[1]], ["Bob", "@bob", "", "", "", ""]);
 }
 
 {
   // Renames keep the stored Zelle unless a zelle param is sent.
-  const { context, sheet } = withRoster([["Ann", "@ann", "", "", "ann@example.com"]]);
+  const { context, sheet } = withRoster([["Ann", "@ann", "", "", "ann@example.com", ""]]);
   context.renamePlayerEverywhere_ = () => ({});
   context.saveRosterMember_({ oldPlayerName: "Ann", playerName: "Anna", venmo: "@ann" });
-  assert.deepEqual([...sheet.data[0]], ["Anna", "@ann", "", "", "ann@example.com"]);
+  assert.deepEqual([...sheet.data[0]], ["Anna", "@ann", "", "", "ann@example.com", ""]);
   context.saveRosterMember_({ oldPlayerName: "Anna", playerName: "ANNA", venmo: "@ann" });
-  assert.deepEqual([...sheet.data[0]], ["ANNA", "@ann", "", "", "ann@example.com"]);
+  assert.deepEqual([...sheet.data[0]], ["ANNA", "@ann", "", "", "ann@example.com", ""]);
   context.saveRosterMember_({
     oldPlayerName: "ANNA",
     playerName: "Annie",
     venmo: "@ann",
     zelle: "annie@example.com",
   });
-  assert.deepEqual([...sheet.data[0]], ["Annie", "@ann", "", "", "annie@example.com"]);
+  assert.deepEqual([...sheet.data[0]], ["Annie", "@ann", "", "", "annie@example.com", ""]);
 }
 
 {
@@ -177,11 +186,12 @@ function withRoster(rows) {
   };
   const anonymous = call({ action: "listRoster" });
   assert.equal(anonymous.isAdmin, false);
-  assert.equal(anonymous.roster[0].zelle, undefined);
-  assert.equal(anonymous.roster[0].hasZelle, true);
+  assert.equal("zelle" in anonymous.roster[0], false);
+  assert.equal("hasZelle" in anonymous.roster[0], false, "non-admins can't tell a Zelle is on file");
   const expired = call({ action: "listRoster", adminToken: "stale" });
   assert.equal(expired.isAdmin, false);
-  assert.equal(expired.roster[0].zelle, undefined);
+  assert.equal("zelle" in expired.roster[0], false);
+  assert.equal("hasZelle" in expired.roster[0], false);
   const admin = call({ action: "listRoster", adminToken: "good" });
   assert.equal(admin.isAdmin, true);
   assert.equal(admin.roster[0].zelle, "ann@example.com");
@@ -195,12 +205,12 @@ function withRoster(rows) {
   const publicRoster = context.toPublicRoster_(context.getRoster_());
 
   assert.deepEqual(
-    publicRoster.map((member) => [member.name, member.hasZelle, "zelle" in member]),
+    publicRoster.map((member) => [member.name, "hasZelle" in member, "zelle" in member]),
     [
-      ["Ann", true, false],
+      ["Ann", false, false],
       ["Bob", false, false],
     ],
-    "the public roster says whether a Zelle exists without revealing it",
+    "the public roster says nothing about Zelle",
   );
   assert.equal(context.getRoster_()[0].zelle, "ann@example.com");
 }
@@ -222,7 +232,7 @@ function withRoster(rows) {
   assert.equal(sheet.data[0][4], "", "an admin can clear a Zelle");
 
   context.saveRosterMember_({ playerName: "Cat", venmo: "@cat", zelle: "cat@example.com" });
-  assert.deepEqual([...sheet.data[1]], ["Cat", "@cat", "", "", "cat@example.com"]);
+  assert.deepEqual([...sheet.data[1]], ["Cat", "@cat", "", "", "cat@example.com", ""]);
 }
 
 {
@@ -231,22 +241,45 @@ function withRoster(rows) {
     ["Bob", "@bob", "", "", "bob@example.com"],
   ]);
 
-  const result = context.completeRosterMemberInfo_({
-    playerName: "Ann",
-    zelle: "ann@example.com",
-  });
-  assert.deepEqual(Array.from(result.updatedFields), ["Zelle"]);
-  assert.equal(sheet.data[0][4], "ann@example.com");
+  context.hasAdminToken_ = (token) => token === "good";
 
+  // Anonymous visitors can't add or change a Zelle: the param is ignored.
+  assert.throws(
+    () =>
+      context.completeRosterMemberInfo_({
+        playerName: "Ann",
+        zelle: "ann@example.com",
+      }),
+    /no missing member info/,
+  );
+  assert.equal(sheet.data[0][4], "");
   assert.throws(
     () =>
       context.completeRosterMemberInfo_({
         playerName: "Bob",
         zelle: "someone-else@example.com",
+        adminToken: "stale",
       }),
-    /Admin login is required to change an existing Zelle/,
+    /no missing member info/,
   );
   assert.equal(sheet.data[1][4], "bob@example.com");
+  const withNote = context.completeRosterMemberInfo_({
+    playerName: "Ann",
+    zelle: "ann@example.com",
+    note: "hi",
+  });
+  assert.deepEqual(Array.from(withNote.updatedFields), ["Note"]);
+  assert.equal(sheet.data[0][4], "");
+
+  // An admin token still allows filling an empty Zelle here.
+  const result = context.completeRosterMemberInfo_({
+    playerName: "Ann",
+    zelle: "ann@example.com",
+    note: "hi",
+    adminToken: "good",
+  });
+  assert.deepEqual(Array.from(result.updatedFields), ["Zelle"]);
+  assert.equal(sheet.data[0][4], "ann@example.com");
 }
 
 console.log("roster-zelle tests passed");
