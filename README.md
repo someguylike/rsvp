@@ -5,7 +5,7 @@ Static RSVP page for weekly play sessions.
 ## What it does
 
 - Player name is limited to a fixed roster dropdown.
-- Date uses one-tap options for the next Tuesday, Thursday, Friday, and Sunday, plus an **Other date** calendar picker that accepts any valid date.
+- Date offers the next Tuesday, Thursday, Friday, and Sunday, plus any dates with at least one RSVP spot in the current week (Monday–Sunday). These shortcuts are sorted by date and show reserved spots when available. Previous Sunday's votes are outside the current week and do not add a shortcut. **Other date** accepts any valid date to start another session. The selected date's tally response also supplies the week's date counts, using the same spreadsheet read and existing tally cache. There is no separate date-discovery request or weekly cache. Choices update after votes and during normal tally refreshes without resetting the selected date.
 - Reserved spots defaults to `1` for the player; increase it to include guests.
 - Reserved spots `0` means not going and removes that player/date reservation.
 - Voting, changes, and removals close at 10 PM the night before the play date.
@@ -176,12 +176,19 @@ and removals close at the cutoff; authenticated admin corrections still follow
 the existing Draft-month rules. Deploy a **New version** of both existing Web
 App deployments after changing RSVP validation or cutoff behavior, keeping
 their URLs unchanged.
-The expected Admin/Billing backend version is `2026-11-09.3`; the public RSVP
-backend version remains `2026-11-03.1`. Deploy only `google-apps-script/Code.gs`
-to the existing Admin/Billing project. This version combines admin backfill
-(`listAdminAttendance`), the admin-only Zelle changes and the BBC membership
-column. The billing calculation version remains `4`, so no billing snapshot
-backfill is needed.
+Both expected backend versions are `2026-11-10.2`. Deploy new versions of both
+existing projects: `google-apps-script/Code.gs` for Admin/Billing and
+`google-apps-script/rsvp-web-app/Code.gs` for public RSVP. Both extend the
+existing read-only `list` action: optional `startDate` and `endDate` parameters
+add a `votedDates` summary to the selected date's tally, without another source
+or roster read. Requests without a range keep their existing behavior. The
+existing browser tally cache can display those choices immediately on repeat
+loads; the public backend's existing 45-second tally cache also includes them.
+Until deployed, the form keeps the usual date shortcuts and **Other date**.
+The Admin/Billing version retains
+admin backfill (`listAdminAttendance`), admin-only Zelle and BBC membership.
+The billing calculation version remains `4`, so no billing snapshot backfill
+is needed.
 
 The `Roster` tab has a fifth column, `Zelle`, and a sixth, `BBC Membership`.
 Deploy the Admin/Billing backend before pushing the matching frontend. Until the
@@ -192,7 +199,7 @@ deployment back while those columns hold data: versions older than
 `2026-11-04.1` also treat column E that way; they merge it into the public
 `Note` and delete it. Clear the column by hand first if a rollback is
 unavoidable. The RSVP backend reads only the first four `Roster` columns and
-never deletes any, so it needs no change.
+never deletes any; its date-discovery update does not change the roster schema.
 
 To backfill missed votes, log in on Admin and return to RSVP in the same browser.
 The form displays **Admin backfill enabled**. Choose a player, use **Other date**

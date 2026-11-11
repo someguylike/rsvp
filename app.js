@@ -108,6 +108,7 @@
   let activePlayerOptionIndex = -1;
   let tallyRefreshTimer = null;
   let activeTallyRequest = null;
+  const votedDateCounts = new Map();
   const rosterContactsByName = new Map();
   const rosterContactsByNormalizedName = new Map();
   const tallySnapshotsByDate = new Map();
@@ -203,6 +204,51 @@
     };
   }
 
+  function getVotedDateRange(now = new Date()) {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return { startDate: formatDate(start), endDate: formatDate(end) };
+  }
+
+  function getDateOptionValues() {
+    const { startDate, endDate } = getVotedDateRange();
+    const votedDates = [...votedDateCounts.keys()].filter(
+      (date) => date >= startDate && date <= endDate,
+    );
+    return [...new Set([
+      ...getUpcomingPlayDates(4).map(formatDate), ...votedDates,
+    ])].sort();
+  }
+
+  function setVotedDateCounts(dates, range) {
+    votedDateCounts.clear();
+    (dates || []).forEach(({ date, totalCount }) => {
+      if (
+        /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+        date >= range.startDate && date <= range.endDate &&
+        Number.isFinite(Number(totalCount)) && Number(totalCount) > 0
+      ) {
+        votedDateCounts.set(date, Number(totalCount));
+      }
+    });
+  }
+
+  function updateVotedDatesFromTally(tally) {
+    const range = getVotedDateRange();
+    const votedDates = tally?.votedDates;
+    if (
+      votedDates?.startDate === range.startDate &&
+      votedDates.endDate === range.endDate &&
+      Array.isArray(votedDates.dates)
+    ) {
+      setVotedDateCounts(votedDates.dates, range);
+      renderDateOptions(true);
+    }
+  }
+
   function formatSubmitDateLine(value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
       return "";
@@ -218,18 +264,22 @@
     if (isCustom && customDateInput && customDateInput.value !== value) {
       customDateInput.value = value;
     }
-    customDateField?.classList.toggle("active", isCustom);
-    dateOptions.querySelectorAll(".date-option").forEach((button) => {
-      const isActive =
-        button.dataset.date === value ||
-        (isCustom && button.dataset.date === "custom");
-      button.classList.toggle("active", isActive);
-      button.setAttribute("aria-checked", String(isActive));
-    });
+    updateDateSelection(value, isCustom);
     setRemoveRsvpAction(null);
     renderParticipantOptions();
     updatePlayerMemory();
     return loadTally(value);
+  }
+
+  function updateDateSelection(value, isCustom) {
+    customDateField?.classList.toggle("active", isCustom);
+    dateOptions.querySelectorAll(".date-option").forEach((button) => {
+      const isActive = isCustom
+        ? button.dataset.date === "custom"
+        : button.dataset.date === value;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-checked", String(isActive));
+    });
   }
 
   function selectCustomDateOption() {
@@ -250,13 +300,14 @@
     customDateInput?.showPicker?.();
   }
 
-  function renderDateOptions() {
-    const dates = getUpcomingPlayDates(4);
+  function renderDateOptions(preserveSelection = false) {
+    const dates = getDateOptionValues();
+    const selectedValue = dateInput.value;
+    const wasCustom = customDateField?.classList.contains("active");
     updateDateMinimum();
     dateOptions.replaceChildren(
-      ...dates.map((date) => {
-        const value = formatDate(date);
-        const label = formatDateOption(date);
+      ...dates.map((value) => {
+        const label = formatDateOption(new Date(`${value}T00:00:00`));
         const button = document.createElement("button");
         const day = document.createElement("span");
         const full = document.createElement("span");
@@ -269,7 +320,10 @@
         day.className = "date-day";
         full.className = "date-full";
         day.textContent = label.day;
-        full.textContent = label.full;
+        const count = votedDateCounts.get(value) || 0;
+        full.textContent = count > 0
+          ? `${label.full} · ${count} spot${count === 1 ? "" : "s"}`
+          : label.full;
 
         button.append(day, full);
         button.addEventListener("click", () => {
@@ -295,11 +349,16 @@
     });
     dateOptions.append(otherButton);
 
-    customDateInput?.addEventListener("change", () => {
-      if (customDateInput.value) {
-        selectPlayDate(customDateInput.value, { isCustom: true });
+    if (preserveSelection) {
+      const isCustom = Boolean(
+        wasCustom || (selectedValue && !dates.includes(selectedValue)),
+      );
+      if (isCustom && selectedValue && customDateInput) {
+        customDateInput.value = selectedValue;
       }
-    });
+      updateDateSelection(selectedValue, isCustom);
+      return;
+    }
 
     return selectPlayDate(formatDate(getNextPlayDate()));
   }
@@ -1267,8 +1326,23 @@
   }
 
   function applyMutationTally(playDate, tally) {
+    if (Number(tally?.totalCount) > 0) {
+      votedDateCounts.set(playDate, Number(tally.totalCount));
+    } else {
+      votedDateCounts.delete(playDate);
+    }
+    renderDateOptions(true);
     invalidateTallyRefresh();
-    cacheTally(playDate, tally);
+    const range = getVotedDateRange();
+    cacheTally(playDate, {
+      ...tally,
+      votedDates: {
+        ...range,
+        dates: [...votedDateCounts]
+          .filter(([date]) => date >= range.startDate && date <= range.endDate)
+          .map(([date, totalCount]) => ({ date, totalCount })),
+      },
+    });
     if (dateInput.value === playDate) {
       renderTally(tally, "Checked just now");
       scheduleTallyRefresh();
@@ -1318,6 +1392,7 @@
 
     try {
       if (cached) {
+        updateVotedDatesFromTally(cached.tally);
         renderTally(
           cached.tally,
           `Cached ${formatCachedTallyAge(cached.cachedAt)} · Refreshing...`,
@@ -1330,11 +1405,13 @@
       const result = await requestAppsScript({
         action: "list",
         playDate,
+        ...getVotedDateRange(),
       });
       if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
         return;
       }
       cacheTally(playDate, result.tally);
+      updateVotedDatesFromTally(result.tally);
       renderTally(result.tally, "Checked just now");
     } catch (error) {
       if (requestId !== latestTallyRequest || dateInput.value !== playDate) {
@@ -1397,12 +1474,12 @@
   function initialize() {
     restoreRosterContacts();
     restoreLastPlayer();
-    const initialTallyRequest = renderDateOptions();
+    renderDateOptions();
 
     participantInput.value = "1";
     updatePlayerMemory();
 
-    initialTallyRequest.then(() => loadRoster()).then(() => {
+    loadRoster().then(() => {
       if (playerInput.value && !selectedPlayerName) {
         const exactMatch = exactPlayerMatch(playerInput.value);
         if (exactMatch) {
@@ -1519,6 +1596,12 @@
     updatePlayerMemory();
   });
 
+  customDateInput?.addEventListener("change", () => {
+    if (customDateInput.value) {
+      selectPlayDate(customDateInput.value, { isCustom: true });
+    }
+  });
+
   playerInput.addEventListener("blur", () => {
     window.setTimeout(hidePlayerList, 120);
   });
@@ -1526,8 +1609,8 @@
   document.addEventListener("visibilitychange", () => {
     window.clearTimeout(tallyRefreshTimer);
     tallyRefreshTimer = null;
-    if (document.visibilityState !== "hidden" && dateInput.value) {
-      loadTally(dateInput.value);
+    if (document.visibilityState !== "hidden") {
+      if (dateInput.value) loadTally(dateInput.value);
     }
   });
 

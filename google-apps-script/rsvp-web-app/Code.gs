@@ -7,7 +7,7 @@ const ROSTER_CACHE_KEY = "rsvp-public-roster-v1";
 const ROSTER_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const TALLY_CACHE_KEY_PREFIX = "rsvp-tally-v1:";
 // Bump this whenever deployment-relevant code in this file changes.
-const RSVP_BACKEND_VERSION = "2026-11-03.1";
+const RSVP_BACKEND_VERSION = "2026-11-10.2";
 // The admin tool writes through a separate Apps Script project and cannot
 // invalidate this cache. Keep this below one minute while spanning the
 // frontend's 30-second refresh interval so every other poll can be a cache hit.
@@ -85,7 +85,11 @@ function doGet(event) {
     if (params.action === "list") {
       return jsonp_(callback, {
         ok: true,
-        tally: getTally_(required_(params.playDate, "Missing play date")),
+        tally: getTally_(
+          required_(params.playDate, "Missing play date"),
+          params.startDate,
+          params.endDate,
+        ),
       });
     }
 
@@ -607,9 +611,48 @@ function getRsvpAtRow_(sheet, row) {
   return rsvpValuesToRecord_(values);
 }
 
-function getTally_(playDate) {
+function getRequestedRsvpDateRange_(startDate, endDate) {
+  if (!startDate && !endDate) return null;
+  const start = validateIsoDate_(required_(startDate, "Missing start date"), "Start date");
+  const end = validateIsoDate_(required_(endDate, "Missing end date"), "End date");
+  const rangeDays = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000;
+  if (rangeDays < 0 || rangeDays > 30) {
+    throw new Error("Date range must cover 1 to 31 days");
+  }
+  return { startDate: start, endDate: end };
+}
+
+function getVotedRsvpDatesFromRows_(rows, rosterNames, range) {
+  const totals = {};
+  rows.forEach((row) => {
+    const date = normalizeDate_(row[0]);
+    if (
+      date < range.startDate || date > range.endDate ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      normalize_(row[2]) !== "yes" ||
+      !isRosterPlayer_(row[1], rosterNames) ||
+      !(Number(row[3]) > 0)
+    ) return;
+    totals[date] = (totals[date] || 0) + clampStoredParticipantCount_(row[3]);
+  });
+  return {
+    ...range,
+    dates: Object.keys(totals).sort().map((date) => ({ date, totalCount: totals[date] })),
+  };
+}
+
+function hasRequestedVotedDates_(tally, range) {
+  return !range || (
+    tally.votedDates?.startDate === range.startDate &&
+    tally.votedDates?.endDate === range.endDate &&
+    Array.isArray(tally.votedDates.dates)
+  );
+}
+
+function getTally_(playDate, startDate, endDate) {
+  const range = getRequestedRsvpDateRange_(startDate, endDate);
   const cached = getCachedTally_(playDate);
-  if (cached) {
+  if (cached && hasRequestedVotedDates_(cached, range)) {
     return cached;
   }
 
@@ -620,6 +663,11 @@ function getTally_(playDate) {
   const snapshot = readRsvpRows_(sheet);
   const rosterNameSet = snapshot.length > 0 ? getRosterNameSet_() : {};
   const candidate = buildTallyFromSnapshot_(snapshot, playDate, rosterNameSet);
+  if (range) {
+    candidate.votedDates = getVotedRsvpDatesFromRows_(
+      snapshot.map((entry) => entry.values), rosterNameSet, range,
+    );
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -627,6 +675,23 @@ function getTally_(playDate) {
   try {
     const rechecked = getCachedTally_(playDate);
     if (rechecked) {
+      if (!hasRequestedVotedDates_(rechecked, range)) {
+        // A writer may have replaced the tally while rows were loading.
+        // Preserve that newer tally and update its date's weekly count too.
+        const totals = new Map(candidate.votedDates.dates.map(
+          (entry) => [entry.date, entry.totalCount],
+        ));
+        if (playDate >= range.startDate && playDate <= range.endDate) {
+          totals.set(playDate, rechecked.totalCount);
+        }
+        rechecked.votedDates = {
+          ...range,
+          dates: [...totals].filter(([, count]) => count > 0)
+            .sort(([first], [second]) => first.localeCompare(second))
+            .map(([date, totalCount]) => ({ date, totalCount })),
+        };
+        return cacheTally_(rechecked);
+      }
       return rechecked;
     }
 

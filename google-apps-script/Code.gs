@@ -10,7 +10,7 @@ const BILLING_MONTH_STATUS_SHEET_NAME = "Billing Month Status";
 const BILLING_MEMBER_BALANCE_SHEET_NAME = "Billing Member Balances";
 const RSVP_SPREADSHEET_ID = "19vferggiMR8Qf4wn2GSJl7TZ9rekSEbDVl-anCfem4w";
 // Bump these whenever deployment or billing-calculation behavior changes.
-const ADMIN_BACKEND_VERSION = "2026-11-09.3";
+const ADMIN_BACKEND_VERSION = "2026-11-10.2";
 const BILLING_BALANCE_CALCULATION_VERSION = 4;
 const EXPORT_SPREADSHEET_ID = RSVP_SPREADSHEET_ID;
 const PREVIEW_MAX_ROWS = 120;
@@ -327,7 +327,11 @@ function doGet(event) {
     if (params.action === "list") {
       return jsonp_(callback, {
         ok: true,
-        tally: getTally_(required_(params.playDate, "Missing play date")),
+        tally: getTally_(
+          required_(params.playDate, "Missing play date"),
+          params.startDate,
+          params.endDate,
+        ),
       });
     }
 
@@ -4812,7 +4816,38 @@ function formatDisplayDate_(dateValue) {
   return `${parts[1]}/${parts[2]}/${parts[0]}`;
 }
 
-function getTally_(playDate) {
+function getRequestedRsvpDateRange_(startDate, endDate) {
+  if (!startDate && !endDate) return null;
+  const start = validateIsoDate_(required_(startDate, "Missing start date"), "Start date");
+  const end = validateIsoDate_(required_(endDate, "Missing end date"), "End date");
+  const rangeDays = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000;
+  if (rangeDays < 0 || rangeDays > 30) {
+    throw new Error("Date range must cover 1 to 31 days");
+  }
+  return { startDate: start, endDate: end };
+}
+
+function getVotedRsvpDatesFromRows_(rows, rosterNames, range) {
+  const totals = {};
+  rows.forEach((row) => {
+    const date = normalizeDate_(row[0]);
+    if (
+      date < range.startDate || date > range.endDate ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      normalize_(row[2]) !== "yes" ||
+      !isRosterPlayer_(row[1], rosterNames) ||
+      !(Number(row[3]) > 0)
+    ) return;
+    totals[date] = (totals[date] || 0) + clampStoredParticipantCount_(row[3]);
+  });
+  return {
+    ...range,
+    dates: Object.keys(totals).sort().map((date) => ({ date, totalCount: totals[date] })),
+  };
+}
+
+function getTally_(playDate, startDate, endDate) {
+  const range = getRequestedRsvpDateRange_(startDate, endDate);
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
   const rosterNameSet = getRosterNameSet_();
@@ -4824,10 +4859,14 @@ function getTally_(playDate) {
   };
 
   if (lastRow < 2) {
+    if (range) tally.votedDates = { ...range, dates: [] };
     return tally;
   }
 
   const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  if (range) {
+    tally.votedDates = getVotedRsvpDatesFromRows_(rows, rosterNameSet, range);
+  }
 
   rows.forEach((row) => {
     const rowDate = normalizeDate_(row[0]);
