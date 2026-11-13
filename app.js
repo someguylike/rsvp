@@ -140,6 +140,17 @@
     return `${year}-${month}-${day}`;
   }
 
+  // Sunday sessions start at 6:30 AM; every other play day starts at 6 AM.
+  // The RSVP cutoff stays at 10 PM the night before (see rsvp-rules.js).
+  function getPlayStartTime(date) {
+    return date.getDay() === 0 ? { hour: 6, minute: 30 } : { hour: 6, minute: 0 };
+  }
+
+  function formatPlayStartLabel(date) {
+    const { hour, minute } = getPlayStartTime(date);
+    return minute ? `${hour}:${String(minute).padStart(2, "0")}AM` : `${hour}AM`;
+  }
+
   function getNextPlayDate() {
     const now = new Date();
     const today = new Date(now);
@@ -149,7 +160,8 @@
       const candidate = new Date(today);
       candidate.setDate(today.getDate() + offset);
       const playStart = new Date(candidate);
-      playStart.setHours(6, 0, 0, 0);
+      const startTime = getPlayStartTime(candidate);
+      playStart.setHours(startTime.hour, startTime.minute, 0, 0);
       if (PLAY_DAYS.includes(candidate.getDay()) && playStart > now) {
         return candidate;
       }
@@ -186,9 +198,10 @@
       month: "short",
       day: "numeric",
     });
+    const startLabel = formatPlayStartLabel(date);
     if (date < today) {
       return {
-        day: `${day} @ 6AM`,
+        day: `${day} @ ${startLabel}`,
         full,
       };
     }
@@ -198,8 +211,8 @@
     return {
       day:
         date.getTime() === today.getTime()
-          ? "Today @ 6AM"
-          : `${prefix} ${day} @ 6AM`,
+          ? `Today @ ${startLabel}`
+          : `${prefix} ${day} @ ${startLabel}`,
       full,
     };
   }
